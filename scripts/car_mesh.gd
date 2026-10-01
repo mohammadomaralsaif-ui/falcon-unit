@@ -58,6 +58,94 @@ static func extrude(poly: PackedVector2Array, width: float, x_off := 0.0) -> Arr
 	st.index()
 	return st.commit()
 
+## Rounded extrusion: side profile (z, y) swept across the car width with rounded
+## (bevelled) edges, tumblehome (narrower toward the top) and tapered nose / tail in plan view.
+static func extrude_round(poly: PackedVector2Array, width: float, bev := 0.08, tumble := 0.0, y0 := 0.0, y1 := 1.0, taper := 0.0, hl := 2.5) -> ArrayMesh:
+	var n := poly.size()
+	var area := 0.0
+	for i in n:
+		area += poly[i].x * poly[(i + 1) % n].y - poly[(i + 1) % n].x * poly[i].y
+	var wind := 1.0 if area > 0.0 else -1.0
+	var hw := width * 0.5
+	# outward 2D edge normals
+	var en: Array[Vector2] = []
+	for i in n:
+		var d := (poly[(i + 1) % n] - poly[i]).normalized()
+		en.append(Vector2(d.y, -d.x) * wind)
+	var rings := []   # each: [P, inset offset, normal]
+	var cap_pts := PackedVector2Array()
+	for i in n:
+		var n1: Vector2 = en[(i - 1 + n) % n]
+		var n2: Vector2 = en[i]
+		var c := n1.dot(n2)
+		var P := poly[i]
+		if c > 0.7:
+			var nv := (n1 + n2).normalized()
+			rings.append([P, nv * bev, nv])
+			cap_pts.append(P - nv * bev)
+		else:
+			var m := (n1 + n2) / maxf(1.0 + c, 0.25)
+			if m.length() > 2.0:
+				m = m.normalized() * 2.0
+			rings.append([P, m * bev, n1])
+			rings.append([P, m * bev, n2])
+			cap_pts.append(P - m * bev)
+	var steps := 3
+	var phis := []
+	for k in steps + 1:
+		phis.append(PI * 0.5 * k / steps)
+	var f := func(v: Vector3) -> Vector3:
+		var t := clampf((v.y - y0) / maxf(y1 - y0, 0.01), 0.0, 1.0)
+		var e := clampf((absf(v.z) - hl * 0.7) / (hl * 0.3), 0.0, 1.0)
+		return Vector3(v.x * (1.0 - tumble * t * t) * (1.0 - taper * e * e), v.y, v.z)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# ring vertex lists: across width from left (-x) to right (+x)
+	var ring_verts := []
+	for rg in rings:
+		var P: Vector2 = rg[0]; var o: Vector2 = rg[1]; var nn: Vector2 = rg[2]
+		var vs := []
+		for side in [-1.0, 1.0]:
+			var order := phis.duplicate()
+			if side < 0:
+				order.reverse()
+			for ph in order:
+				var q: Vector2 = P - o + nn * bev * cos(ph)
+				var x: float = side * (hw - bev + bev * sin(ph))
+				var pos: Vector3 = f.call(Vector3(x, q.y, q.x))
+				var nor := Vector3(side * sin(ph), nn.y * cos(ph), nn.x * cos(ph)).normalized()
+				vs.append([pos, nor])
+		ring_verts.append(vs)
+	var R := ring_verts.size()
+	for i in R:
+		var a: Array = ring_verts[i]
+		var b: Array = ring_verts[(i + 1) % R]
+		for k in a.size() - 1:
+			var quad := [a[k], b[k], b[k + 1], a[k + 1]]
+			var tris := [[0, 1, 2], [0, 2, 3]] if wind > 0 else [[0, 2, 1], [0, 3, 2]]
+			for t in tris:
+				for idx in t:
+					st.set_normal(quad[idx][1]); st.add_vertex(quad[idx][0])
+	# caps
+	var tri := Geometry2D.triangulate_polygon(cap_pts)
+	if tri.is_empty():
+		tri = Geometry2D.triangulate_polygon(poly)
+	for side in [-1.0, 1.0]:
+		var x: float = side * hw
+		for i in range(0, tri.size(), 3):
+			var ids := [tri[i], tri[i + 1], tri[i + 2]]
+			if (side > 0) != (wind > 0):
+				ids = [tri[i], tri[i + 2], tri[i + 1]]
+			var pts := []
+			for id in ids:
+				var c2: Vector2 = cap_pts[id]
+				pts.append(f.call(Vector3(x, c2.y, c2.x)))
+			var nor: Vector3 = (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalized()
+			for pp in pts:
+				st.set_normal(nor); st.add_vertex(pp)
+	st.index()
+	return st.commit()
+
 static func _arch(pts: PackedVector2Array, cz: float, base: float, r: float) -> void:
 	for k in 13:
 		var a := PI - PI * k / 12.0
@@ -146,28 +234,29 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 	p.append(Vector2(-hl - 0.02, s.belt - 0.04))
 	p.append(Vector2(-hl - 0.05, base + 0.2))
 	var body := MeshInstance3D.new()
-	body.mesh = extrude(p, W)
+	body.mesh = extrude_round(p, W, 0.1, 0.06, base, s.belt, 0.07, hl)
 	body.material_override = paint
 	root.add_child(body)
 	# glass cabin
 	var g := PackedVector2Array([Vector2(s.ws0, s.belt), Vector2(s.ws1, s.roof - 0.02), Vector2(s.re, s.roof), Vector2(s.rb, s.belt)])
 	var cab := MeshInstance3D.new()
-	cab.mesh = extrude(g, W - 0.12)
+	cab.mesh = extrude_round(g, W - 0.12, 0.08, 0.2, s.belt, s.roof, 0.0, hl)
 	cab.material_override = glass
 	root.add_child(cab)
 	# roof slab
 	var rf := PackedVector2Array([Vector2(s.ws1 - 0.05, s.roof - 0.03), Vector2(s.re + 0.02, s.roof - 0.01), Vector2(s.re + 0.04, s.roof + 0.05), Vector2(s.ws1 - 0.07, s.roof + 0.03)])
 	var roof := MeshInstance3D.new()
-	roof.mesh = extrude(rf, W - 0.1)
+	roof.mesh = extrude_round(rf, (W - 0.12) * 0.8 + 0.04, 0.03, 0.0, 0.0, 1.0, 0.0, hl)
 	roof.material_override = paint
 	root.add_child(roof)
 	# pillars
 	for sd in [-1.0, 1.0]:
-		var x: float = sd * (W * 0.5 - 0.055)
-		_between(root, Vector3(x, s.belt, s.ws0), Vector3(x, s.roof, s.ws1), Vector2(0.08, 0.09), paint)
-		_between(root, Vector3(x, s.belt, s.rb), Vector3(x, s.roof, s.re), Vector2(0.08, 0.14), paint)
+		var x: float = sd * ((W - 0.12) * 0.5 + 0.005)
+		var xt: float = sd * ((W - 0.12) * 0.4 + 0.005)
+		_between(root, Vector3(x, s.belt, s.ws0), Vector3(xt, s.roof - 0.04, s.ws1 - 0.03), Vector2(0.07, 0.08), paint)
+		_between(root, Vector3(x, s.belt, s.rb), Vector3(xt, s.roof - 0.04, s.re + 0.03), Vector2(0.07, 0.14), paint)
 		var bz: float = lerpf(float(s.ws1), float(s.re), 0.48)
-		_between(root, Vector3(x, s.belt, bz), Vector3(x, s.roof, bz), Vector2(0.08, 0.1), paint)
+		_between(root, Vector3(x, s.belt, bz), Vector3(xt, s.roof - 0.04, bz), Vector2(0.07, 0.09), dark)
 		_box(root, Vector3(0.07, 0.11, 0.16), Vector3(sd * (W * 0.5 + 0.06), s.belt + 0.03, s.ws0 - 0.15), paint)
 		_box(root, Vector3(0.012, s.belt - base - 0.1, 0.012), Vector3(sd * (W * 0.5 + 0.004), (s.belt + base) * 0.5, bz), dark)
 		_box(root, Vector3(0.02, 0.03, 0.14), Vector3(sd * (W * 0.5 + 0.01), s.belt - 0.12, bz + 0.45), chrome)
