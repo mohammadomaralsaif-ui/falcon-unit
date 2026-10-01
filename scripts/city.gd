@@ -228,13 +228,177 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0.85, 0.85, 0.83); m.roughness = 0.4; m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		"tape":
 			m.albedo_color = Color(0.95, 0.76, 0.18); m.roughness = 0.5; m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		"curb":
+			m.albedo_texture = _img_tex(64, 16, func(img):
+				img.fill(Color(0.9, 0.75, 0.15))
+				img.fill_rect(Rect2i(0, 0, 32, 16), Color(0.08, 0.08, 0.08)))
+			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(1.0, 1.0, 1.0)
+			m.roughness = 0.75
+		"manhole":
+			m.albedo_color = Color(0.12, 0.12, 0.12); m.metallic = 0.6; m.roughness = 0.5
+		"rebar":
+			m.albedo_color = Color(0.35, 0.2, 0.12); m.metallic = 0.5; m.roughness = 0.7
 		_:
+			if key.begins_with("stone") and key.length() > 5:
+				var v := int(key.substr(5))
+				var t := _facade_v2(v)
+				m.albedo_texture = t[0]
+				m.normal_enabled = true; m.normal_texture = t[1]; m.normal_scale = 1.0
+				m.roughness = 0.85
+			elif key.begins_with("shop") and key.length() > 4:
+				var v := int(key.substr(4))
+				var t := _shop_v2(v)
+				m.albedo_texture = t[0]
+				m.normal_enabled = true; m.normal_texture = t[1]
+				m.roughness = 0.6
+				if v % 3 == 1:
+					m.emission_enabled = true; m.emission_texture = t[2]; m.emission = Color(1, 1, 1); m.emission_energy_multiplier = 0.3
+			elif key.begins_with("awning"):
+				var cols := [Color(0.65, 0.1, 0.1), Color(0.1, 0.35, 0.2), Color(0.12, 0.25, 0.5), Color(0.8, 0.55, 0.1)]
+				m.albedo_color = cols[int(key.substr(6)) % cols.size()]
+				m.roughness = 0.8
+				m.cull_mode = BaseMaterial3D.CULL_DISABLED
 			if key.begins_with("sign"):
 				var cols := [Color(0.1, 0.4, 0.25), Color(0.5, 0.25, 0.08), Color(0.08, 0.25, 0.5), Color(0.55, 0.12, 0.18), Color(0.15, 0.15, 0.18)]
 				m.albedo_color = cols[int(key.substr(4)) % cols.size()]
 				m.roughness = 0.5
 	_mats[key] = m
 	return m
+
+const STONES := [Color(0.9, 0.87, 0.8), Color(0.84, 0.77, 0.64), Color(0.79, 0.68, 0.52), Color(0.83, 0.82, 0.79), Color(0.86, 0.8, 0.7)]
+
+## Cut-stone facade bay (3.4 m x 3.3 m) with a window, plus a matching normal map.
+func _facade_v2(v: int) -> Array:
+	var W := 512; var H := 512
+	var img := Image.create(W, H, false, Image.FORMAT_RGB8)
+	var hgt := Image.create(W, H, false, Image.FORMAT_RGB8)
+	var base: Color = STONES[v % STONES.size()]
+	img.fill(base); hgt.fill(Color(0.7, 0.7, 0.7))
+	var r := RandomNumberGenerator.new(); r.seed = 900 + v
+	# stone courses with staggered blocks of varying shade
+	var y := 0
+	var row := 0
+	while y < H:
+		var ch := r.randi_range(36, 48)
+		var x := -r.randi_range(0, 80)
+		while x < W:
+			var bw := r.randi_range(70, 150)
+			var shade := r.randf_range(-0.06, 0.05)
+			var col := Color(base.r + shade, base.g + shade, base.b + shade * 1.2)
+			img.fill_rect(Rect2i(maxi(x, 0), y, mini(bw, W - maxi(x, 0)), ch), col)
+			# chisel texture
+			for k in 60:
+				var px := r.randi_range(maxi(x, 0), mini(x + bw, W - 1)); var py := r.randi_range(y, mini(y + ch, H - 1))
+				var d := r.randf_range(-0.08, 0.06)
+				img.set_pixel(px, py, Color(col.r + d, col.g + d, col.b + d))
+				hgt.set_pixel(px, py, Color(0.62 + d, 0.62 + d, 0.62 + d))
+			# joint
+			if x > 0:
+				img.fill_rect(Rect2i(x, y, 2, ch), base.darkened(0.3))
+				hgt.fill_rect(Rect2i(x, y, 2, ch), Color(0.35, 0.35, 0.35))
+			x += bw
+		img.fill_rect(Rect2i(0, y, W, 2), base.darkened(0.3))
+		hgt.fill_rect(Rect2i(0, y, W, 2), Color(0.35, 0.35, 0.35))
+		y += ch
+		row += 1
+	# window with stone surround
+	var style := v % 3
+	var wx := 136; var wy := 110; var ww := 240; var wh := 250
+	var sur := base.lightened(0.12)
+	img.fill_rect(Rect2i(wx - 22, wy - 22, ww + 44, wh + 44), sur)
+	hgt.fill_rect(Rect2i(wx - 22, wy - 22, ww + 44, wh + 44), Color(0.85, 0.85, 0.85))
+	img.fill_rect(Rect2i(wx - 34, wy + wh + 10, ww + 68, 18), sur.lightened(0.05))   # sill
+	hgt.fill_rect(Rect2i(wx - 34, wy + wh + 10, ww + 68, 18), Color(1, 1, 1))
+	# glass with sky reflection gradient
+	for gy in wh:
+		var t := float(gy) / wh
+		var gc := Color(0.32, 0.42, 0.5).lerp(Color(0.08, 0.1, 0.12), t)
+		img.fill_rect(Rect2i(wx, wy + gy, ww, 1), gc)
+	hgt.fill_rect(Rect2i(wx, wy, ww, wh), Color(0.1, 0.1, 0.1))
+	if style == 1:
+		# arched top
+		for ax in ww + 44:
+			var dx := (ax - (ww + 44) * 0.5) / ((ww + 44) * 0.5)
+			var top := int(40 * (1.0 - sqrt(maxf(1.0 - dx * dx, 0.0))))
+			img.fill_rect(Rect2i(wx - 22 + ax, wy - 22, 1, top), base)
+	# aluminium frame + mullion
+	var fr := Color(0.85, 0.86, 0.86) if style != 2 else Color(0.25, 0.22, 0.2)
+	for rr in [Rect2i(wx, wy, ww, 8), Rect2i(wx, wy + wh - 8, ww, 8), Rect2i(wx, wy, 8, wh), Rect2i(wx + ww - 8, wy, 8, wh), Rect2i(wx + ww / 2 - 4, wy, 8, wh)]:
+		img.fill_rect(rr, fr)
+		hgt.fill_rect(rr, Color(0.4, 0.4, 0.4))
+	# blinds / curtains
+	var blind := r.randi_range(0, 2)
+	if blind == 1:
+		var bh := r.randi_range(60, 200)
+		for by in range(0, bh, 6):
+			img.fill_rect(Rect2i(wx + 8, wy + 8 + by, ww - 16, 4), Color(0.88, 0.86, 0.8))
+	elif blind == 2:
+		img.fill_rect(Rect2i(wx + 10, wy + 10, 70, wh - 20), Color(0.75, 0.62, 0.45))
+		img.fill_rect(Rect2i(wx + ww - 80, wy + 10, 70, wh - 20), Color(0.75, 0.62, 0.45))
+	if style == 2:
+		# wrought iron security grille
+		for gx in range(wx + 20, wx + ww, 28):
+			img.fill_rect(Rect2i(gx, wy - 4, 4, wh + 8), Color(0.1, 0.1, 0.1))
+			hgt.fill_rect(Rect2i(gx, wy - 4, 4, wh + 8), Color(1, 1, 1))
+		for gy2 in [wy + 60, wy + wh - 60]:
+			img.fill_rect(Rect2i(wx, gy2, ww, 4), Color(0.1, 0.1, 0.1))
+	# weathering streaks under the sill
+	for k in 8:
+		var sx := r.randi_range(wx - 20, wx + ww + 20)
+		var sl := r.randi_range(30, 110)
+		img.fill_rect(Rect2i(sx, wy + wh + 28, 3, sl), base.darkened(0.12))
+	img.generate_mipmaps()
+	hgt.bump_map_to_normal_map(6.0)
+	hgt.generate_mipmaps()
+	return [ImageTexture.create_from_image(img), ImageTexture.create_from_image(hgt)]
+
+## Ground-floor shop bay: 0 = closed roller shutter, 1 = open lit shop, 2 = glass shopfront.
+func _shop_v2(v: int) -> Array:
+	var W := 512; var H := 512
+	var img := Image.create(W, H, false, Image.FORMAT_RGB8)
+	var hgt := Image.create(W, H, false, Image.FORMAT_RGB8)
+	var emi := Image.create(W, H, false, Image.FORMAT_RGB8)
+	var base: Color = STONES[(v / 3) % STONES.size()]
+	img.fill(base); hgt.fill(Color(0.7, 0.7, 0.7)); emi.fill(Color.BLACK)
+	var r := RandomNumberGenerator.new(); r.seed = 500 + v
+	var ox := 34; var oy := 70; var ow := 444; var oh := 442
+	img.fill_rect(Rect2i(ox - 10, oy - 10, ow + 20, oh + 10), Color(0.2, 0.21, 0.23))
+	match v % 3:
+		0:
+			for yy in range(oy, H, 9):
+				img.fill_rect(Rect2i(ox, yy, ow, 6), Color(0.52, 0.54, 0.56))
+				img.fill_rect(Rect2i(ox, yy + 6, ow, 3), Color(0.36, 0.38, 0.4))
+				hgt.fill_rect(Rect2i(ox, yy + 6, ow, 3), Color(0.3, 0.3, 0.3))
+			# graffiti-free padlock box
+			img.fill_rect(Rect2i(ox + ow / 2 - 14, H - 40, 28, 20), Color(0.2, 0.2, 0.2))
+		1:
+			# lit interior: shelves full of goods
+			img.fill_rect(Rect2i(ox, oy, ow, oh), Color(0.42, 0.4, 0.36))
+			for sy in range(oy + 40, H - 20, 70):
+				img.fill_rect(Rect2i(ox + 10, sy, ow - 20, 8), Color(0.45, 0.32, 0.2))
+				var gx := ox + 14
+				while gx < ox + ow - 30:
+					var gw := r.randi_range(10, 26)
+					var gh := r.randi_range(24, 52)
+					img.fill_rect(Rect2i(gx, sy - gh, gw, gh), Color.from_hsv(r.randf(), r.randf_range(0.4, 0.9), r.randf_range(0.5, 0.95)))
+					gx += gw + 3
+			emi.fill_rect(Rect2i(ox, oy, ow, oh), Color(0.35, 0.33, 0.28))
+			img.fill_rect(Rect2i(ox + ow / 2 - 50, oy + 120, 100, oh - 120), Color(0.15, 0.18, 0.2))
+			emi.fill_rect(Rect2i(ox + ow / 2 - 50, oy + 120, 100, oh - 120), Color.BLACK)
+		2:
+			for gy in oh:
+				var t := float(gy) / oh
+				img.fill_rect(Rect2i(ox, oy + gy, ow, 1), Color(0.3, 0.38, 0.44).lerp(Color(0.1, 0.12, 0.14), t))
+			img.fill_rect(Rect2i(ox + 60, oy + 200, 120, 150), Color(0.6, 0.2, 0.25))
+			img.fill_rect(Rect2i(ox + 260, oy + 180, 100, 170), Color(0.25, 0.3, 0.55))
+	# frame
+	for rr in [Rect2i(ox, oy, ow, 8), Rect2i(ox, oy, 8, oh), Rect2i(ox + ow - 8, oy, 8, oh)]:
+		img.fill_rect(rr, Color(0.7, 0.71, 0.72))
+	hgt.fill_rect(Rect2i(ox, oy, ow, oh), Color(0.25, 0.25, 0.25))
+	img.generate_mipmaps(); emi.generate_mipmaps()
+	hgt.bump_map_to_normal_map(5.0)
+	hgt.generate_mipmaps()
+	return [ImageTexture.create_from_image(img), ImageTexture.create_from_image(hgt), ImageTexture.create_from_image(emi)]
 
 func _facade_tex(shop: bool) -> ImageTexture:
 	return _img_tex(256, 256, func(img: Image):
@@ -354,6 +518,10 @@ func _block(bi: int, bj: int) -> void:
 	# raised sidewalk slab
 	_mi(_box_mesh(Vector3(B + SIDEWALK * 2, 0.16, B + SIDEWALK * 2)), mat("sidewalk"), Vector3(cx, 0.08, cz), false)
 	_static_box(Vector3(B + SIDEWALK * 2, 0.16, B + SIDEWALK * 2), Vector3(cx, 0.08, cz))
+	_curbs(cx, cz)
+	if rng.randf() < 0.6:
+		var mh := CylinderMesh.new(); mh.top_radius = 0.35; mh.bottom_radius = 0.35; mh.height = 0.02; mh.radial_segments = 16
+		_mi(mh, mat("manhole"), Vector3(cx + rng.randf_range(-20, 20), 0.01, z0 - SIDEWALK - rng.randf_range(2.0, 6.0)), false)
 	var lot := (B - 1.0) / 2.0
 	var park := rng.randf() < 0.12
 	for lx in 2:
@@ -402,9 +570,29 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 	var st_up := SurfaceTool.new(); st_up.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_walls(st_shop, base, w, d, 0.0, FLOOR_H, 4.0, FLOOR_H)
 	_walls(st_up, base, w, d, FLOOR_H, h, 3.4, FLOOR_H)
-	var mi_shop := _mi(st_shop.commit(), mat("shop"))
-	var mi_up := _mi(st_up.commit(), mat("stone"))
+	var sv := rng.randi_range(0, 4)
+	var shopv := sv * 3 + rng.randi_range(0, 2)
+	var stone_m := mat("stone%d" % sv)
+	var mi_shop := _mi(st_shop.commit(), mat("shop%d" % shopv))
+	var mi_up := _mi(st_up.commit(), stone_m)
 	_mi(_box_mesh(Vector3(w + 0.3, 0.35, d + 0.3)), mat("roof"), base + Vector3(0, h + 0.17, 0))
+	# floor cornice bands + roof parapet
+	for fl in range(1, floors + 1):
+		_mi(_box_mesh(Vector3(w + 0.16, 0.14, d + 0.16)), mat("white"), base + Vector3(0, fl * FLOOR_H - 0.05, 0))
+	for e in [[Vector3(0, 0, d * 0.5), Vector3(w + 0.3, 0.9, 0.22)], [Vector3(0, 0, -d * 0.5), Vector3(w + 0.3, 0.9, 0.22)], [Vector3(w * 0.5, 0, 0), Vector3(0.22, 0.9, d + 0.3)], [Vector3(-w * 0.5, 0, 0), Vector3(0.22, 0.9, d + 0.3)]]:
+		_mi(_box_mesh(e[1]), mat("white"), base + e[0] + Vector3(0, h + 0.8, 0))
+	# stair room on the roof
+	var srp := base + Vector3(rng.randf_range(-w * 0.25, w * 0.25), h + 0.35, rng.randf_range(-d * 0.25, d * 0.25))
+	_mi(_box_mesh(Vector3(3.0, 2.6, 3.2)), stone_m, srp + Vector3(0, 1.3, 0))
+	_mi(_box_mesh(Vector3(1.0, 2.0, 0.06)), mat("door"), srp + Vector3(0, 1.0, 1.62), false)
+	# unfinished-floor rebar: very common on Amman roofs
+	if rng.randf() < 0.35:
+		var rb := CylinderMesh.new(); rb.top_radius = 0.02; rb.bottom_radius = 0.02; rb.height = 1.4; rb.radial_segments = 4
+		for cx in [-1, 0, 1]:
+			for cz in [-1, 1]:
+				var cp := base + Vector3(cx * (w * 0.5 - 0.4), h + 1.05, cz * (d * 0.5 - 0.4))
+				for k in 4:
+					_mi(rb, mat("rebar"), cp + Vector3((k % 2) * 0.15, 0, (k / 2) * 0.15), false)
 	_static_box(Vector3(w, h, d), base + Vector3(0, h * 0.5, 0))
 	# balconies on the street-facing sides
 	var faces := [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)]
@@ -435,6 +623,9 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 			var sign_w: float = min(span * 0.8, 9.0)
 			var board := _mi(_box_mesh(Vector3(sign_w, 0.75, 0.12)), mat("sign%d" % (rng.randi() % 5)), sp, false)
 			board.rotation.y = ry
+			if rng.randf() < 0.5:
+				var aw := _mi(_box_mesh(Vector3(sign_w, 0.05, 1.3)), mat("awning%d" % (rng.randi() % 4)), sp + f * 0.65 + Vector3(0, -0.55, 0), true)
+				aw.rotation = Vector3(0.3, ry, 0)
 			_label(SHOPS[rng.randi() % SHOPS.size()], sp + f * 0.08, ry, 72, Color(1, 1, 1), 0.009)
 	if bal.size():
 		_multimesh(_box_mesh(Vector3(2.8, 0.15, 1.1)), mat("white"), bal)
@@ -487,6 +678,13 @@ func _lamp(pos: Vector3, ry: float) -> void:
 	arm.position += Basis(Vector3.UP, ry) * Vector3(0, 0, -0.75)
 	var head := _mi(_box_mesh(Vector3(0.35, 0.12, 0.6)), mat("lamp"), pos + Vector3(0, 5.85, 0), false)
 	head.position += Basis(Vector3.UP, ry) * Vector3(0, 0, -1.5)
+
+func _curbs(cx: float, cz: float) -> void:
+	var half := B * 0.5 + SIDEWALK
+	_mi(_box_mesh(Vector3(half * 2 + 0.25, 0.2, 0.25)), mat("curb"), Vector3(cx, 0.1, cz - half), false)
+	_mi(_box_mesh(Vector3(half * 2 + 0.25, 0.2, 0.25)), mat("curb"), Vector3(cx, 0.1, cz + half), false)
+	_mi(_box_mesh(Vector3(0.25, 0.2, half * 2 + 0.25)), mat("curb"), Vector3(cx - half, 0.1, cz), false)
+	_mi(_box_mesh(Vector3(0.25, 0.2, half * 2 + 0.25)), mat("curb"), Vector3(cx + half, 0.1, cz), false)
 
 func _traffic_light(pos: Vector3) -> void:
 	var cm := CylinderMesh.new(); cm.top_radius = 0.07; cm.bottom_radius = 0.08; cm.height = 3.2
@@ -635,6 +833,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	var z0 := bj * P + R
 	_mi(_box_mesh(Vector3(B + SIDEWALK * 2, 0.16, B + SIDEWALK * 2)), mat("sidewalk"), Vector3(x0 + B * 0.5, 0.08, z0 + B * 0.5), false)
 	_static_box(Vector3(B + SIDEWALK * 2, 0.16, B + SIDEWALK * 2), Vector3(x0 + B * 0.5, 0.08, z0 + B * 0.5))
+	_curbs(x0 + B * 0.5, z0 + B * 0.5)
 	var rows := BANK_MAP.size()
 	var cols: int = BANK_MAP[0].length()
 	var ox := x0 + (B - cols * CELL) * 0.5

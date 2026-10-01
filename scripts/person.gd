@@ -6,6 +6,7 @@ extends Node3D
 const Retarget = preload("res://scripts/retarget.gd")
 const PoseMod = preload("res://scripts/pose_mod.gd")
 const Humanoid = preload("res://scripts/humanoid.gd")
+const CarMesh = preload("res://scripts/car_mesh.gd")
 
 var role := "swat"
 var model: Node3D
@@ -19,24 +20,39 @@ var aim_pitch := 0.0
 var gun_rest := Vector3(0.17, 1.3, -0.3)
 
 static var _civ: PackedScene
+static var _woman: PackedScene
+var model_path := "res://assets/models/civilian.glb"
 static var _mats := {}
 
 func _init(_role := "swat", seed_val := 0) -> void:
 	role = _role
-	if not _civ:
-		_civ = load("res://assets/models/civilian.glb")
-	model = _civ.instantiate()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_val if seed_val != 0 else randi()
+	var female := false
+	if female:
+		if not _woman:
+			_woman = load("res://assets/models/michelle.glb")
+		model = _woman.instantiate()
+		model_path = "res://assets/models/michelle.glb"
+		var old_ap := model.find_child("AnimationPlayer", true, false)
+		if old_ap:
+			old_ap.get_parent().remove_child(old_ap)
+			old_ap.free()
+	else:
+		if not _civ:
+			_civ = load("res://assets/models/civilian.glb")
+		model = _civ.instantiate()
 	model.rotation.y = PI
 	add_child(model)
 	skel = model.find_child("Skeleton3D", true, false)
 	anim = AnimationPlayer.new()
 	anim.root_node = NodePath("..")
 	model.add_child(anim)
-	anim.add_animation_library("", Retarget.library())
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_val if seed_val != 0 else randi()
-	_dress(rng)
+	anim.add_animation_library("", Retarget.library(model_path))
+	if not female:
+		_dress(rng)
 	pose = PoseMod.new()
+	pose.body = self
 	skel.add_child(pose)
 	if role in ["swat", "robber"]:
 		gun = Humanoid.rifle("m4" if role == "swat" else "ak")
@@ -87,15 +103,47 @@ func _all(n: Node) -> Array:
 func _mesh(n: String) -> MeshInstance3D:
 	return model.find_child(n, true, false) as MeshInstance3D
 
-func _tint(n: String, col: Color, rough := -1.0) -> void:
+static var _fabric: Texture2D
+static var _denim: Texture2D
+static var _rbox_cache := {}
+
+static func _noise_tex(kind: String) -> Texture2D:
+	var img := Image.create(128, 128, false, Image.FORMAT_RGB8)
+	var r := RandomNumberGenerator.new(); r.seed = 5 if kind == "fabric" else 9
+	for y in 128:
+		for x in 128:
+			var v := 0.82 + r.randf() * 0.18
+			if kind == "denim":
+				v *= 0.88 + 0.12 * float((x + y) % 4 < 2)
+			else:
+				v *= 0.94 + 0.06 * float((x % 3 == 0) or (y % 3 == 0))
+			img.set_pixel(x, y, Color(v, v, v))
+	return ImageTexture.create_from_image(img)
+
+## Rounded-edge box (bevelled), used for vest plates and pouches.
+static func rbox(size: Vector3, bev := 0.02) -> Mesh:
+	var key := str(size) + str(bev)
+	if not _rbox_cache.has(key):
+		var hz := size.z * 0.5; var hy := size.y * 0.5
+		var poly := PackedVector2Array([Vector2(-hz, -hy), Vector2(hz, -hy), Vector2(hz, hy), Vector2(-hz, hy)])
+		_rbox_cache[key] = CarMesh.extrude_round(poly, size.x, bev, 0.0, 0.0, 1.0, 0.0, 10.0)
+	return _rbox_cache[key]
+
+func _tint(n: String, col: Color, rough := -1.0, fabric := "") -> void:
 	var mi := _mesh(n)
 	if not mi:
 		return
 	var base: Material = mi.mesh.surface_get_material(0)
-	var key := n + col.to_html() + str(rough)
+	var key := n + col.to_html() + str(rough) + fabric
 	if not _mats.has(key):
 		var m: StandardMaterial3D = base.duplicate() if base is StandardMaterial3D else StandardMaterial3D.new()
 		m.albedo_color = col
+		if fabric == "fabric":
+			if not _fabric: _fabric = _noise_tex("fabric")
+			m.albedo_texture = _fabric
+		elif fabric == "denim":
+			if not _denim: _denim = _noise_tex("denim")
+			m.albedo_texture = _denim
 		if rough >= 0.0:
 			m.roughness = rough
 		_mats[key] = m
@@ -131,19 +179,24 @@ func _dress(rng: RandomNumberGenerator) -> void:
 	match role:
 		"swat", "officer":
 			var navy := Color(0.12, 0.14, 0.2) if role == "swat" else Color(0.22, 0.3, 0.45)
-			_tint("Wolf3D_Outfit_Top", navy, 0.9)
-			_tint("Wolf3D_Outfit_Bottom", Color(0.1, 0.11, 0.15) if role == "swat" else Color(0.12, 0.14, 0.2), 0.9)
+			_tint("Wolf3D_Outfit_Top", navy, 0.9, "fabric" if role == "swat" else "")
+			_tint("Wolf3D_Outfit_Bottom", Color(0.1, 0.11, 0.15) if role == "swat" else Color(0.12, 0.14, 0.2), 0.9, "fabric")
 			_tint("Wolf3D_Outfit_Footwear", Color(0.06, 0.06, 0.06), 0.6)
 			var head := _attach("Head")
 			if role == "swat":
 				# ballistic helmet
-				var hm := SphereMesh.new(); hm.radius = 0.138; hm.height = 0.2; hm.is_hemisphere = true
-				_part(head, hm, Vector3(0, 0.1, -0.005), _mat(Color(0.09, 0.1, 0.12), 0.55), Vector3.ZERO, Vector3(1.0, 1.0, 1.12))
-				# goggles + headset
-				_part(head, _box(Vector3(0.17, 0.045, 0.03)), Vector3(0, 0.08, 0.125), _mat(Color(0.02, 0.02, 0.03), 0.1, 0.6))
+				var hcol := _mat(Color(0.1, 0.11, 0.12), 0.6)
+				var hm := SphereMesh.new(); hm.radius = 0.135; hm.height = 0.17; hm.is_hemisphere = true; hm.radial_segments = 24; hm.rings = 8
+				_part(head, hm, Vector3(0, 0.095, -0.01), hcol, Vector3(-0.08, 0, 0), Vector3(1.0, 1.0, 1.1))
+				# side rails + NVG shroud + strap
 				for sx in [-1.0, 1.0]:
-					var cm := CylinderMesh.new(); cm.top_radius = 0.045; cm.bottom_radius = 0.045; cm.height = 0.04
-					_part(head, cm, Vector3(sx * 0.105, 0.05, 0.0), _mat(Color(0.12, 0.12, 0.1), 0.7), Vector3(0, 0, PI / 2))
+					_part(head, rbox(Vector3(0.015, 0.025, 0.16), 0.006), Vector3(sx * 0.133, 0.12, -0.01), _mat(Color(0.06, 0.06, 0.06), 0.5))
+					var cm := CylinderMesh.new(); cm.top_radius = 0.042; cm.bottom_radius = 0.045; cm.height = 0.035; cm.radial_segments = 16
+					_part(head, cm, Vector3(sx * 0.11, 0.045, 0.0), _mat(Color(0.14, 0.14, 0.12), 0.7), Vector3(0, 0, PI / 2))
+					_part(head, rbox(Vector3(0.01, 0.1, 0.02), 0.004), Vector3(sx * 0.1, 0.0, 0.035), _mat(Color(0.08, 0.08, 0.08), 0.9))
+				_part(head, rbox(Vector3(0.05, 0.035, 0.03), 0.008), Vector3(0, 0.2, 0.135), _mat(Color(0.05, 0.05, 0.05), 0.4, 0.4))
+				# ballistic glasses
+				_part(head, rbox(Vector3(0.16, 0.04, 0.02), 0.008), Vector3(0, 0.075, 0.118), _mat(Color(0.02, 0.025, 0.03), 0.05, 0.7))
 				_tint("Wolf3D_Beard", Color(0.12, 0.09, 0.07))
 			else:
 				# police peaked cap
@@ -154,12 +207,22 @@ func _dress(rng: RandomNumberGenerator) -> void:
 			# plate carrier vest
 			var chest := _attach("Spine2")
 			var vest_col := Color(0.11, 0.12, 0.13) if role == "swat" else Color(0.18, 0.2, 0.22)
-			_part(chest, _box(Vector3(0.335, 0.3, 0.235)), Vector3(0, -0.09, 0.015), _mat(vest_col, 0.85))
+			var vm := _mat(vest_col, 0.9)
+			_part(chest, rbox(Vector3(0.32, 0.31, 0.08), 0.025), Vector3(0, -0.09, 0.115), vm)    # front plate
+			_part(chest, rbox(Vector3(0.32, 0.33, 0.07), 0.025), Vector3(0, -0.08, -0.095), vm)   # back plate
 			for sx in [-1.0, 1.0]:
-				_part(chest, _box(Vector3(0.07, 0.04, 0.2)), Vector3(sx * 0.12, 0.07, 0.0), _mat(vest_col, 0.85))
+				_part(chest, rbox(Vector3(0.05, 0.2, 0.23), 0.02), Vector3(sx * 0.165, -0.14, 0.012), vm)  # cummerbund
+				_part(chest, rbox(Vector3(0.065, 0.035, 0.22), 0.012), Vector3(sx * 0.11, 0.075, 0.01), vm) # shoulder straps
 			if role == "swat":
+				var pm := _mat(Color(0.13, 0.14, 0.14), 0.95)
 				for i in 3:
-					_part(chest, _box(Vector3(0.08, 0.1, 0.05)), Vector3(-0.1 + i * 0.1, -0.17, 0.15), _mat(Color(0.14, 0.15, 0.15), 0.9))
+					_part(chest, rbox(Vector3(0.075, 0.11, 0.045), 0.012), Vector3(-0.085 + i * 0.085, -0.17, 0.165), pm)
+				_part(chest, rbox(Vector3(0.05, 0.08, 0.035), 0.01), Vector3(0.1, 0.0, 0.16), pm)   # radio pouch
+				var ant := CylinderMesh.new(); ant.top_radius = 0.004; ant.bottom_radius = 0.006; ant.height = 0.22
+				_part(chest, ant, Vector3(0.12, 0.13, -0.12), _mat(Color(0.05, 0.05, 0.05), 0.5))
+				# pistol holster on the right thigh
+				var thigh := _attach("RightUpLeg")
+				_part(thigh, rbox(Vector3(0.05, 0.17, 0.11), 0.015), Vector3(-0.09, 0.2, 0.0), _mat(Color(0.07, 0.07, 0.07), 0.8))
 			var back := Label3D.new()
 			back.text = "الأمن العام\nPOLICE"
 			back.font = font; back.font_size = 48; back.pixel_size = 0.0019
@@ -188,8 +251,8 @@ func _dress(rng: RandomNumberGenerator) -> void:
 			if teeth: teeth.visible = false
 			var tops := [Color(0.18, 0.2, 0.14), Color(0.25, 0.25, 0.27), Color(0.08, 0.08, 0.09), Color(0.3, 0.2, 0.12), Color(0.15, 0.17, 0.22)]
 			var bottoms := [Color(0.18, 0.24, 0.38), Color(0.08, 0.08, 0.1), Color(0.25, 0.25, 0.22)]
-			_tint("Wolf3D_Outfit_Top", tops[rng.randi() % tops.size()], 0.9)
-			_tint("Wolf3D_Outfit_Bottom", bottoms[rng.randi() % bottoms.size()], 0.9)
+			_tint("Wolf3D_Outfit_Top", tops[rng.randi() % tops.size()], 0.95, "fabric")
+			_tint("Wolf3D_Outfit_Bottom", bottoms[rng.randi() % bottoms.size()], 0.9, "denim")
 			_tint("Wolf3D_Outfit_Footwear", Color(0.15, 0.13, 0.12))
 			if rng.randf() < 0.5:
 				var chest := _attach("Spine2")
@@ -197,8 +260,9 @@ func _dress(rng: RandomNumberGenerator) -> void:
 		"hostage", "civilian":
 			var tops := [Color(0.95, 0.95, 0.95), Color(0.55, 0.68, 0.85), Color(0.75, 0.68, 0.55), Color(0.6, 0.15, 0.15), Color(0.3, 0.42, 0.3)]
 			var bottoms := [Color(0.15, 0.15, 0.17), Color(0.3, 0.3, 0.33), Color(0.2, 0.25, 0.4)]
-			_tint("Wolf3D_Outfit_Top", tops[rng.randi() % tops.size()], 0.85)
-			_tint("Wolf3D_Outfit_Bottom", bottoms[rng.randi() % bottoms.size()], 0.85)
+			var casual := role == "civilian" and rng.randf() < 0.6
+			_tint("Wolf3D_Outfit_Top", tops[rng.randi() % tops.size()], 0.85, "fabric" if casual else "")
+			_tint("Wolf3D_Outfit_Bottom", bottoms[rng.randi() % bottoms.size()], 0.85, "denim" if casual else "")
 			if role == "hostage":
 				# bank staff tie
 				var chest := _attach("Spine2")

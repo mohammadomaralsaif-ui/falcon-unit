@@ -9,37 +9,54 @@ extends SkeletonModifier3D
 var mode := "rifle"
 var grip: Node3D        # right hand target
 var guard: Node3D       # left hand target
+var body: Node3D        # the Person node (faces -Z, metres, Y up)
 var _b := {}
+var K := Transform3D.IDENTITY   # "civilian space" (Y up, +Z forward, metres) -> skeleton space
 
 func _bone(n: String) -> int:
 	if not _b.has(n):
-		_b[n] = get_skeleton().find_bone(n)
+		var sk := get_skeleton()
+		var i := sk.find_bone(n)
+		if i < 0:
+			i = sk.find_bone("mixamorig_" + n)
+		_b[n] = i
 	return _b[n]
+
+func _toS(p: Vector3) -> Vector3:
+	return K * p
+
+func _toC(p: Vector3) -> Vector3:
+	return K.affine_inverse() * p
+
+func _dirS(d: Vector3) -> Vector3:
+	return (K.basis * d).normalized()
 
 func _process_modification() -> void:
 	var sk := get_skeleton()
 	if not sk or mode == "none":
 		return
 	var inv := sk.global_transform.affine_inverse()
+	if body:
+		K = inv * body.global_transform * Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO)
 	match mode:
 		"rifle":
 			if grip and guard and grip.is_inside_tree():
 				_ik("Right", inv * grip.global_position, Vector3(-0.6, -1.0, -0.5))
 				_ik("Left", inv * guard.global_position, Vector3(0.7, -1.0, 0.0))
 		"hands_up":
-			var h := sk.get_bone_global_pose(_bone("Head")).origin
-			_ik("Right", h + Vector3(-0.22, 0.32, 0.05), Vector3(-1, 0, -0.3))
-			_ik("Left", h + Vector3(0.22, 0.32, 0.05), Vector3(1, 0, -0.3))
+			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
+			_ik("Right", _toS(h + Vector3(-0.22, 0.32, 0.05)), Vector3(-1, 0, -0.3))
+			_ik("Left", _toS(h + Vector3(0.22, 0.32, 0.05)), Vector3(1, 0, -0.3))
 		"kneel_head", "kneel_back":
 			_kneel(sk)
-			var h := sk.get_bone_global_pose(_bone("Head")).origin
+			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
 			if mode == "kneel_head":
-				_ik("Right", h + Vector3(-0.1, 0.12, -0.02), Vector3(-1, 0.2, 0.2))
-				_ik("Left", h + Vector3(0.1, 0.12, -0.02), Vector3(1, 0.2, 0.2))
+				_ik("Right", _toS(h + Vector3(-0.1, 0.12, -0.02)), Vector3(-1, 0.2, 0.2))
+				_ik("Left", _toS(h + Vector3(0.1, 0.12, -0.02)), Vector3(1, 0.2, 0.2))
 			else:
-				var hip := sk.get_bone_global_pose(_bone("Hips")).origin
-				_ik("Right", hip + Vector3(-0.05, 0.02, -0.2), Vector3(-1, 0, 0.3))
-				_ik("Left", hip + Vector3(0.05, 0.02, -0.2), Vector3(1, 0, 0.3))
+				var hip := _toC(sk.get_bone_global_pose(_bone("Hips")).origin)
+				_ik("Right", _toS(hip + Vector3(-0.05, 0.02, -0.2)), Vector3(-1, 0, 0.3))
+				_ik("Left", _toS(hip + Vector3(0.05, 0.02, -0.2)), Vector3(1, 0, 0.3))
 
 func _point(b: int, child: int, dir: Vector3) -> void:
 	var sk := get_skeleton()
@@ -48,7 +65,7 @@ func _point(b: int, child: int, dir: Vector3) -> void:
 	var cur := (c - g.origin)
 	if cur.length() < 0.0001:
 		return
-	var q := _arc(cur.normalized(), dir.normalized())
+	var q := _arc(cur.normalized(), _dirS(dir))
 	g.basis = Basis(q) * g.basis
 	sk.set_bone_global_pose(b, g)
 
@@ -59,7 +76,9 @@ func _kneel(sk: Skeleton3D) -> void:
 		_point(_bone(s + "Leg"), _bone(s + "Foot"), Vector3(0, -0.12, -1))
 		_point(_bone(s + "Foot"), _bone(s + "ToeBase"), Vector3(0, -0.2, -1))
 	var hips := sk.get_bone_global_pose(_bone("Hips"))
-	hips.origin.y = 0.55
+	var hc := _toC(hips.origin)
+	hc.y = 0.55
+	hips.origin = _toS(hc)
 	sk.set_bone_global_pose(_bone("Hips"), hips)
 
 static func _arc(a: Vector3, b: Vector3) -> Quaternion:
@@ -90,7 +109,7 @@ func _ik(side: String, target: Vector3, pole: Vector3) -> void:
 	var dir := to.normalized()
 	var x := (a * a - b * b + d * d) / (2.0 * d)
 	var h := sqrt(maxf(a * a - x * x, 0.0))
-	var pn := pole.normalized()
+	var pn := _dirS(pole)
 	var perp := (pn - dir * pn.dot(dir))
 	if perp.length() < 0.001:
 		perp = Vector3.DOWN

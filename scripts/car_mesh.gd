@@ -122,10 +122,8 @@ static func extrude_round(poly: PackedVector2Array, width: float, bev := 0.08, t
 		var b: Array = ring_verts[(i + 1) % R]
 		for k in a.size() - 1:
 			var quad := [a[k], b[k], b[k + 1], a[k + 1]]
-			var tris := [[0, 1, 2], [0, 2, 3]] if wind > 0 else [[0, 2, 1], [0, 3, 2]]
-			for t in tris:
-				for idx in t:
-					st.set_normal(quad[idx][1]); st.add_vertex(quad[idx][0])
+			for t in [[0, 1, 2], [0, 2, 3]]:
+				_tri(st, quad[t[0]], quad[t[1]], quad[t[2]])
 	# caps
 	var tri := Geometry2D.triangulate_polygon(cap_pts)
 	if tri.is_empty():
@@ -133,18 +131,22 @@ static func extrude_round(poly: PackedVector2Array, width: float, bev := 0.08, t
 	for side in [-1.0, 1.0]:
 		var x: float = side * hw
 		for i in range(0, tri.size(), 3):
-			var ids := [tri[i], tri[i + 1], tri[i + 2]]
-			if (side > 0) != (wind > 0):
-				ids = [tri[i], tri[i + 2], tri[i + 1]]
 			var pts := []
-			for id in ids:
+			for id in [tri[i], tri[i + 1], tri[i + 2]]:
 				var c2: Vector2 = cap_pts[id]
-				pts.append(f.call(Vector3(x, c2.y, c2.x)))
-			var nor: Vector3 = (pts[1] - pts[0]).cross(pts[2] - pts[0]).normalized()
-			for pp in pts:
-				st.set_normal(nor); st.add_vertex(pp)
+				pts.append([f.call(Vector3(x, c2.y, c2.x)), Vector3(side, 0, 0)])
+			_tri(st, pts[0], pts[1], pts[2])
 	st.index()
 	return st.commit()
+
+## Emits a triangle (vertices are [position, normal]) wound so its front face matches the normal.
+static func _tri(st: SurfaceTool, a: Array, b: Array, c: Array) -> void:
+	var g: Vector3 = (b[0] - a[0]).cross(c[0] - a[0])
+	var nsum: Vector3 = a[1] + b[1] + c[1]
+	if g.dot(nsum) > 0.0:   # Godot front faces are clockwise
+		var t := b; b = c; c = t
+	for v in [a, b, c]:
+		st.set_normal(v[1]); st.add_vertex(v[0])
 
 static func _arch(pts: PackedVector2Array, cz: float, base: float, r: float) -> void:
 	for k in 13:

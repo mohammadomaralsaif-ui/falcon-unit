@@ -4,7 +4,7 @@ extends RefCounted
 ## Works in "model space" (both characters facing -Z) and aligns rest bone directions,
 ## because the soldier rests in a T-pose while the civilian rests in an A-pose.
 
-static var _lib: AnimationLibrary
+static var _libs := {}
 
 static func _rot(b: Basis) -> Quaternion:
 	return b.orthonormalized().get_rotation_quaternion()
@@ -21,15 +21,29 @@ static func _arc(a: Vector3, b: Vector3) -> Quaternion:
 		return Quaternion(ax.normalized(), PI)
 	return Quaternion(a.cross(b).normalized(), acos(d))
 
-static func library() -> AnimationLibrary:
-	if _lib:
-		return _lib
+static func _chain(root: Node, n: Node3D) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var c: Node = n
+	while c and c != root:
+		if c is Node3D:
+			t = (c as Node3D).transform * t
+		c = c.get_parent()
+	return t
+
+static func _bare(n: String) -> String:
+	return n.trim_prefix("mixamorig_").trim_prefix("mixamorig:")
+
+## path: target model (any Mixamo / Ready Player Me compatible rig facing +Z).
+static func library(model := "res://assets/models/civilian.glb") -> AnimationLibrary:
+	if _libs.has(model):
+		return _libs[model]
 	var src: Node3D = load("res://assets/models/soldier.glb").instantiate()
-	var tgt: Node3D = load("res://assets/models/civilian.glb").instantiate()
+	var tgt: Node3D = load(model).instantiate()
 	var ssk: Skeleton3D = src.find_child("Skeleton3D", true, false)
 	var tsk: Skeleton3D = tgt.find_child("Skeleton3D", true, false)
-	var sroot: Transform3D = src.get_node("Character").transform * ssk.transform
-	var troot: Transform3D = Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO) * tgt.get_node("Armature").transform * tsk.transform
+	var sroot: Transform3D = _chain(src, ssk)
+	var troot: Transform3D = Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO) * _chain(tgt, tsk)
+	var skel_path := String(tgt.get_path_to(tsk))
 	var sroot_q := _rot(sroot.basis)
 	var troot_q := _rot(troot.basis)
 	# model-space global rests
@@ -48,7 +62,7 @@ static func library() -> AnimationLibrary:
 	# bone map target -> source
 	var map := {}
 	for i in tsk.get_bone_count():
-		var si := ssk.find_bone("mixamorig_" + tsk.get_bone_name(i))
+		var si := ssk.find_bone("mixamorig_" + _bare(tsk.get_bone_name(i)))
 		if si >= 0:
 			map[i] = si
 	# aligned target rests: rotate each target bone so it points like the source bone
@@ -64,22 +78,25 @@ static func library() -> AnimationLibrary:
 			var skids := ssk.get_bone_children(si)
 			if kids.size() > 0 and skids.size() > 0:
 				var tc: int = kids[0]
-				var sc := ssk.find_bone("mixamorig_" + tsk.get_bone_name(tc))
+				var sc := ssk.find_bone("mixamorig_" + _bare(tsk.get_bone_name(tc)))
 				if sc < 0:
 					sc = skids[0]
 				var dt: Vector3 = Pt[tc] - Pt[i]
 				var ds: Vector3 = Ps[sc] - Ps[si]
 				if dt.length() > 0.001 and ds.length() > 0.001:
-					var name := tsk.get_bone_name(i)
+					var name := _bare(tsk.get_bone_name(i))
 					# keep spine / neck / head / hips upright from the target's own rest
 					if not (name in ["Hips", "Spine", "Spine1", "Spine2", "Neck", "Head", "HeadTop_End"]):
 						al = _arc(dt, ds)
 		Gt_al[i] = al * Gt[i]
-	var hip_t := tsk.find_bone("Hips")
+	var hip_t := -1
+	for i in tsk.get_bone_count():
+		if _bare(tsk.get_bone_name(i)) == "Hips":
+			hip_t = i
 	var hip_s := ssk.find_bone("mixamorig_Hips")
 	var ratio: float = Pt[hip_t].y / maxf(Ps[hip_s].y, 0.01)
 	var sap: AnimationPlayer = src.find_child("AnimationPlayer", true, false)
-	_lib = AnimationLibrary.new()
+	var lib := AnimationLibrary.new()
 	for an in ["Idle", "Walk", "Run"]:
 		var a := sap.get_animation(an)
 		var out := Animation.new()
@@ -93,8 +110,10 @@ static func library() -> AnimationLibrary:
 				continue
 			var ti := tsk.find_bone(bname.trim_prefix("mixamorig_"))
 			if ti < 0:
+				ti = tsk.find_bone(bname)
+			if ti < 0:
 				continue
-			var tpath := NodePath("Armature/Skeleton3D:" + tsk.get_bone_name(ti))
+			var tpath := NodePath(skel_path + ":" + tsk.get_bone_name(ti))
 			var typ := a.track_get_type(t)
 			if typ == Animation.TYPE_ROTATION_3D:
 				var sp := ssk.get_bone_parent(si)
@@ -122,7 +141,8 @@ static func library() -> AnimationLibrary:
 					delta.z = 0.0  # keep animations in place
 					var tw: Vector3 = Pt[ti] + delta
 					out.position_track_insert_key(nt, a.track_get_key_time(t, k), troot.affine_inverse() * tw)
-		_lib.add_animation(an, out)
+		lib.add_animation(an, out)
 	src.free()
 	tgt.free()
-	return _lib
+	_libs[model] = lib
+	return lib
