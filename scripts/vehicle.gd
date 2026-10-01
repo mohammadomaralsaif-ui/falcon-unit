@@ -60,7 +60,8 @@ func _ready() -> void:
 			w.use_as_steering = wzp > 0
 			w.use_as_traction = true
 			add_child(w)
-			CarMesh.wheel(w, r, 0.3)
+			if not body.has_meta("custom"):
+				CarMesh.wheel(w, r, 0.3)
 	# siren lights
 	var bar_z: float = (s.ws1 + s.re) * 0.5 + 0.3
 	light_r = OmniLight3D.new(); light_r.light_color = Color(1, 0.1, 0.1); light_r.omni_range = 14.0

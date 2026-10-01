@@ -781,12 +781,16 @@ func bake(node: Node3D) -> ArrayMesh:
 		for ch in n.get_children():
 			if ch is Node3D:
 				var cxf: Transform3D = xf * ch.transform
-				if ch is MeshInstance3D and ch.mesh:
-					var m: Material = ch.material_override
-					if not groups.has(m):
-						var s := SurfaceTool.new(); s.begin(Mesh.PRIMITIVE_TRIANGLES)
-						groups[m] = s
+				if ch is MeshInstance3D and ch.mesh and ch.visible:
 					for si in ch.mesh.get_surface_count():
+						var m: Material = ch.material_override
+						if not m:
+							m = ch.get_surface_override_material(si)
+						if not m:
+							m = ch.mesh.surface_get_material(si)
+						if not groups.has(m):
+							var s := SurfaceTool.new(); s.begin(Mesh.PRIMITIVE_TRIANGLES)
+							groups[m] = s
 						groups[m].append_from(ch.mesh, si, cxf)
 				stack.append([ch, cxf])
 	var am := ArrayMesh.new()

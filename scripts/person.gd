@@ -6,6 +6,7 @@ extends Node3D
 const Retarget = preload("res://scripts/retarget.gd")
 const PoseMod = preload("res://scripts/pose_mod.gd")
 const Humanoid = preload("res://scripts/humanoid.gd")
+const CustomModels = preload("res://scripts/custom_models.gd")
 const CarMesh = preload("res://scripts/car_mesh.gd")
 
 var role := "swat"
@@ -22,6 +23,7 @@ var gun_rest := Vector3(0.17, 1.3, -0.3)
 static var _civ: PackedScene
 static var _woman: PackedScene
 var model_path := "res://assets/models/civilian.glb"
+var custom := false
 static var _mats := {}
 
 func _init(_role := "swat", seed_val := 0) -> void:
@@ -39,17 +41,35 @@ func _init(_role := "swat", seed_val := 0) -> void:
 			old_ap.get_parent().remove_child(old_ap)
 			old_ap.free()
 	else:
-		if not _civ:
-			_civ = load("res://assets/models/civilian.glb")
-		model = _civ.instantiate()
+		# a real Mixamo character dropped into assets/characters/ wins over the built-in body
+		var real := CustomModels.character(role, rng.randi())
+		if real != "" and CustomModels.scene(real):
+			model = CustomModels.scene(real).instantiate()
+			model_path = real
+			custom = true
+			for ap in model.find_children("*", "AnimationPlayer", true, false):
+				ap.get_parent().remove_child(ap)
+				ap.free()
+		else:
+			if not _civ:
+				_civ = load("res://assets/models/civilian.glb")
+			model = _civ.instantiate()
 	model.rotation.y = PI
 	add_child(model)
 	skel = model.find_child("Skeleton3D", true, false)
+	if custom:
+		# normalise height: head bone at ~1.62 m whatever units the file used
+		var hb := skel.find_bone("mixamorig_Head")
+		if hb < 0: hb = skel.find_bone("Head")
+		if hb >= 0:
+			var hy: float = (Retarget._chain(model, skel) * skel.get_bone_global_rest(hb).origin).y
+			if hy > 0.01:
+				model.scale = Vector3.ONE * (1.62 / hy)
 	anim = AnimationPlayer.new()
 	anim.root_node = NodePath("..")
 	model.add_child(anim)
 	anim.add_animation_library("", Retarget.library(model_path))
-	if not female:
+	if not female and not custom:
 		_dress(rng)
 	pose = PoseMod.new()
 	pose.body = self

@@ -2,6 +2,8 @@ extends RefCounted
 ## Builds detailed vehicle meshes (sedans, taxis, police cars, SUVs, ambulances) from side profiles.
 ## Vehicles face +Z (Godot VehicleBody3D forward).
 
+const CustomModels = preload("res://scripts/custom_models.gd")
+
 const SPECS := {
 	"sedan": {"L": 4.5, "W": 1.78, "belt": 1.0, "roof": 1.44, "r": 0.36, "wz": 1.4, "hood": 0.92, "ws0": 1.05, "ws1": 0.35, "re": -1.1, "rb": -1.9},
 	"suv": {"L": 4.9, "W": 2.0, "belt": 1.25, "roof": 1.95, "r": 0.45, "wz": 1.55, "hood": 1.18, "ws0": 1.4, "ws1": 0.8, "re": -2.2, "rb": -2.36},
@@ -210,6 +212,12 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 	elif kind == "ambulance" or kind == "cashvan":
 		base_kind = "van"
 	var s: Dictionary = SPECS[base_kind]
+	# a real model dropped into assets/cars/ wins over the procedural one
+	var real := CustomModels.car(kind, float(s.L), randi())
+	if real:
+		real.set_meta("flashers", {})
+		real.set_meta("spec", s)
+		return real
 	var L: float = s.L; var W: float = s.W; var hl := L * 0.5; var r: float = s.r; var wz: float = s.wz
 	var root := Node3D.new()
 	if kind == "taxi":
@@ -351,12 +359,16 @@ static func compact(node: Node3D) -> Node3D:
 		for ch in n.get_children():
 			if ch is Node3D:
 				var cxf: Transform3D = xf * ch.transform
-				if ch is MeshInstance3D and ch.mesh:
-					var m: Material = ch.material_override
-					if not groups.has(m):
-						var s := SurfaceTool.new(); s.begin(Mesh.PRIMITIVE_TRIANGLES)
-						groups[m] = s
+				if ch is MeshInstance3D and ch.mesh and ch.visible:
 					for si in ch.mesh.get_surface_count():
+						var m: Material = ch.material_override
+						if not m:
+							m = ch.get_surface_override_material(si)
+						if not m:
+							m = ch.mesh.surface_get_material(si)
+						if not groups.has(m):
+							var s := SurfaceTool.new(); s.begin(Mesh.PRIMITIVE_TRIANGLES)
+							groups[m] = s
 						groups[m].append_from(ch.mesh, si, cxf)
 				elif ch is Label3D:
 					labels.append([ch, cxf])
