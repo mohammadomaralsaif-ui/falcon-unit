@@ -45,7 +45,11 @@ jobs:
           echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=android" >> $GITHUB_ENV
 
       - name: Import assets
-        run: godot --headless --path . --import || true
+        run: |
+          # phones only need ETC2/ASTC textures; skipping desktop S3TC/BPTC halves the APK
+          sed -i 's|^textures/vram_compression/import_etc2_astc=true|textures/vram_compression/import_s3tc_bptc=false\ntextures/vram_compression/import_etc2_astc=true|' project.godot
+          grep vram_compression project.godot
+          godot --headless --path . --import || true
 
       - name: Export APK
         run: |
