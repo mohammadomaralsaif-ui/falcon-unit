@@ -55,6 +55,8 @@ static func _rotation_for(file: String) -> float:
 static func _aabb(n: Node, xf: Transform3D, acc: Array) -> void:
 	for c in n.get_children():
 		if c is Node3D:
+			if not c.visible:
+				continue
 			var cx: Transform3D = xf * c.transform
 			if c is MeshInstance3D and c.mesh:
 				var bb: AABB = cx * c.mesh.get_aabb()
@@ -72,6 +74,11 @@ static func car(kind: String, length: float, seed_val: int) -> Node3D:
 	var inst: Node3D = ps.instantiate()
 	for ap in inst.find_children("*", "AnimationPlayer", true, false):
 		ap.queue_free()
+	# Sketchfab exports often carry a big shadow plane and rigged door helpers: hide them
+	for mi in inst.find_children("*", "MeshInstance3D", true, false):
+		var nm := String(mi.name).to_lower()
+		if mi.skin or nm.contains("sombra") or nm.contains("shadow") or nm.begins_with("plane") or nm.contains("ground"):
+			mi.visible = false
 	var holder := Node3D.new()
 	var spin := Node3D.new()
 	spin.rotation.y = _rotation_for(path)
@@ -98,6 +105,79 @@ static func car(kind: String, length: float, seed_val: int) -> Node3D:
 	wrap.set_meta("custom", true)
 	return wrap
 
+static var _roles = null
+
 ## Path of a real character model for this role ("" if none provided).
+## assets/characters/roles.json can list several files per role (a file may serve several roles).
 static func character(role: String, seed_val: int) -> String:
+	if _roles == null:
+		_roles = {}
+		var p := "res://assets/characters/roles.json"
+		if FileAccess.file_exists(p):
+			var j = JSON.parse_string(FileAccess.get_file_as_string(p))
+			if j is Dictionary:
+				_roles = j
+	if _roles.has(role) and (_roles[role] as Array).size() > 0:
+		var arr: Array = _roles[role]
+		return "res://assets/characters".path_join(arr[absi(seed_val) % arr.size()])
 	return pick("res://assets/characters", role, seed_val)
+
+## A real weapon model, scaled to `length`, barrel along -Z, rear end at z = +rear. null if none.
+## assets/weapons/setup.json: {"rifle_swat.glb": {"rotate": 90}} turns the model so the muzzle faces -Z.
+static func weapon(name: String, length: float, rear: float) -> Node3D:
+	var path := "res://assets/weapons/%s.glb" % name
+	var ps := scene(path) if ResourceLoader.exists(path) else null
+	if not ps:
+		return null
+	var inst: Node3D = ps.instantiate()
+	var holder := Node3D.new()
+	var spin := Node3D.new()
+	var rot := 0.0
+	var sp := "res://assets/weapons/setup.json"
+	if FileAccess.file_exists(sp):
+		var j = JSON.parse_string(FileAccess.get_file_as_string(sp))
+		if j is Dictionary and j.has(name + ".glb"):
+			rot = deg_to_rad(float(j[name + ".glb"].get("rotate", 0.0)))
+	spin.rotation.y = rot
+	holder.add_child(spin)
+	spin.add_child(inst)
+	var acc := [null]
+	_aabb(holder, Transform3D.IDENTITY, acc)
+	if acc[0] == null:
+		holder.free()
+		return null
+	var bb: AABB = acc[0]
+	var s := length / maxf(bb.size.z, 0.001)
+	holder.scale = Vector3.ONE * s
+	var c := bb.get_center()
+	# rear end (max z) sits at +rear, barrel runs toward -Z
+	holder.position = Vector3(-c.x * s, -c.y * s, rear - bb.end.z * s)
+	var wrap := Node3D.new()
+	wrap.add_child(holder)
+	for mi in wrap.find_children("*", "GeometryInstance3D", true, false):
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return wrap
+
+## Generic prop (tree, building…) scaled so its height is `height` (0 = keep size), base on y = 0.
+static func prop(name: String, height := 0.0) -> Node3D:
+	var path := "res://assets/props/%s.glb" % name
+	var ps := scene(path) if ResourceLoader.exists(path) else null
+	if not ps:
+		return null
+	var inst: Node3D = ps.instantiate()
+	var holder := Node3D.new()
+	holder.add_child(inst)
+	var acc := [null]
+	_aabb(holder, Transform3D.IDENTITY, acc)
+	if acc[0] == null:
+		holder.free()
+		return null
+	var bb: AABB = acc[0]
+	var s := height / maxf(bb.size.y, 0.001) if height > 0.0 else 1.0
+	holder.scale = Vector3.ONE * s
+	var c := bb.get_center()
+	holder.position = Vector3(-c.x * s, -bb.position.y * s, -c.z * s)
+	var wrap := Node3D.new()
+	wrap.add_child(holder)
+	wrap.set_meta("size", bb.size * s)
+	return wrap

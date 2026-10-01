@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://fcn4ncnenmlg"
+path="res://.godot/imported/robber_1_Ch18_1001_Diffuse.webp-a0a7085ab28991d972ac0c5efe04c420.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "cfcc6913d3353c9535b69ecb151c770b"
+}
+
+[deps]
+
+source_file="res://assets/characters/robber_1_Ch18_1001_Diffuse.webp"
+dest_files=["res://.godot/imported/robber_1_Ch18_1001_Diffuse.webp-a0a7085ab28991d972ac0c5efe04c420.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

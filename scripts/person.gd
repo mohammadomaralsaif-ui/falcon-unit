@@ -59,8 +59,12 @@ func _init(_role := "swat", seed_val := 0) -> void:
 	skel = model.find_child("Skeleton3D", true, false)
 	if custom:
 		# normalise height: head bone at ~1.62 m whatever units the file used
-		var hb := skel.find_bone("mixamorig_Head")
-		if hb < 0: hb = skel.find_bone("Head")
+		var hb := -1
+		for k in skel.get_bone_count():
+			var bn := skel.get_bone_name(k)
+			if bn == "Head" or (bn.begins_with("mixamorig") and bn.ends_with("_Head")):
+				hb = k
+				break
 		if hb >= 0:
 			var hy: float = (Retarget._chain(model, skel) * skel.get_bone_global_rest(hb).origin).y
 			if hy > 0.01:

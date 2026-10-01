@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://dbt3dlijhp7d6"
+path="res://.godot/imported/rifle_swat_10.webp-57aeac7863cb289eb5bf98193478fb73.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "04ad4e74cf28058f0cbcbf01b72ada35"
+}
+
+[deps]
+
+source_file="res://assets/weapons/rifle_swat_10.webp"
+dest_files=["res://.godot/imported/rifle_swat_10.webp-57aeac7863cb289eb5bf98193478fb73.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

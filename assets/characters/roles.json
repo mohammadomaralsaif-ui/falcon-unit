@@ -1,0 +1,7 @@
+{
+  "swat": ["swat_1.glb", "swat_2.glb"],
+  "robber": ["robber_1.glb", "robber_2.glb"],
+  "hostage": ["hostage_1.glb", "civilian_woman.glb", "civilian_medic.glb", "officer_1.glb"],
+  "civilian": ["civilian_1.glb", "civilian_2.glb", "civilian_woman.glb", "civilian_medic.glb", "robber_2.glb"],
+  "officer": ["officer_1.glb"]
+}

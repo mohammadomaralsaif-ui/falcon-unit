@@ -22,6 +22,7 @@ const ACTIONS := {
 	"siren": [KEY_H],
 	"crouch": [KEY_C],
 	"pause": [KEY_ESCAPE],
+	"flash": [KEY_G],
 }
 
 func _ready() -> void:

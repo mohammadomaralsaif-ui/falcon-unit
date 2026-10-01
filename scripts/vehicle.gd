@@ -75,6 +75,15 @@ func _ready() -> void:
 	light_b = OmniLight3D.new(); light_b.light_color = Color(0.15, 0.35, 1); light_b.omni_range = 14.0
 	light_b.position = Vector3(0.5, s.roof + 0.4, bar_z)
 	add_child(light_r); add_child(light_b)
+	if main and main.night:
+		for sd in [-1.0, 1.0]:
+			var sl := SpotLight3D.new()
+			sl.light_color = Color(1, 0.95, 0.85); sl.light_energy = 3.0
+			sl.spot_range = 40.0; sl.spot_angle = 30.0
+			sl.position = Vector3(sd * 0.7, 0.85, s.L * 0.5)
+			sl.rotation.y = PI
+			sl.rotation.x = -0.08
+			add_child(sl)
 	engine_snd = AudioStreamPlayer3D.new(); engine_snd.stream = Sfx.streams["engine"]; engine_snd.unit_size = 8.0
 	siren_snd = AudioStreamPlayer3D.new(); siren_snd.stream = Sfx.streams["siren"]; siren_snd.unit_size = 14.0; siren_snd.volume_db = -6.0
 	add_child(engine_snd); add_child(siren_snd)

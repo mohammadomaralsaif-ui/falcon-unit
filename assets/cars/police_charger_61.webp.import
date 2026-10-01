@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://bqiv7hc7271lj"
+path="res://.godot/imported/police_charger_61.webp-0fa8745572d6d1f14aeaf01642cf7787.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "cd3e074fe5ae5df3c6f74126441b5b44"
+}
+
+[deps]
+
+source_file="res://assets/cars/police_charger_61.webp"
+dest_files=["res://.godot/imported/police_charger_61.webp-0fa8745572d6d1f14aeaf01642cf7787.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

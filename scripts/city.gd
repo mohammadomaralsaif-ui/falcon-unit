@@ -3,6 +3,7 @@ extends Node3D
 ## street lamps, trees, parked cars, hills covered in houses, and the target bank compound.
 
 const CarMesh = preload("res://scripts/car_mesh.gd")
+const CustomModels = preload("res://scripts/custom_models.gd")
 
 const N := 5            # blocks per side
 const R := 14.0         # road corridor width (incl. sidewalks)
@@ -31,7 +32,13 @@ const SHOPS := ["صيدلية الشفاء", "مخبز الأمل", "بقالة 
 
 var rng := RandomNumberGenerator.new()
 var size_total := 0.0
-var bank_block := Vector2i(2, 0)
+var bank_block := Vector2i(2, 0)   # the mission building's block (name kept from mission 1)
+var mission := {}
+var imap: Array = []
+var style := "bank"
+var evidence_spawns: Array[Vector3] = []
+var bomb_pos := Vector3.INF
+var cover_points: Array[Vector3] = []
 var bank_origin := Vector3.ZERO
 var door_pos := Vector3.ZERO
 var door_body: StaticBody3D
@@ -44,8 +51,15 @@ var baked := {}
 var font: Font
 var _mats := {}
 
-func build(seed_val := 7) -> void:
+func build(seed_val := 7, m: Dictionary = {}) -> void:
 	rng.seed = seed_val
+	mission = m
+	if m.has("block"):
+		bank_block = m.block
+		imap = m.map
+		style = m.style
+	else:
+		imap = BANK_MAP
 	font = load("res://assets/fonts/Tajawal-Bold.ttf")
 	size_total = N * P + R
 	_ground()
@@ -165,6 +179,8 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0.62, 0.55, 0.43); m.roughness = 1.0
 			m.normal_enabled = true; m.normal_texture = _noise_normal(0.04, 4.0)
 			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.05, 0.05, 0.05)
+		"sofa":
+			m.albedo_color = Color(0.32, 0.22, 0.17); m.roughness = 0.95
 		"granite":
 			m.albedo_texture = _img_tex(128, 128, func(img):
 				img.fill(Color(0.2, 0.2, 0.21))
@@ -531,6 +547,8 @@ func _block(bi: int, bj: int) -> void:
 			if park and lx == 0 and lz == 0:
 				_trees_in_lot(bx, bz, lot)
 				continue
+			if rng.randf() < 0.08 and _loft(bx, bz, lot):
+				continue
 			if rng.randf() < 0.05:
 				_mosque(bx, bz, lot)
 				continue
@@ -716,7 +734,33 @@ func _traffic_light(pos: Vector3) -> void:
 		var lmp69 := _mi(_box_mesh(Vector3(0.16, 0.16, 0.04)), mat("black" if on_red else "tlgreen"), hp + Vector3(0, -0.25, 0) + b * Vector3(0, 0, 0.12), false)
 		lmp69.rotation.y = ry
 
+func _loft(cx: float, cz: float, lot: float) -> bool:
+	var b := CustomModels.prop("building_loft")
+	if not b:
+		return false
+	var sz: Vector3 = b.get_meta("size")
+	var k := minf(lot * 0.92 / sz.x, lot * 0.92 / sz.z)
+	b.scale = Vector3.ONE * k
+	b.position = Vector3(cx, 0.16, cz)
+	b.rotation.y = rng.randi_range(0, 3) * PI * 0.5
+	b.set_meta("no_merge", true)
+	add_child(b)
+	_static_box(Vector3(sz.x * k, sz.y * k, sz.z * k), Vector3(cx, 0.16 + sz.y * k * 0.5, cz), b.rotation.y)
+	return true
+
 func _tree(pos: Vector3) -> void:
+	var real := CustomModels.prop("tree", rng.randf_range(5.5, 7.5))
+	if real:
+		real.position = pos
+		real.rotation.y = rng.randf() * TAU
+		real.set_meta("no_merge", true)
+		for gi in real.find_children("*", "GeometryInstance3D", true, false):
+			gi.visibility_range_end = 120.0
+			gi.visibility_range_end_margin = 10.0
+			gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		add_child(real)
+		_pole_body(pos, 0.25, 3.0, "tree")
+		return
 	var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.17; cm.height = 3.0
 	_mi(cm, mat("trunk"), pos + Vector3(0, 1.5, 0))
 	_pole_body(pos, 0.22, 3.0, "tree")
@@ -828,7 +872,8 @@ func random_car_mesh() -> ArrayMesh:
 	return baked_car("sedan", CAR_COLORS[rng.randi() % CAR_COLORS.size()])
 
 func _parked_cars() -> void:
-	for i in 26:
+	var n := 14 if CustomModels.files_for("res://assets/cars", "sedan").size() > 0 else 26
+	for i in n:
 		var k := rng.randi_range(0, N)
 		var bk := rng.randi_range(0, N - 1)
 		var along := bk * P + R + rng.randf_range(6, B - 6)
@@ -852,8 +897,8 @@ func _bank_block(bi: int, bj: int) -> void:
 	_mi(_box_mesh(Vector3(B + SIDEWALK * 2, 0.16, B + SIDEWALK * 2)), mat("sidewalk"), Vector3(x0 + B * 0.5, 0.08, z0 + B * 0.5), false)
 	_static_box(Vector3(B + SIDEWALK * 2, 0.16, B + SIDEWALK * 2), Vector3(x0 + B * 0.5, 0.08, z0 + B * 0.5))
 	_curbs(x0 + B * 0.5, z0 + B * 0.5)
-	var rows := BANK_MAP.size()
-	var cols: int = BANK_MAP[0].length()
+	var rows := imap.size()
+	var cols: int = imap[0].length()
 	var ox := x0 + (B - cols * CELL) * 0.5
 	var oz := z0 + B - rows * CELL - 0.5
 	bank_origin = Vector3(ox, 0.16, oz)
@@ -862,7 +907,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	var wh := 4.2
 	var wall_mesh := _box_mesh(Vector3(CELL, wh, CELL))
 	for r in rows:
-		var line: String = BANK_MAP[r]
+		var line: String = imap[r]
 		for c in cols:
 			var ch := line[c]
 			var p := Vector3(ox + c * CELL + CELL * 0.5, 0.16, oz + r * CELL + CELL * 0.5)
@@ -877,13 +922,35 @@ func _bank_block(bi: int, bj: int) -> void:
 				"H":
 					hostage_spawns.append(p)
 				"K":
-					_desk(p)
+					if style == "mall":
+						_bench(p)
+					else:
+						_desk(p)
+					cover_points.append(p)
+				"S":
+					_sofa(p)
+					cover_points.append(p)
+				"B":
+					_bed(p)
+				"V":
+					evidence_spawns.append(p)
+					_table(p)
+				"X":
+					bomb_pos = p
 				"P":
 					_plant(p)
 				"O":
 					_mi(_box_mesh(Vector3(0.8, wh, 0.8)), mat("marble"), p + Vector3(0, wh * 0.5, 0))
 					_static_box(Vector3(0.8, wh, 0.8), p + Vector3(0, wh * 0.5, 0))
+					cover_points.append(p)
 				"T":
+					cover_points.append(p)
+					if style == "apartment":
+						_table(p)
+						continue
+					if style == "mall":
+						_kiosk(p)
+						continue
 					_mi(_box_mesh(Vector3(CELL, 1.1, 0.8)), mat("wood"), p + Vector3(0, 0.55, 0))
 					_mi(_box_mesh(Vector3(CELL, 0.05, 0.95)), mat("granite"), p + Vector3(0, 1.12, 0))
 					_mi(_box_mesh(Vector3(CELL - 0.1, 0.9, 0.03)), mat("glass"), p + Vector3(0, 1.6, 0.0), false)
@@ -892,6 +959,7 @@ func _bank_block(bi: int, bj: int) -> void:
 				"C":
 					var crate := _mi(_box_mesh(Vector3(2.2, 1.3, 2.2)), mat("door"), p + Vector3(0, 0.65, 0))
 					crate.material_override = _crate_mat()
+					cover_points.append(p)
 					_static_box(Vector3(2.2, 1.3, 2.2), p + Vector3(0, 0.65, 0))
 				"D":
 					door_pos = p
@@ -908,25 +976,46 @@ func _bank_block(bi: int, bj: int) -> void:
 					var lintel := _mi(_box_mesh(Vector3(CELL, wh - 3.2, CELL)), mat("plaster"), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
 					lintel.material_override = mat("plaster")
 					_static_box(Vector3(CELL, wh - 3.2, CELL), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
-	var walls := _mi(wall_st.commit(), mat("interior"))
-	_mi(out_st.commit(), mat("granite"))
+	var in_mat: String = {"bank": "interior", "apartment": "plaster", "mall": "white"}[style]
+	var out_mat: String = {"bank": "granite", "apartment": "stone%d" % (bi % 5), "mall": "darkglass"}[style]
+	var floor_mat: String = {"bank": "marble", "apartment": "tile", "mall": "marble"}[style]
+	var walls := _mi(wall_st.commit(), mat(in_mat))
+	_mi(out_st.commit(), mat(out_mat))
+	# residential / office floors stacked above the mission floor
+	var floors_up: int = mission.get("floors_above", 0)
+	if floors_up > 0:
+		var up_st := SurfaceTool.new(); up_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var fc := bank_origin + Vector3(cols * CELL * 0.5, 0, rows * CELL * 0.5)
+		var top := wh + 0.4 + floors_up * FLOOR_H
+		_walls(up_st, Vector3(fc.x, 0.16, fc.z), cols * CELL, rows * CELL, wh + 0.4, top, 3.4, FLOOR_H)
+		_mi(up_st.commit(), mat("stone%d" % ((bi + bj) % 5)))
+		_mi(_box_mesh(Vector3(cols * CELL + 0.3, 0.35, rows * CELL + 0.3)), mat("roof"), Vector3(fc.x, 0.16 + top + 0.17, fc.z))
+		_static_box(Vector3(cols * CELL, top - wh, rows * CELL), Vector3(fc.x, 0.16 + wh + (top - wh) * 0.5, fc.z))
+		for fl2 in range(1, floors_up + 1):
+			_mi(_box_mesh(Vector3(cols * CELL + 0.16, 0.14, rows * CELL + 0.16)), mat("white"), Vector3(fc.x, 0.16 + wh + 0.4 + fl2 * FLOOR_H - 0.05, fc.z))
 	# floor + roof
-	var fl := _mi(_box_mesh(Vector3(cols * CELL, 0.05, rows * CELL)), mat("marble"), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5), false)
+	var fl := _mi(_box_mesh(Vector3(cols * CELL, 0.05, rows * CELL)), mat(floor_mat), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5), false)
 	_static_box(Vector3(cols * CELL, 0.05, rows * CELL), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5))
 	var roof := _mi(_box_mesh(Vector3(cols * CELL + 0.6, 0.4, rows * CELL + 0.6)), mat("roof"), bank_origin + Vector3(cols * CELL * 0.5, wh + 0.2, rows * CELL * 0.5))
 	# facade sign
-	var sign_pos := door_pos + Vector3(0, wh + 1.2, CELL * 0.5 + 0.2)
-	var board := _mi(_box_mesh(Vector3(10, 1.6, 0.25)), mat("bankboard"), sign_pos, false)
-	var bm := StandardMaterial3D.new(); bm.albedo_color = Color(0.06, 0.16, 0.29); board.material_override = bm
-	_label("مصرف الشرق", sign_pos + Vector3(0, 0, 0.14), 0.0, 120, Color(0.96, 0.9, 0.72), 0.01)
+	var sign_text: String = mission.get("sign", "مصرف الشرق")
+	if sign_text != "":
+		var sign_pos := door_pos + Vector3(0, wh - 0.3 if floors_up > 0 else wh + 1.2, CELL * 0.5 + 0.2)
+		var board := _mi(_box_mesh(Vector3(12, 1.5, 0.25)), mat("bankboard"), sign_pos, false)
+		var bm := StandardMaterial3D.new()
+		bm.albedo_color = Color(0.06, 0.16, 0.29) if style == "bank" else Color(0.45, 0.08, 0.32)
+		board.material_override = bm
+		_label(sign_text, sign_pos + Vector3(0, 0, 0.14), 0.0, 120, Color(0.96, 0.9, 0.72), 0.01)
 	# interior lights: ceiling panels + a few real lights + reflection probe (no sky reflections indoors)
 	for r in range(1, rows - 1, 2):
 		for c in range(1, cols - 1, 2):
-			if BANK_MAP[r][c] != "#":
+			if imap[r][c] != "#":
 				_mi(_box_mesh(Vector3(1.2, 0.04, 1.2)), mat("ceilinglight"), bank_origin + Vector3(c * CELL + CELL * 0.5, wh - 0.03, r * CELL + CELL * 0.5), false)
 	for i in 4:
 		var ol := OmniLight3D.new()
-		ol.light_color = Color(1, 0.92, 0.8); ol.light_energy = 1.6; ol.omni_range = 14.0
+		ol.light_color = {"bank": Color(1, 0.92, 0.8), "apartment": Color(1, 0.75, 0.5), "mall": Color(0.95, 0.97, 1.0)}[style]
+		ol.light_energy = {"bank": 1.6, "apartment": 1.1, "mall": 2.0}[style]
+		ol.omni_range = 14.0
 		ol.position = bank_origin + Vector3(cols * CELL * (0.15 + i * 0.235), 3.7, rows * CELL * (0.3 if i % 2 == 0 else 0.7))
 		add_child(ol)
 	var rp := ReflectionProbe.new()
@@ -938,6 +1027,9 @@ func _bank_block(bi: int, bj: int) -> void:
 	rp.ambient_color_energy = 0.9
 	rp.update_mode = ReflectionProbe.UPDATE_ONCE
 	add_child(rp)
+	cordon_point = door_pos + Vector3(0, 0, 14.0)
+	if style != "bank":
+		return
 	# street facade: tinted glass bays between granite columns, steps, ATM
 	var fz := oz + rows * CELL + 0.02
 	for c in range(1, cols - 1):
@@ -967,6 +1059,39 @@ func _desk(p: Vector3) -> void:
 	var cm := CylinderMesh.new(); cm.top_radius = 0.03; cm.bottom_radius = 0.03; cm.height = 0.45
 	_mi(cm, mat("metal"), p + Vector3(0, 0.25, 0.75))
 	_static_box(Vector3(1.6, 0.8, 0.8), p + Vector3(0, 0.4, 0))
+
+func _sofa(p: Vector3) -> void:
+	var m := mat("sofa")
+	_mi(_box_mesh(Vector3(2.0, 0.45, 0.9)), m, p + Vector3(0, 0.25, 0))
+	_mi(_box_mesh(Vector3(2.0, 0.5, 0.25)), m, p + Vector3(0, 0.7, -0.33))
+	for sx in [-0.95, 0.95]:
+		_mi(_box_mesh(Vector3(0.2, 0.35, 0.9)), m, p + Vector3(sx, 0.6, 0))
+	_static_box(Vector3(2.0, 0.9, 0.9), p + Vector3(0, 0.45, 0))
+
+func _bed(p: Vector3) -> void:
+	_mi(_box_mesh(Vector3(1.6, 0.45, 2.1)), mat("wood"), p + Vector3(0, 0.22, 0))
+	_mi(_box_mesh(Vector3(1.55, 0.2, 2.0)), mat("white"), p + Vector3(0, 0.55, 0))
+	_mi(_box_mesh(Vector3(1.6, 0.9, 0.08)), mat("wood"), p + Vector3(0, 0.6, -1.05))
+	_static_box(Vector3(1.6, 0.65, 2.1), p + Vector3(0, 0.32, 0))
+
+func _table(p: Vector3) -> void:
+	_mi(_box_mesh(Vector3(1.4, 0.05, 0.9)), mat("wood"), p + Vector3(0, 0.76, 0))
+	for sx in [-0.62, 0.62]:
+		for sz in [-0.38, 0.38]:
+			_mi(_box_mesh(Vector3(0.06, 0.74, 0.06)), mat("wood"), p + Vector3(sx, 0.37, sz))
+	_static_box(Vector3(1.4, 0.8, 0.9), p + Vector3(0, 0.4, 0))
+
+func _bench(p: Vector3) -> void:
+	_mi(_box_mesh(Vector3(2.4, 0.08, 0.6)), mat("wood"), p + Vector3(0, 0.45, 0))
+	_mi(_box_mesh(Vector3(2.2, 0.42, 0.4)), mat("metal"), p + Vector3(0, 0.21, 0))
+	_static_box(Vector3(2.4, 0.5, 0.6), p + Vector3(0, 0.25, 0))
+
+func _kiosk(p: Vector3) -> void:
+	_mi(_box_mesh(Vector3(2.6, 1.0, 1.2)), mat("white"), p + Vector3(0, 0.5, 0))
+	_mi(_box_mesh(Vector3(2.5, 0.6, 1.1)), mat("glass"), p + Vector3(0, 1.3, 0), false)
+	_mi(_box_mesh(Vector3(2.6, 0.08, 1.25)), mat("granite"), p + Vector3(0, 1.62, 0))
+	_mi(_box_mesh(Vector3(2.4, 0.3, 0.05)), mat("sign%d" % (int(p.x + p.z) % 5)), p + Vector3(0, 2.3, 0))
+	_static_box(Vector3(2.6, 1.0, 1.2), p + Vector3(0, 0.5, 0))
 
 func _plant(p: Vector3) -> void:
 	var pot := CylinderMesh.new(); pot.top_radius = 0.3; pot.bottom_radius = 0.22; pot.height = 0.6

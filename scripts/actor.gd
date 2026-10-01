@@ -29,6 +29,11 @@ var cur_anim := ""
 var accuracy := 0.42
 var damage := 10.0
 var escort_h: Node3D = null    # hostage this teammate is walking out
+var executioner_of: Node3D = null   # hostage this gunman guards (and executes if the assault drags on)
+var exec_t := 0.0
+var engaged_t := 0.0
+var cover_spot := Vector3.INF
+var cover_t := 0.0
 var _wp := Vector3.ZERO
 var _wp_goal := Vector3.INF
 var _wp_t := 0.0
@@ -131,6 +136,26 @@ func _face(p: Vector3, dt: float, rate := 6.0) -> float:
 	return abs(d)
 
 func _enemy_ai(dt: float) -> Vector3:
+	engaged_t -= dt
+	# the hostage guard: once the assault starts he gives the police ~10 s, then shoots his hostage
+	if executioner_of and is_instance_valid(executioner_of) and state == "alert":
+		var h = executioner_of
+		if h.dead or h.freed or h.rescued:
+			executioner_of = null
+		else:
+			if exec_t == 0.0:
+				main.on_executioner(self)
+			exec_t += dt
+			if exec_t > 10.0 and stun <= 0.0 and engaged_t <= 0.0:
+				_face(h.global_position, dt, 8.0)
+				if exec_t > 10.7:
+					var hp_pos: Vector3 = h.global_position + Vector3(0, 1.0, 0)
+					Fx.tracer(main, muzzle.global_position, hp_pos, Color(1, 0.6, 0.3))
+					Fx.muzzle(main, muzzle)
+					Sfx.play_at("far", muzzle.global_position, main.listener_pos(), 4.0)
+					h.take_hit(999.0, false, self)
+					executioner_of = null
+				return Vector3.ZERO
 	if think <= 0.0:
 		think = randf_range(0.15, 0.3)
 		var best: Node3D = null
@@ -150,13 +175,37 @@ func _enemy_ai(dt: float) -> Vector3:
 		if best:
 			if target != best:
 				react = main.diff_react * randf_range(0.7, 1.3)
+				# some gunmen dash to the nearest piece of cover first
+				if target == null and randf() < 0.55 and not executioner_of:
+					var bc := Vector3.INF
+					var bcd := 9.0
+					for cp in main.city.cover_points:
+						var cd: float = cp.distance_to(global_position)
+						if cd < bcd:
+							bcd = cd; bc = cp
+					if bc != Vector3.INF:
+						var away: Vector3 = (bc - best.global_position)
+						away.y = 0
+						cover_spot = bc + away.normalized() * 1.25
+						cover_t = 4.0
 			if state == "idle":
 				alert(best.global_position)
 			target = best
 			last_seen = best.global_position
 		else:
 			target = null
+	if cover_spot != Vector3.INF:
+		cover_t -= dt
+		var dc := cover_spot - global_position
+		dc.y = 0
+		if dc.length() < 0.5 or cover_t <= 0.0:
+			cover_spot = Vector3.INF
+		else:
+			var step := _nav_to(cover_spot, dt)
+			_face(global_position + step, dt, 9.0)
+			return step.normalized() * 4.8
 	if target and is_instance_valid(target):
+		engaged_t = 1.0
 		var ang := _face(target.global_position, dt, 5.0)
 		react -= dt
 		if react <= 0.0 and fire_cd <= 0.0 and ang < 0.45:

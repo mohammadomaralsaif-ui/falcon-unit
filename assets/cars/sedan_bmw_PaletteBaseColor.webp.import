@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://dpon8dt1ke67f"
+path="res://.godot/imported/sedan_bmw_PaletteBaseColor.webp-70c5880ef8861bc5c7fa521d13b1e3d4.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "650cbcc51f42d18ee9038f2c1d24fcb0"
+}
+
+[deps]
+
+source_file="res://assets/cars/sedan_bmw_PaletteBaseColor.webp"
+dest_files=["res://.godot/imported/sedan_bmw_PaletteBaseColor.webp-70c5880ef8861bc5c7fa521d13b1e3d4.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

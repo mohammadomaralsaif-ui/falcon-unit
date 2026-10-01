@@ -46,6 +46,7 @@ var joy_ring: Control
 
 const GOLD := Color(0.96, 0.8, 0.35)
 const BLUE := Color(0.45, 0.72, 1.0)
+const Missions = preload("res://scripts/missions.gd")
 
 func _ready() -> void:
 	layer = 5
@@ -280,6 +281,23 @@ func hit_marker(kill: bool) -> void:
 	hit_t = 0.3
 	hit_kill = kill
 
+var _white: ColorRect
+
+func white_flash(amount: float) -> void:
+	if amount <= 0.05:
+		return
+	if not _white:
+		_white = ColorRect.new()
+		_white.color = Color(1, 1, 1, 0)
+		_white.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(_white)
+	_white.color.a = amount
+	var tw := create_tween()
+	tw.tween_interval(0.4 * amount)
+	tw.tween_property(_white, "color:a", 0.0, 2.5 * amount + 0.3)
+	Sfx.play("beep", -12.0, 3.0)
+
 func damage_flash() -> void:
 	vig_a = minf(vig_a + 0.45, 1.0)
 
@@ -403,6 +421,8 @@ func _process(dt: float) -> void:
 					b.get_child(0).text = "فرامل" if in_car else "قفز"
 				"pause":
 					b.visible = true
+				"flash":
+					b.visible = not in_car and main.phase in ["staging", "breach", "assault"] and main.flashbangs > 0
 
 func _draw_minimap() -> void:
 	if not main or not main.city:
@@ -495,14 +515,39 @@ func show_briefing(on_start: Callable) -> void:
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 10)
 	panel.add_child(vb)
-	vb.add_child(_label("وحدة الصقر", 54, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
-	vb.add_child(_label("الأمن العام · العمليات الخاصة · عمّان", 20, Color(1, 1, 1, 0.65), HORIZONTAL_ALIGNMENT_RIGHT))
-	var story := _label("الساعة ٥:٤٢ مساءً. مسلّحون اقتحموا «مصرف الشرق» في جبل عمّان واحتجزوا موظفين كرهائن. فشلت المفاوضات، وقائد العمليات أعطى الإذن بالاقتحام.\n\nمهمتك: قُد سيارة الوحدة إلى الطوق الأمني، فجّر الباب، حرّر الرهائن واعتقل المسلحين أحياء إن أمكن.", 22, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+	vb.add_child(_label("وحدة الصقر", 44, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
+	# mission cards (locked ones greyed out)
+	var mrow := HBoxContainer.new(); mrow.alignment = BoxContainer.ALIGNMENT_END
+	mrow.add_theme_constant_override("separation", 8)
+	vb.add_child(mrow)
+	var unlocked := Missions.unlocked()
+	for i in range(Missions.LIST.size() - 1, -1, -1):
+		var md: Dictionary = Missions.LIST[i]
+		var locked := i >= unlocked
+		var stars := Missions.rating_of(i)
+		var txt := "%d. %s" % [i + 1, md.title]
+		if locked:
+			txt += " (مقفلة)"
+		elif stars != "":
+			txt += "\n" + stars.get_slice(" ", 1)
+		var mb := _button(txt, func():
+			if i == Missions.current:
+				return
+			Missions.current = i
+			Missions.team_size = main.team_size
+			Missions.difficulty = main.difficulty
+			get_tree().reload_current_scene(), 19)
+		mb.custom_minimum_size = Vector2(172, 64)
+		mb.disabled = locked
+		mb.modulate = Color.WHITE if i == Missions.current else (Color(1, 1, 1, 0.3) if locked else Color(1, 1, 1, 0.6))
+		mrow.add_child(mb)
+	var md2: Dictionary = main.M
+	vb.add_child(_label("%s — %s" % [md2.title, md2.subtitle], 24, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
+	var story := _label(md2.story, 19, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	story.custom_minimum_size.x = 520
+	story.custom_minimum_size.x = 540
 	vb.add_child(story)
-	vb.add_child(HSeparator.new())
-	vb.add_child(_label("عدد أفراد الفريق معك", 22, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
+	vb.add_child(_label("عدد أفراد الفريق معك", 19, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
 	var team_row := HBoxContainer.new(); team_row.alignment = BoxContainer.ALIGNMENT_END
 	vb.add_child(team_row)
 	var team_btns := []
@@ -512,11 +557,11 @@ func show_briefing(on_start: Callable) -> void:
 			for tb in team_btns:
 				tb.modulate = Color(1, 1, 1, 0.55)
 			team_btns[4 - n].modulate = Color.WHITE, 28)
-		b.custom_minimum_size = Vector2(70, 56)
+		b.custom_minimum_size = Vector2(66, 48)
 		b.modulate = Color.WHITE if n == main.team_size else Color(1, 1, 1, 0.55)
 		team_row.add_child(b)
 		team_btns.append(b)
-	vb.add_child(_label("الصعوبة", 22, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
+	vb.add_child(_label("الصعوبة", 19, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
 	var diff_row := HBoxContainer.new(); diff_row.alignment = BoxContainer.ALIGNMENT_END
 	vb.add_child(diff_row)
 	var diff_btns := []
@@ -529,19 +574,18 @@ func show_briefing(on_start: Callable) -> void:
 			for db in diff_btns:
 				db.modulate = Color(1, 1, 1, 0.55)
 			diff_btns[i].modulate = Color.WHITE, 24)
-		b.custom_minimum_size = Vector2(110, 52)
+		b.custom_minimum_size = Vector2(110, 46)
 		b.modulate = Color.WHITE if dv == main.difficulty else Color(1, 1, 1, 0.55)
 		diff_row.add_child(b)
 		diff_btns.append(b)
-	vb.add_child(HSeparator.new())
 	var start := _button("ابدأ المهمة  ◀", func():
 		briefing.queue_free()
 		briefing = null
 		on_start.call(), 34)
-	start.custom_minimum_size = Vector2(0, 70)
+	start.custom_minimum_size = Vector2(0, 60)
 	vb.add_child(start)
-	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q أمر استسلام · R تعبئة · H صفارة" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر"
-	var hl := _label(hint, 16, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_RIGHT)
+	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · H صفارة" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر"
+	var hl := _label(hint, 14, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_RIGHT)
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hl.custom_minimum_size.x = 520
 	vb.add_child(hl)
@@ -615,11 +659,24 @@ func show_result(win: bool, title: String, lines: Array, rating: String) -> void
 	for l in lines:
 		vb.add_child(_label(l, 24, Color(1, 1, 1, 0.9), HORIZONTAL_ALIGNMENT_RIGHT))
 	vb.add_child(HSeparator.new())
+	if win and Missions.current + 1 < Missions.LIST.size():
+		var nxt := _button("المهمة التالية: %s  ◀" % Missions.LIST[Missions.current + 1].title, func():
+			Engine.time_scale = 1.0
+			Missions.current += 1
+			get_tree().reload_current_scene(), 28)
+		nxt.custom_minimum_size = Vector2(0, 60)
+		vb.add_child(nxt)
 	var again := _button("إعادة المهمة", func():
 		Engine.time_scale = 1.0
-		get_tree().reload_current_scene(), 32)
-	again.custom_minimum_size = Vector2(0, 64)
+		Missions.autostart = true
+		get_tree().reload_current_scene(), 26)
+	again.custom_minimum_size = Vector2(0, 54)
 	vb.add_child(again)
+	var menu := _button("قائمة المهمات", func():
+		Engine.time_scale = 1.0
+		get_tree().reload_current_scene(), 22)
+	menu.custom_minimum_size = Vector2(0, 46)
+	vb.add_child(menu)
 
 # ------------------------------------------------------------------ touch controls
 func _circle_tex(r: int, fill: Color, ring: Color) -> ImageTexture:
@@ -639,7 +696,7 @@ func _build_touch() -> void:
 	var specs := {
 		"fire": ["نار", 70], "aim": ["تصويب", 46], "reload": ["تعبئة", 38], "jump": ["قفز", 40],
 		"interact": ["تفاعل", 44], "vehicle": ["سيارة", 40], "yell": ["استسلم!", 42], "siren": ["صفارة", 38],
-		"pause": ["II", 26],
+		"pause": ["II", 26], "flash": ["فلاش", 36],
 	}
 	for k in specs:
 		var r: int = specs[k][1]
@@ -675,7 +732,7 @@ func _layout_touch() -> void:
 		"reload": Vector2(vs.x - 110, vs.y - 300), "jump": Vector2(vs.x - 240, vs.y - 240),
 		"interact": Vector2(vs.x - 380, vs.y - 110), "vehicle": Vector2(vs.x - 380, vs.y - 230),
 		"yell": Vector2(vs.x - 250, vs.y - 370), "siren": Vector2(vs.x - 120, vs.y - 150),
-		"pause": Vector2(vs.x * 0.5 + 200, 34),
+		"pause": Vector2(vs.x * 0.5 + 200, 34), "flash": Vector2(vs.x - 120, vs.y - 420),
 	}
 	for k in touch_buttons:
 		var b: TouchScreenButton = touch_buttons[k]

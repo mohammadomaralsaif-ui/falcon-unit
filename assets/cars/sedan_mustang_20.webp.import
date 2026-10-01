@@ -1,0 +1,37 @@
+[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+uid="uid://c06px17fdljcl"
+path="res://.godot/imported/sedan_mustang_20.webp-d328d7e94460233d83a57020a7c690a0.ctex"
+metadata={
+"vram_texture": false
+}
+generator_parameters={
+"md5": "5c29c6ce13ef5d9affbed8a0ea9b7e79"
+}
+
+[deps]
+
+source_file="res://assets/cars/sedan_mustang_20.webp"
+dest_files=["res://.godot/imported/sedan_mustang_20.webp-d328d7e94460233d83a57020a7c690a0.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=true
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1

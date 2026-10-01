@@ -30,8 +30,13 @@ static func _chain(root: Node, n: Node3D) -> Transform3D:
 		c = c.get_parent()
 	return t
 
+static var _rx: RegEx
+
+## "mixamorig7_Hips" / "mixamorig:Hips" / "Hips" -> "Hips"
 static func _bare(n: String) -> String:
-	return n.trim_prefix("mixamorig_").trim_prefix("mixamorig:")
+	if not _rx:
+		_rx = RegEx.create_from_string("^mixamorig\\d*[_:]")
+	return _rx.sub(n, "")
 
 ## path: target model (any Mixamo / Ready Player Me compatible rig facing +Z).
 static func library(model := "res://assets/models/civilian.glb") -> AnimationLibrary:
@@ -59,7 +64,10 @@ static func library(model := "res://assets/models/civilian.glb") -> AnimationLib
 		var g := tsk.get_bone_global_rest(i)
 		Gt[i] = troot_q * _rot(g.basis)
 		Pt[i] = troot * g.origin
-	# bone map target -> source
+	# bone map target -> source (and bare name -> target bone)
+	var tbare := {}
+	for i in tsk.get_bone_count():
+		tbare[_bare(tsk.get_bone_name(i))] = i
 	var map := {}
 	for i in tsk.get_bone_count():
 		var si := ssk.find_bone("mixamorig_" + _bare(tsk.get_bone_name(i)))
@@ -108,9 +116,7 @@ static func library(model := "res://assets/models/civilian.glb") -> AnimationLib
 			var si := ssk.find_bone(bname)
 			if si < 0:
 				continue
-			var ti := tsk.find_bone(bname.trim_prefix("mixamorig_"))
-			if ti < 0:
-				ti = tsk.find_bone(bname)
+			var ti: int = tbare.get(_bare(bname), -1)
 			if ti < 0:
 				continue
 			var tpath := NodePath(skel_path + ":" + tsk.get_bone_name(ti))

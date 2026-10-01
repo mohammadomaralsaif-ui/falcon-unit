@@ -18,7 +18,12 @@ func _bone(n: String) -> int:
 		var sk := get_skeleton()
 		var i := sk.find_bone(n)
 		if i < 0:
-			i = sk.find_bone("mixamorig_" + n)
+			# any Mixamo prefix: mixamorig_, mixamorig7_, …
+			for k in sk.get_bone_count():
+				var bn := sk.get_bone_name(k)
+				if bn.begins_with("mixamorig") and (bn.ends_with("_" + n) or bn.ends_with(":" + n)) and not bn.ends_with("Fore" + n):
+					i = k
+					break
 		_b[n] = i
 	return _b[n]
 

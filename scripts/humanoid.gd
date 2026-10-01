@@ -1,4 +1,5 @@
 extends RefCounted
+const CustomModels = preload("res://scripts/custom_models.gd")
 ## Loads the rigged soldier / civilian models, sets up looping animations, tints and weapons.
 
 static var _soldier: PackedScene
@@ -63,6 +64,12 @@ static func bone_named(sk: Skeleton3D, part: String) -> int:
 
 static func rifle(kind := "m4") -> Node3D:
 	## Built facing -Z, origin at the pistol grip. Geometry is built once per kind and shared.
+	# real weapon models dropped into assets/weapons/ win
+	var real := CustomModels.weapon("rifle_swat" if kind == "m4" else "rifle_robber", 0.98, 0.30)
+	if real:
+		var tip0 := Marker3D.new(); tip0.name = "Muzzle"; tip0.position = Vector3(0, 0.03, -0.69)
+		real.add_child(tip0)
+		return real
 	if _gun_cache.has(kind):
 		var g2 := Node3D.new()
 		var mi := MeshInstance3D.new()
