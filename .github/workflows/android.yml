@@ -1,0 +1,71 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare Godot templates, SDK path and signing key
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
+          if [ -d /root/.local/share/godot/export_templates/4.3.stable ] && [ ! -d ~/.local/share/godot/export_templates/4.3.stable ]; then
+            cp -r /root/.local/share/godot/export_templates/4.3.stable ~/.local/share/godot/export_templates/
+          fi
+          ls ~/.local/share/godot/export_templates/4.3.stable | head
+          SDK="${ANDROID_HOME:-/usr/lib/android-sdk}"
+          [ -d "$SDK" ] || SDK=/usr/lib/android-sdk
+          echo "Android SDK: $SDK"
+          KS=/root/debug.keystore
+          if [ ! -f "$KS" ]; then
+            KS="$PWD/falcon.keystore"
+            keytool -genkeypair -v -keystore "$KS" -storepass android -keypass android \
+              -alias androiddebugkey -dname "CN=Falcon Unit,O=Falcon,C=JO" -keyalg RSA -keysize 2048 -validity 10000
+          fi
+          for f in editor_settings-4.tres editor_settings-4.3.tres; do
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$SDK" "$KS" > ~/.config/godot/$f
+          done
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$KS" >> $GITHUB_ENV
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> $GITHUB_ENV
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android" >> $GITHUB_ENV
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$KS" >> $GITHUB_ENV
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=androiddebugkey" >> $GITHUB_ENV
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=android" >> $GITHUB_ENV
+
+      - name: Import assets
+        run: godot --headless --path . --import || true
+
+      - name: Export APK
+        run: |
+          mkdir -p build
+          sed -i "s/^version\/code=.*/version\/code=${GITHUB_RUN_NUMBER}/" export_presets.cfg
+          sed -i "s/^version\/name=.*/version\/name=\"1.0.${GITHUB_RUN_NUMBER}\"/" export_presets.cfg
+          godot --headless --path . --export-release "Android" build/falcon-unit.apk
+          ls -la build
+          test -s build/falcon-unit.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: falcon-unit-apk
+          path: build/falcon-unit.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Falcon Unit · build ${{ github.run_number }}
+          make_latest: true
+          body: |
+            حمّل ملف falcon-unit.apk على جوالك وثبّته (اسمح بالتثبيت من مصادر غير معروفة).
+            Download falcon-unit.apk on your Android phone and install it.
+          files: build/falcon-unit.apk
