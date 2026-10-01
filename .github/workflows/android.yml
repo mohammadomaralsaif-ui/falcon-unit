@@ -50,9 +50,15 @@ jobs:
           mkdir -p build
           sed -i "s/^version\/code=.*/version\/code=${GITHUB_RUN_NUMBER}/" export_presets.cfg
           sed -i "s/^version\/name=.*/version\/name=\"1.0.${GITHUB_RUN_NUMBER}\"/" export_presets.cfg
-          godot --headless --path . --export-release "Android" build/falcon-unit.apk
+          set +e
+          godot --headless --verbose --path . --export-release "Android" build/falcon-unit.apk > export.log 2>&1
           ls -la build
-          test -s build/falcon-unit.apk
+          if [ ! -s build/falcon-unit.apk ]; then
+            echo "HOME=$HOME"; ls -la ~/.local/share/godot/export_templates/* | head -30
+            grep -n -i -E "error|fail|template|sdk|keystore|apksigner" export.log | tail -40 | while IFS= read -r line; do echo "::error::$line"; done
+            tail -60 export.log
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
