@@ -144,8 +144,11 @@ func _shoot() -> void:
 		else:
 			Fx.particles(main, hit.position, hit.normal, "spark", 8)
 			Fx.particles(main, hit.position, hit.normal, "dust", 4)
+			if col is StaticBody3D:
+				Fx.bullet_hole(main, hit.position, hit.normal)
 	Fx.tracer(main, mpos, end)
 	Fx.flash(main, mpos, 3.0)
+	Fx.muzzle(main, muzzle)
 	Sfx.play("rifle", -4.0, randf_range(0.95, 1.05))
 	pitch += 0.012
 	yaw += randf_range(-0.006, 0.006)

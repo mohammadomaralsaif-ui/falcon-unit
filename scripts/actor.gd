@@ -212,8 +212,10 @@ func _shoot_at(t: Node3D) -> void:
 		if hit:
 			end = hit.position
 			Fx.particles(main, hit.position, hit.normal, "spark", 5)
+			Fx.bullet_hole(main, hit.position, hit.normal)
 	Fx.tracer(main, from, end, Color(1, 0.6, 0.3) if side == "enemy" else Color(0.6, 0.8, 1))
 	Fx.flash(main, from, 2.5)
+	Fx.muzzle(main, muzzle)
 	Sfx.play_at("far", from, main.listener_pos(), 2.0)
 	main.on_gunfire(from)
 

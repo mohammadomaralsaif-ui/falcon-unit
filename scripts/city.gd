@@ -14,15 +14,15 @@ const CELL := 3.2       # bank interior grid cell
 
 const BANK_MAP := [
 	"##############",
-	"#H...#...E.H.#",
+	"#H.K.#..KE.H.#",
 	"#.E..#.......#",
-	"#....##.###..#",
+	"#..P.##.###..#",
 	"#.........E..#",
-	"###.####.C...#",
-	"#H..#..E.....#",
+	"###.####.C..P#",
+	"#H..#.KE.....#",
 	"#...#....#####",
-	"#.C.....E...H#",
-	"#....##......#",
+	"#.C..O..E...H#",
+	"#K...##.TTTT.#",
 	"#.E..#..C..E.#",
 	"######D#######",
 ]
@@ -165,6 +165,67 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0.62, 0.55, 0.43); m.roughness = 1.0
 			m.normal_enabled = true; m.normal_texture = _noise_normal(0.04, 4.0)
 			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.05, 0.05, 0.05)
+		"granite":
+			m.albedo_texture = _img_tex(128, 128, func(img):
+				img.fill(Color(0.2, 0.2, 0.21))
+				_speckle(img, 4000, [Color(0.13, 0.13, 0.14), Color(0.32, 0.31, 0.3), Color(0.42, 0.4, 0.38)], 1)
+				img.fill_rect(Rect2i(0, 0, 128, 1), Color(0.08, 0.08, 0.08)); img.fill_rect(Rect2i(0, 0, 1, 128), Color(0.08, 0.08, 0.08)))
+			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.4, 0.4, 0.4)
+			m.roughness = 0.22; m.metallic = 0.1
+		"interior":
+			m.albedo_texture = _img_tex(64, 256, func(img):
+				img.fill(Color(0.86, 0.82, 0.74))
+				_speckle(img, 600, [Color(0.82, 0.78, 0.7), Color(0.9, 0.87, 0.8)], 2)
+				img.fill_rect(Rect2i(0, 200, 64, 56), Color(0.36, 0.22, 0.13))
+				_speckle(img, 300, [Color(0.3, 0.18, 0.1), Color(0.42, 0.27, 0.16)], 1)
+				img.fill_rect(Rect2i(0, 198, 64, 4), Color(0.25, 0.15, 0.08))
+				img.fill_rect(Rect2i(0, 0, 64, 6), Color(0.95, 0.94, 0.9)))
+			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(1.0 / 4.2, 1.0 / 4.2, 1.0 / 4.2)
+			m.roughness = 0.8
+		"marble":
+			m.albedo_texture = _img_tex(256, 256, func(img):
+				img.fill(Color(0.88, 0.85, 0.79))
+				_speckle(img, 3000, [Color(0.83, 0.8, 0.74), Color(0.92, 0.9, 0.86)], 3)
+				for v in 7:
+					var y := rng.randf_range(0, 256); var slope := rng.randf_range(-0.6, 0.6)
+					for x in 256:
+						var yy := int(y + x * slope + sin(x * 0.07 + v) * 6.0) % 256
+						if yy < 0: yy += 256
+						img.set_pixel(x, yy, Color(0.62, 0.58, 0.52))
+				for k in 2:
+					img.fill_rect(Rect2i(0, k * 128, 256, 2), Color(0.55, 0.52, 0.47))
+					img.fill_rect(Rect2i(k * 128, 0, 2, 256), Color(0.55, 0.52, 0.47)))
+			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.33, 0.33, 0.33)
+			m.roughness = 0.18
+		"wood":
+			m.albedo_texture = _img_tex(64, 64, func(img):
+				img.fill(Color(0.4, 0.25, 0.14))
+				for y in 64:
+					if rng.randf() < 0.35:
+						img.fill_rect(Rect2i(0, y, 64, 1), Color(0.33, 0.2, 0.11)))
+			m.uv1_triplanar = true; m.uv1_scale = Vector3(1.5, 1.5, 1.5)
+			m.roughness = 0.45
+		"glass":
+			m.albedo_color = Color(0.55, 0.7, 0.75, 0.25); m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.roughness = 0.05; m.metallic = 0.3
+		"darkglass":
+			m.albedo_color = Color(0.06, 0.09, 0.12); m.roughness = 0.04; m.metallic = 0.6
+		"screen":
+			m.albedo_color = Color(0.05, 0.08, 0.12); m.emission_enabled = true; m.emission = Color(0.3, 0.55, 0.9); m.emission_energy_multiplier = 0.8
+		"ceilinglight":
+			m.albedo_color = Color(1, 1, 1); m.emission_enabled = true; m.emission = Color(1, 0.96, 0.88); m.emission_energy_multiplier = 3.0
+		"black":
+			m.albedo_color = Color(0.05, 0.05, 0.06); m.roughness = 0.5
+		"pot":
+			m.albedo_color = Color(0.55, 0.3, 0.18); m.roughness = 0.8
+		"bin":
+			m.albedo_color = Color(0.13, 0.33, 0.2); m.roughness = 0.6; m.metallic = 0.3
+		"tlred":
+			m.albedo_color = Color(0.4, 0, 0); m.emission_enabled = true; m.emission = Color(1, 0.1, 0.05); m.emission_energy_multiplier = 3.0
+		"tlgreen":
+			m.albedo_color = Color(0, 0.3, 0.1); m.emission_enabled = true; m.emission = Color(0.1, 1, 0.4); m.emission_energy_multiplier = 3.0
+		"dish":
+			m.albedo_color = Color(0.85, 0.85, 0.83); m.roughness = 0.4; m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		"tape":
 			m.albedo_color = Color(0.95, 0.76, 0.18); m.roughness = 0.5; m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		_:
@@ -320,6 +381,15 @@ func _block(bi: int, bj: int) -> void:
 				1: pos = Vector3(along, 0.16, z0 + B + SIDEWALK - 0.5); ry = PI
 				2: pos = Vector3(x0 - SIDEWALK + 0.5, 0.16, z0 + 5.0 + t * 12.0); ry = -PI / 2
 				3: pos = Vector3(x0 + B + SIDEWALK - 0.5, 0.16, z0 + 5.0 + t * 12.0); ry = PI / 2
+			if t == 0 and side == 0:
+				_traffic_light(Vector3(x0 - SIDEWALK + 0.4, 0.16, z0 - SIDEWALK + 0.4))
+			if t == 3 and side == 1:
+				_traffic_light(Vector3(x0 + B + SIDEWALK - 0.4, 0.16, z0 + B + SIDEWALK - 0.4))
+			if t == 1 and rng.randf() < 0.35:
+				var bp := pos + Basis(Vector3.UP, ry) * Vector3(2.5, 0, 0)
+				var bin := _mi(_box_mesh(Vector3(1.6, 1.2, 1.0)), mat("bin"), bp + Vector3(0, 0.6, 0))
+				bin.rotation.y = ry
+				_static_box(Vector3(1.6, 1.2, 1.0), bp + Vector3(0, 0.6, 0), ry)
 			if t % 2 == 0:
 				_lamp(pos, ry)
 			elif rng.randf() < 0.6:
@@ -376,6 +446,13 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 		var p := base + Vector3(rng.randf_range(-w * 0.35, w * 0.35), h + 0.35, rng.randf_range(-d * 0.35, d * 0.35))
 		var cm := CylinderMesh.new(); cm.top_radius = 0.55; cm.bottom_radius = 0.55; cm.height = 1.2
 		_mi(cm, mat("tankblack" if rng.randf() < 0.6 else "tankwhite"), p + Vector3(0, 0.6, 0))
+	for i in rng.randi_range(1, 4):
+		var p := base + Vector3(rng.randf_range(-w * 0.4, w * 0.4), h + 0.35, rng.randf_range(-d * 0.4, d * 0.4))
+		var dm := SphereMesh.new(); dm.radius = 0.45; dm.height = 0.22; dm.is_hemisphere = true; dm.radial_segments = 14; dm.rings = 3
+		var dish := _mi(dm, mat("dish"), p + Vector3(0, 0.75, 0))
+		dish.rotation = Vector3(-1.1, rng.randf() * TAU, 0)
+		var pc := CylinderMesh.new(); pc.top_radius = 0.03; pc.bottom_radius = 0.03; pc.height = 0.75
+		_mi(pc, mat("pole"), p + Vector3(0, 0.37, 0))
 	if rng.randf() < 0.7:
 		var p := base + Vector3(rng.randf_range(-w * 0.3, w * 0.3), h + 0.35, rng.randf_range(-d * 0.3, d * 0.3))
 		var panel := _mi(_box_mesh(Vector3(2.0, 0.06, 1.1)), mat("solar"), p + Vector3(0, 0.7, 0))
@@ -410,6 +487,23 @@ func _lamp(pos: Vector3, ry: float) -> void:
 	arm.position += Basis(Vector3.UP, ry) * Vector3(0, 0, -0.75)
 	var head := _mi(_box_mesh(Vector3(0.35, 0.12, 0.6)), mat("lamp"), pos + Vector3(0, 5.85, 0), false)
 	head.position += Basis(Vector3.UP, ry) * Vector3(0, 0, -1.5)
+
+func _traffic_light(pos: Vector3) -> void:
+	var cm := CylinderMesh.new(); cm.top_radius = 0.07; cm.bottom_radius = 0.08; cm.height = 3.2
+	_mi(cm, mat("pole"), pos + Vector3(0, 1.6, 0))
+	for k in 2:
+		var ry := PI * 0.25 + k * PI
+		var b := Basis(Vector3.UP, ry)
+		var hp := pos + Vector3(0, 3.0, 0) + b * Vector3(0, 0, 0.18)
+		var box := _mi(_box_mesh(Vector3(0.3, 0.85, 0.22)), mat("black"), hp)
+		box.rotation.y = ry
+		var on_red := (int(pos.x + pos.z) + k) % 2 == 0
+		var lmp715 := _mi(_box_mesh(Vector3(0.16, 0.16, 0.04)), mat("tlred" if on_red else "black"), hp + Vector3(0, 0.25, 0) + b * Vector3(0, 0, 0.12), false)
+		lmp715.rotation.y = ry
+		var lmp818 := _mi(_box_mesh(Vector3(0.16, 0.16, 0.04)), mat("black"), hp + b * Vector3(0, 0, 0.12), false)
+		lmp818.rotation.y = ry
+		var lmp69 := _mi(_box_mesh(Vector3(0.16, 0.16, 0.04)), mat("black" if on_red else "tlgreen"), hp + Vector3(0, -0.25, 0) + b * Vector3(0, 0, 0.12), false)
+		lmp69.rotation.y = ry
 
 func _tree(pos: Vector3) -> void:
 	var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.17; cm.height = 3.0
@@ -547,6 +641,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	var oz := z0 + B - rows * CELL - 0.5
 	bank_origin = Vector3(ox, 0.16, oz)
 	var wall_st := SurfaceTool.new(); wall_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var out_st := SurfaceTool.new(); out_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var wh := 4.2
 	var wall_mesh := _box_mesh(Vector3(CELL, wh, CELL))
 	for r in rows:
@@ -556,12 +651,27 @@ func _bank_block(bi: int, bj: int) -> void:
 			var p := Vector3(ox + c * CELL + CELL * 0.5, 0.16, oz + r * CELL + CELL * 0.5)
 			match ch:
 				"#":
-					wall_st.append_from(wall_mesh, 0, Transform3D(Basis(), p + Vector3(0, wh * 0.5, 0)))
+					var outer := r == 0 or c == 0 or r == rows - 1 or c == cols - 1
+					var wst: SurfaceTool = out_st if outer else wall_st
+					wst.append_from(wall_mesh, 0, Transform3D(Basis(), p + Vector3(0, wh * 0.5, 0)))
 					_static_box(Vector3(CELL, wh, CELL), p + Vector3(0, wh * 0.5, 0))
 				"E":
 					enemy_spawns.append(p)
 				"H":
 					hostage_spawns.append(p)
+				"K":
+					_desk(p)
+				"P":
+					_plant(p)
+				"O":
+					_mi(_box_mesh(Vector3(0.8, wh, 0.8)), mat("marble"), p + Vector3(0, wh * 0.5, 0))
+					_static_box(Vector3(0.8, wh, 0.8), p + Vector3(0, wh * 0.5, 0))
+				"T":
+					_mi(_box_mesh(Vector3(CELL, 1.1, 0.8)), mat("wood"), p + Vector3(0, 0.55, 0))
+					_mi(_box_mesh(Vector3(CELL, 0.05, 0.95)), mat("granite"), p + Vector3(0, 1.12, 0))
+					_mi(_box_mesh(Vector3(CELL - 0.1, 0.9, 0.03)), mat("glass"), p + Vector3(0, 1.6, 0.0), false)
+					_mi(_box_mesh(Vector3(0.5, 0.32, 0.03)), mat("screen"), p + Vector3(0.6, 1.32, -0.2), false)
+					_static_box(Vector3(CELL, 1.1, 0.8), p + Vector3(0, 0.55, 0))
 				"C":
 					var crate := _mi(_box_mesh(Vector3(2.2, 1.3, 2.2)), mat("door"), p + Vector3(0, 0.65, 0))
 					crate.material_override = _crate_mat()
@@ -579,22 +689,72 @@ func _bank_block(bi: int, bj: int) -> void:
 					add_child(door_body)
 					var lintel := _mi(_box_mesh(Vector3(CELL, wh - 3.2, CELL)), mat("plaster"), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
 					lintel.material_override = mat("plaster")
-	var walls := _mi(wall_st.commit(), mat("plaster"))
+	var walls := _mi(wall_st.commit(), mat("interior"))
+	_mi(out_st.commit(), mat("granite"))
 	# floor + roof
-	var fl := _mi(_box_mesh(Vector3(cols * CELL, 0.05, rows * CELL)), mat("tile"), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5), false)
+	var fl := _mi(_box_mesh(Vector3(cols * CELL, 0.05, rows * CELL)), mat("marble"), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5), false)
 	var roof := _mi(_box_mesh(Vector3(cols * CELL + 0.6, 0.4, rows * CELL + 0.6)), mat("roof"), bank_origin + Vector3(cols * CELL * 0.5, wh + 0.2, rows * CELL * 0.5))
 	# facade sign
 	var sign_pos := door_pos + Vector3(0, wh + 1.2, CELL * 0.5 + 0.2)
 	var board := _mi(_box_mesh(Vector3(10, 1.6, 0.25)), mat("bankboard"), sign_pos, false)
 	var bm := StandardMaterial3D.new(); bm.albedo_color = Color(0.06, 0.16, 0.29); board.material_override = bm
 	_label("مصرف الشرق", sign_pos + Vector3(0, 0, 0.14), 0.0, 120, Color(0.96, 0.9, 0.72), 0.01)
-	# interior lights
-	for i in 3:
+	# interior lights: ceiling panels + a few real lights + reflection probe (no sky reflections indoors)
+	for r in range(1, rows - 1, 2):
+		for c in range(1, cols - 1, 2):
+			if BANK_MAP[r][c] != "#":
+				_mi(_box_mesh(Vector3(1.2, 0.04, 1.2)), mat("ceilinglight"), bank_origin + Vector3(c * CELL + CELL * 0.5, wh - 0.03, r * CELL + CELL * 0.5), false)
+	for i in 4:
 		var ol := OmniLight3D.new()
-		ol.light_color = Color(1, 0.88, 0.7); ol.light_energy = 2.0; ol.omni_range = 16.0
-		ol.position = bank_origin + Vector3(cols * CELL * (0.2 + i * 0.3), 3.6, rows * CELL * 0.5)
+		ol.light_color = Color(1, 0.92, 0.8); ol.light_energy = 1.6; ol.omni_range = 14.0
+		ol.position = bank_origin + Vector3(cols * CELL * (0.15 + i * 0.235), 3.7, rows * CELL * (0.3 if i % 2 == 0 else 0.7))
 		add_child(ol)
+	var rp := ReflectionProbe.new()
+	rp.size = Vector3(cols * CELL, wh, rows * CELL)
+	rp.position = bank_origin + Vector3(cols * CELL * 0.5, wh * 0.5, rows * CELL * 0.5)
+	rp.interior = true
+	rp.ambient_mode = ReflectionProbe.AMBIENT_COLOR
+	rp.ambient_color = Color(0.55, 0.5, 0.44)
+	rp.ambient_color_energy = 0.9
+	rp.update_mode = ReflectionProbe.UPDATE_ONCE
+	add_child(rp)
+	# street facade: tinted glass bays between granite columns, steps, ATM
+	var fz := oz + rows * CELL + 0.02
+	for c in range(1, cols - 1):
+		if c == 6:
+			continue
+		var x := ox + c * CELL + CELL * 0.5
+		_mi(_box_mesh(Vector3(CELL - 0.5, 3.0, 0.05)), mat("darkglass"), Vector3(x, 1.9, fz), false)
+		_mi(_box_mesh(Vector3(0.5, wh, 0.35)), mat("granite"), Vector3(ox + c * CELL, 0.16 + wh * 0.5, fz + 0.1))
+	_mi(_box_mesh(Vector3(CELL * 2.0, 0.15, 1.2)), mat("granite"), door_pos + Vector3(0, 0.0, CELL * 0.5 + 0.6), false)
+	var atm := door_pos + Vector3(CELL * 2.5, 0, CELL * 0.5 + 0.25)
+	_mi(_box_mesh(Vector3(0.9, 1.7, 0.5)), mat("door"), atm + Vector3(0, 0.85, 0))
+	_mi(_box_mesh(Vector3(0.5, 0.35, 0.02)), mat("screen"), atm + Vector3(0, 1.25, 0.26), false)
+	_label("صراف آلي ATM", atm + Vector3(0, 1.62, 0.26), 0.0, 40, Color(1, 1, 1), 0.006)
 	cordon_point = door_pos + Vector3(0, 0, 14.0)
+
+func _desk(p: Vector3) -> void:
+	_mi(_box_mesh(Vector3(1.6, 0.05, 0.8)), mat("wood"), p + Vector3(0, 0.76, 0))
+	_mi(_box_mesh(Vector3(1.5, 0.7, 0.05)), mat("wood"), p + Vector3(0, 0.38, -0.35))
+	for sx in [-0.75, 0.75]:
+		_mi(_box_mesh(Vector3(0.05, 0.74, 0.75)), mat("wood"), p + Vector3(sx, 0.37, 0))
+	_mi(_box_mesh(Vector3(0.55, 0.34, 0.03)), mat("black"), p + Vector3(0.1, 1.05, -0.2))
+	_mi(_box_mesh(Vector3(0.5, 0.29, 0.01)), mat("screen"), p + Vector3(0.1, 1.05, -0.18), false)
+	_mi(_box_mesh(Vector3(0.45, 0.02, 0.15)), mat("black"), p + Vector3(0.1, 0.79, 0.1), false)
+	# office chair
+	_mi(_box_mesh(Vector3(0.5, 0.08, 0.5)), mat("black"), p + Vector3(0, 0.5, 0.75))
+	_mi(_box_mesh(Vector3(0.5, 0.55, 0.07)), mat("black"), p + Vector3(0, 0.8, 1.0))
+	var cm := CylinderMesh.new(); cm.top_radius = 0.03; cm.bottom_radius = 0.03; cm.height = 0.45
+	_mi(cm, mat("metal"), p + Vector3(0, 0.25, 0.75))
+	_static_box(Vector3(1.6, 0.8, 0.8), p + Vector3(0, 0.4, 0))
+
+func _plant(p: Vector3) -> void:
+	var pot := CylinderMesh.new(); pot.top_radius = 0.3; pot.bottom_radius = 0.22; pot.height = 0.6
+	_mi(pot, mat("pot"), p + Vector3(0, 0.3, 0))
+	for i in 3:
+		var sm := SphereMesh.new(); sm.radius = 0.4; sm.height = 0.9; sm.radial_segments = 8; sm.rings = 5
+		_mi(sm, mat("leaf"), p + Vector3(rng.randf_range(-0.15, 0.15), 1.0 + i * 0.25, rng.randf_range(-0.15, 0.15)))
+	_static_box(Vector3(0.6, 0.6, 0.6), p + Vector3(0, 0.3, 0))
 
 func _crate_mat() -> StandardMaterial3D:
 	if _mats.has("crate"):

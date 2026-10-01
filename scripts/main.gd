@@ -11,6 +11,7 @@ const Hud = preload("res://scripts/hud.gd")
 const Fx = preload("res://scripts/fx.gd")
 const Person = preload("res://scripts/person.gd")
 const EscapeVan = preload("res://scripts/escape_van.gd")
+const Pedestrians = preload("res://scripts/pedestrians.gd")
 
 var city: Node3D
 var traffic: Node3D
@@ -51,6 +52,7 @@ var intro_shots: Array = []
 var intro_i := -1
 var intro_t := 0.0
 var talked := false
+var peds: Node3D
 
 const COLONEL := "العقيد سامر الخطيب"
 const NEGOTIATOR := "المفاوِضة الرائد ليلى"
@@ -103,6 +105,10 @@ func _ready() -> void:
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.position = Vector3(0, 2.15, 0)
 	colonel.add_child(tag)
+	peds = Node3D.new()
+	peds.set_script(Pedestrians)
+	add_child(peds)
+	peds.setup(self)
 	cine_cam = Camera3D.new()
 	cine_cam.fov = 55; cine_cam.far = 1500
 	add_child(cine_cam)
@@ -664,6 +670,8 @@ func listener_pos() -> Vector3:
 	return cam.global_position if cam else Vector3.ZERO
 
 func on_gunfire(from: Vector3) -> void:
+	if peds:
+		peds.panic(from)
 	for e in enemies:
 		if not e.dead and not e.surrendered and e.global_position.distance_to(from) < 22.0:
 			e.alert(from)

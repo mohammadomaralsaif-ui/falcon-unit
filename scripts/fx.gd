@@ -103,3 +103,69 @@ static func particles(root: Node, pos: Vector3, normal: Vector3, kind := "spark"
 	p.emitting = true
 	var t := root.get_tree().create_timer(p.lifetime + 0.2)
 	t.timeout.connect(p.queue_free)
+
+static var _flash_mat: StandardMaterial3D
+static var _hole_mat: StandardMaterial3D
+static var _holes: Array = []
+
+## Star-shaped muzzle flash at the barrel tip, lives for two frames.
+static func muzzle(root: Node, tip: Node3D) -> void:
+	if not _flash_mat:
+		_flash_mat = StandardMaterial3D.new()
+		_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_flash_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		_flash_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var gt := GradientTexture2D.new()
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 0.95, 0.7, 1)); g.set_color(1, Color(1, 0.5, 0.1, 0))
+		gt.gradient = g; gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5); gt.fill_to = Vector2(1.0, 0.5); gt.width = 64; gt.height = 64
+		_flash_mat.albedo_texture = gt
+	var n := Node3D.new()
+	tip.add_child(n)
+	for k in 3:
+		var mi := MeshInstance3D.new()
+		var q := QuadMesh.new(); q.size = Vector2(0.16, 0.42)
+		mi.mesh = q
+		mi.material_override = _flash_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.rotation = Vector3(PI / 2, 0, k * PI / 3.0 + randf() * 0.5)
+		mi.position.z = -0.12
+		n.add_child(mi)
+	var front := MeshInstance3D.new()
+	var fq := QuadMesh.new(); fq.size = Vector2(0.2, 0.2)
+	front.mesh = fq; front.material_override = _flash_mat
+	front.rotation.z = randf() * TAU
+	n.add_child(front)
+	var t := root.get_tree().create_timer(0.045)
+	t.timeout.connect(n.queue_free)
+
+## Small dark bullet hole stuck to a wall (keeps the most recent 60).
+static func bullet_hole(root: Node, pos: Vector3, normal: Vector3) -> void:
+	if not _hole_mat:
+		_hole_mat = StandardMaterial3D.new()
+		_hole_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		var gt := GradientTexture2D.new()
+		var g := Gradient.new()
+		g.set_color(0, Color(0.03, 0.03, 0.03, 1)); g.set_color(1, Color(0.2, 0.18, 0.16, 0))
+		g.add_point(0.35, Color(0.05, 0.05, 0.05, 0.95))
+		gt.gradient = g; gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5); gt.fill_to = Vector2(1.0, 0.5); gt.width = 32; gt.height = 32
+		_hole_mat.albedo_texture = gt
+		_hole_mat.roughness = 0.9
+	if normal.length() < 0.5:
+		return
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new(); q.size = Vector2(0.09, 0.09)
+	mi.mesh = q
+	mi.material_override = _hole_mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mi)
+	var up := Vector3.UP if absf(normal.y) < 0.95 else Vector3.FORWARD
+	mi.global_transform = Transform3D(Basis.looking_at(-normal, up), pos + normal * 0.01)
+	_holes.append(mi)
+	if _holes.size() > 60:
+		var old = _holes.pop_front()
+		if is_instance_valid(old):
+			old.queue_free()
