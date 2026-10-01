@@ -670,9 +670,21 @@ func _walls(st: SurfaceTool, base: Vector3, w: float, d: float, y0: float, y1: f
 			st.set_uv(vv[1])
 			st.add_vertex(vv[0])
 
+func _pole_body(pos: Vector3, radius: float, height: float, kind: String) -> void:
+	var sb := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	var cy := CylinderShape3D.new(); cy.radius = radius; cy.height = height
+	cs.shape = cy
+	cs.position = Vector3(0, height * 0.5, 0)
+	sb.add_child(cs)
+	sb.position = pos
+	sb.set_meta("prop", kind)
+	add_child(sb)
+
 func _lamp(pos: Vector3, ry: float) -> void:
 	var cm := CylinderMesh.new(); cm.top_radius = 0.06; cm.bottom_radius = 0.1; cm.height = 6.0
 	_mi(cm, mat("pole"), pos + Vector3(0, 3.0, 0))
+	_pole_body(pos, 0.14, 6.0, "pole")
 	var arm := _mi(_box_mesh(Vector3(0.08, 0.08, 1.6)), mat("pole"), pos + Vector3(0, 5.9, 0))
 	arm.rotation.y = ry
 	arm.position += Basis(Vector3.UP, ry) * Vector3(0, 0, -0.75)
@@ -689,6 +701,7 @@ func _curbs(cx: float, cz: float) -> void:
 func _traffic_light(pos: Vector3) -> void:
 	var cm := CylinderMesh.new(); cm.top_radius = 0.07; cm.bottom_radius = 0.08; cm.height = 3.2
 	_mi(cm, mat("pole"), pos + Vector3(0, 1.6, 0))
+	_pole_body(pos, 0.12, 3.2, "pole")
 	for k in 2:
 		var ry := PI * 0.25 + k * PI
 		var b := Basis(Vector3.UP, ry)
@@ -706,6 +719,7 @@ func _traffic_light(pos: Vector3) -> void:
 func _tree(pos: Vector3) -> void:
 	var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.17; cm.height = 3.0
 	_mi(cm, mat("trunk"), pos + Vector3(0, 1.5, 0))
+	_pole_body(pos, 0.22, 3.0, "tree")
 	for i in 3:
 		var sm := SphereMesh.new(); var r := rng.randf_range(1.0, 1.5)
 		sm.radius = r; sm.height = r * 1.6; sm.radial_segments = 10; sm.rings = 6
@@ -898,6 +912,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	_mi(out_st.commit(), mat("granite"))
 	# floor + roof
 	var fl := _mi(_box_mesh(Vector3(cols * CELL, 0.05, rows * CELL)), mat("marble"), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5), false)
+	_static_box(Vector3(cols * CELL, 0.05, rows * CELL), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5))
 	var roof := _mi(_box_mesh(Vector3(cols * CELL + 0.6, 0.4, rows * CELL + 0.6)), mat("roof"), bank_origin + Vector3(cols * CELL * 0.5, wh + 0.2, rows * CELL * 0.5))
 	# facade sign
 	var sign_pos := door_pos + Vector3(0, wh + 1.2, CELL * 0.5 + 0.2)

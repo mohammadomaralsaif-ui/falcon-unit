@@ -54,6 +54,10 @@ var intro_t := 0.0
 var talked := false
 var peds: Node3D
 var input_guard := 0.0
+var civilians_hit := 0
+var nav_region: NavigationRegion3D
+var nav_ready := false
+var ambience: AudioStreamPlayer
 var chase_pending := false
 
 const COLONEL := "العقيد سامر الخطيب"
@@ -74,6 +78,7 @@ func _ready() -> void:
 	city.build(7)
 	city.build_cordon()
 	city.merge_static()
+	_setup_nav()
 	traffic = Node3D.new()
 	traffic.set_script(Traffic)
 	add_child(traffic)
@@ -111,6 +116,11 @@ func _ready() -> void:
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.position = Vector3(0, 2.15, 0)
 	colonel.add_child(tag)
+	ambience = AudioStreamPlayer.new()
+	ambience.stream = Sfx.streams["ambience"]
+	ambience.volume_db = -14.0
+	add_child(ambience)
+	ambience.play()
 	peds = Node3D.new()
 	peds.set_script(Pedestrians)
 	add_child(peds)
@@ -125,6 +135,54 @@ func _ready() -> void:
 	add_child(hud)
 	hud.set_letterbox(true)
 	hud.show_briefing(_start_mission)
+
+# ------------------------------------------------------------------ navigation (bank + street in front)
+func _setup_nav() -> void:
+	var map := get_world_3d().navigation_map
+	NavigationServer3D.map_set_cell_size(map, 0.2)
+	NavigationServer3D.map_set_cell_height(map, 0.1)
+	var x0: float = city.bank_block.x * city.P + city.R
+	var z0: float = city.bank_block.y * city.P + city.R
+	var area := AABB(Vector3(x0 - 10.0, -1.0, z0 - 10.0), Vector3(city.B + 34.0, 7.0, city.B + 42.0))
+	# a plain floor collider so the baker has ground everywhere in the area
+	var floor_body := StaticBody3D.new()
+	var cs := CollisionShape3D.new(); var bs := BoxShape3D.new()
+	bs.size = Vector3(area.size.x, 0.1, area.size.z); cs.shape = bs
+	floor_body.add_child(cs)
+	floor_body.position = Vector3(area.get_center().x, -0.05, area.get_center().z)
+	city.add_child(floor_body)
+	var nm := NavigationMesh.new()
+	nm.cell_size = 0.2
+	nm.cell_height = 0.1
+	nm.agent_radius = 0.4
+	nm.agent_height = 1.75
+	nm.agent_max_climb = 0.35
+	nm.agent_max_slope = 40.0
+	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	nm.geometry_collision_mask = 1
+	nm.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
+	nm.geometry_source_group_name = &"navsrc"
+	nm.filter_baking_aabb = area
+	city.add_to_group("navsrc")
+	nav_region = NavigationRegion3D.new()
+	nav_region.navigation_mesh = nm
+	add_child(nav_region)
+	nav_region.bake_finished.connect(func(): nav_ready = true)
+	nav_region.bake_navigation_mesh(true)
+
+## Next waypoint from `from` toward `to` along the navmesh (or `to` itself outside the baked area).
+func nav_step(from: Vector3, to: Vector3) -> Vector3:
+	if not nav_ready:
+		return to
+	var map := get_world_3d().navigation_map
+	var cf := NavigationServer3D.map_get_closest_point(map, from)
+	if Vector2(cf.x - from.x, cf.z - from.z).length() > 1.5:
+		return to
+	var path := NavigationServer3D.map_get_path(map, from, to, true)
+	for p in path:
+		if Vector2(p.x - from.x, p.z - from.z).length() > 0.6:
+			return p
+	return to
 
 func _environment() -> void:
 	var env := Environment.new()
@@ -228,7 +286,7 @@ func _begin_drive() -> void:
 	hud.radio("الصقر ٢", "الفريق جاهز بالخلف يا سيدي. عبوة الاقتحام معنا." if team_size > 0 else "الوحدة المساندة عالقة بالأزمة. أنت لوحدك يا الصقر ١.", 4.0)
 	hud.show_banner("وحدة الصقر", "مصرف الشرق · جبل عمّان · ٥:٤٢ م", 3.5)
 	hud.set_waypoint(city.cordon_point + Vector3(0, 1, 0))
-	hud.set_objectives(["◆ قُد السيارة إلى الطوق الأمني أمام المصرف", "◇ [H] صفارة · [F] نزول/ركوب"])
+	hud.set_objectives(["◆ قُد السيارة إلى الطوق الأمني أمام المصرف", "◇ [H] صفارة · [E] زمّور · [F] نزول/ركوب"])
 
 func _arrive() -> void:
 	phase = "arrive"
@@ -267,6 +325,8 @@ func _breach() -> void:
 	door_open = true
 	var dp: Vector3 = city.door_pos + Vector3(0, 1.4, 0)
 	city.open_door()
+	# the doorway is open now: rebuild the walkable area so people can path through it
+	get_tree().create_timer(0.2).timeout.connect(func(): nav_region.bake_navigation_mesh(true))
 	Sfx.play("boom", 4.0)
 	Fx.flash(self, dp, 30.0, Color(1, 0.7, 0.4), 0.5, 30.0)
 	Fx.particles(self, dp, Vector3(0, 0.3, 1), "smoke", 26)
@@ -311,7 +371,7 @@ func mission_assault_text() -> void:
 			var d: float = h.global_position.distance_to(player.global_position)
 			if d < bd:
 				bd = d; best = h
-	var escorting := hostages.any(func(h): return h.freed and not h.dead)
+	var escorting := hostages.any(func(h): return h.freed and not h.dead and h.escort == null)
 	if escorting:
 		hud.set_waypoint(city.door_pos + Vector3(0, 0.6, 11.0))
 	elif best:
@@ -552,7 +612,21 @@ func _cuff(e) -> void:
 func _free(h) -> void:
 	h.free_hostage(trail.size())
 	Sfx.play("cuff", -4.0, 0.8)
-	hud.radio("الصقر ١", ["امشي ورايا وما تبعدي عنّي، رح نطلع سوا.", "إنت بأمان هلأ. ضلّك ورايا لبرّا.", "قوم معي… خلّيك لازق فيّ لحد الباب."].pick_random(), 3.0)
+	# hand the hostage to the nearest free teammate, who walks them out while you keep clearing
+	var best = null
+	var bd := 30.0
+	for t in team:
+		if t.dead or not t.visible or t.escort_h:
+			continue
+		var d: float = t.global_position.distance_to(h.global_position)
+		if d < bd:
+			bd = d; best = t
+	if best:
+		best.escort_h = h
+		h.escort = best
+		hud.radio(best.display_name, ["أنا ماسك الرهينة، بطلّعها لبرّا. غطّوني!", "استلمتها! طالع فيها عالإسعاف.", "معي الرهينة، كمّلوا التنظيف!"].pick_random(), 3.0)
+	else:
+		hud.radio("الصقر ١", ["امشي ورايا وما تبعدي عنّي، رح نطلع سوا.", "إنت بأمان هلأ. ضلّك ورايا لبرّا.", "قوم معي… خلّيك لازق فيّ لحد الباب."].pick_random(), 3.0)
 	mission_assault_text()
 
 func on_hostage_saved(_h) -> void:
@@ -701,7 +775,7 @@ func _end(win: bool, reason: String) -> void:
 		("%s: معتقل ✔" % LEADER) if leader_cuffed else ("%s: هارب ✖" % LEADER),
 		"اعتقالات: %d    ·    تحييد: %d" % [arrests, kills],
 		"دقة الإصابة: %d%%    ·    طلقات في الرأس: %d" % [int(acc), st.heads],
-		"خسائر الفريق: %d    ·    مخالفات: %d" % [team_lost, violations],
+		"خسائر الفريق: %d    ·    مخالفات: %d    ·    مدنيون مصابون: %d" % [team_lost, violations, civilians_hit],
 	]
 	if reason != "":
 		lines.push_front(reason)
@@ -735,6 +809,11 @@ func on_gunfire(from: Vector3) -> void:
 func _on_player_shot(pos: Vector3) -> void:
 	on_gunfire(pos)
 
+func on_civilian_hit() -> void:
+	violations += 1
+	civilians_hit += 1
+	hud.radio(COLONEL, "الصقر ١! دهست مدني! انتبه على الطريق!", 3.0)
+
 func on_violation() -> void:
 	violations += 1
 	hud.radio("قائد العمليات", "الصقر ١! المشتبه كان مستسلماً! التزم بقواعد الاشتباك!", 3.0)
@@ -743,6 +822,10 @@ func on_actor_dead(a, head: bool, from) -> void:
 	if a.side == "team":
 		team_lost += 1
 		hud.radio("الصقر ١", "سقط %s! رجل مصاب!" % a.display_name, 3.0)
+		if a.escort_h and is_instance_valid(a.escort_h):
+			a.escort_h.escort = null
+			hud.radio("الصقر ١", "الرهينة لحالها! تعالي ورايا!", 2.5)
+			a.escort_h = null
 		return
 	if from == player:
 		player.stats.kills += 1

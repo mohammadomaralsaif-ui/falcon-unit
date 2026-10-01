@@ -27,6 +27,7 @@ var last_hit := -10.0
 var recoil := 0.0
 var cur_anim := ""
 var active := true
+var step_t := 0.0
 var stats := {"shots": 0, "hits": 0, "kills": 0, "heads": 0}
 
 func _ready() -> void:
@@ -92,6 +93,12 @@ func _physics_process(dt: float) -> void:
 		velocity.y -= 9.8 * dt
 	move_and_slide()
 	var hs := Vector2(velocity.x, velocity.z).length()
+	# footsteps
+	if is_on_floor() and hs > 0.6:
+		step_t -= dt
+		if step_t <= 0.0:
+			step_t = 0.3 if hs > 5.0 else 0.48
+			Sfx.play("step", -16.0 if hs < 5.0 else -11.0, randf_range(0.85, 1.15))
 	var want := "Idle"
 	if hs > 4.6:
 		want = "Run"
@@ -109,12 +116,13 @@ func _physics_process(dt: float) -> void:
 			gun.rotation.z = 0.0
 	elif Controls.just("reload") and ammo < 30 and reserve > 0:
 		reload_t = 2.0
-		Sfx.play("click")
+		Sfx.play("reload", -6.0)
 	elif Controls.held("fire") and fire_cd <= 0.0 and not sprint:
 		if ammo > 0:
 			_shoot()
 		elif reserve > 0:
 			reload_t = 2.0
+			Sfx.play("reload", -6.0)
 	if Time.get_ticks_msec() / 1000.0 - last_hit > 5.0 and hp < 100.0:
 		hp = minf(100.0, hp + 12.0 * dt)
 
@@ -140,7 +148,12 @@ func _shoot() -> void:
 			stats.hits += 1
 			if main:
 				main.on_player_hit(killed, head)
-			Fx.particles(main, hit.position, hit.normal, "blood", 10)
+			if col is AnimatableBody3D:
+				Fx.particles(main, hit.position, hit.normal, "spark", 10)
+				Sfx.play_3d("crash_small", hit.position, -14.0, 2.2)
+			else:
+				Fx.blood_hit(main, hit.position, fwd, hit.normal)
+				Sfx.play_3d("flesh", hit.position, -4.0)
 		else:
 			Fx.particles(main, hit.position, hit.normal, "spark", 8)
 			Fx.particles(main, hit.position, hit.normal, "dust", 4)
@@ -168,6 +181,8 @@ func take_hit(dmg: float, _head := false, from: Node3D = null) -> bool:
 		model.set_mode("none")
 		var tw := create_tween()
 		tw.tween_property(model, "rotation:x", -PI / 2, 0.6)
+		if main:
+			get_tree().create_timer(0.7).timeout.connect(func(): Fx.blood_pool(main, global_position))
 		if main:
 			main.on_player_dead()
 		return true

@@ -3,6 +3,7 @@ extends StaticBody3D
 ## player's exact path (breadcrumb trail) out of the building to the ambulance.
 
 const Person = preload("res://scripts/person.gd")
+const Fx = preload("res://scripts/fx.gd")
 
 var main: Node
 var dead := false
@@ -11,6 +12,7 @@ var rescued := false   # out of the building, safe
 var model: Node3D
 var trail_idx := 0
 var gone := false
+var escort: Node3D = null   # teammate walking this hostage out (null = follow the player)
 
 func _ready() -> void:
 	collision_layer = 32
@@ -35,6 +37,7 @@ func take_hit(_dmg: float, _head := false, from: Node3D = null) -> bool:
 	tw.parallel().tween_property(model, "position:y", 0.15, 0.5)
 	if main:
 		main.on_hostage_dead(self, from)
+		get_tree().create_timer(0.6).timeout.connect(func(): Fx.blood_pool(main, global_position))
 	return true
 
 func free_hostage(trail_size: int) -> void:
@@ -54,18 +57,26 @@ func _physics_process(dt: float) -> void:
 		goal = main.city.cordon_point + Vector3(13, 0, 4)
 		spd = 3.0
 	elif freed:
-		var trail: Array = main.trail
-		var pl: Vector3 = main.player.global_position
-		if global_position.distance_to(pl) > 2.2 and trail.size() > 0:
-			trail_idx = mini(trail_idx, trail.size() - 1)
-			goal = trail[trail_idx]
-			if Vector2(goal.x - global_position.x, goal.z - global_position.z).length() < 0.9 and trail_idx < trail.size() - 1:
-				trail_idx += 1
-				goal = trail[trail_idx]
-			spd = 4.6 if global_position.distance_to(pl) > 5.0 else 2.2
+		if escort and (not is_instance_valid(escort) or escort.dead):
+			escort = null
+		var leader: Node3D = escort if escort else main.player
+		var pl: Vector3 = leader.global_position
+		var dl := global_position.distance_to(pl)
+		if dl > 1.9:
+			if main.nav_ready:
+				goal = main.nav_step(global_position, pl)
+			else:
+				var trail: Array = main.trail
+				if trail.size() > 0:
+					trail_idx = mini(trail_idx, trail.size() - 1)
+					goal = trail[trail_idx]
+					if Vector2(goal.x - global_position.x, goal.z - global_position.z).length() < 0.9 and trail_idx < trail.size() - 1:
+						trail_idx += 1
+						goal = trail[trail_idx]
+			spd = 4.6 if dl > 5.0 else 2.2
 		# out of the bank?
 		var dz: float = main.city.door_pos.z
-		if global_position.z > dz + 3.5 or (global_position.z > dz + 1.2 and main.player.global_position.z > dz + 3.0):
+		if global_position.z > dz + 3.5 or (global_position.z > dz + 1.2 and pl.z > dz + 3.0):
 			rescued = true
 			freed = false
 			main.on_hostage_saved(self)

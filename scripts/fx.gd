@@ -183,3 +183,86 @@ static func bullet_hole(root: Node, pos: Vector3, normal: Vector3) -> void:
 		var old = _holes.pop_front()
 		if is_instance_valid(old):
 			old.queue_free()
+
+static var _splat_mat: StandardMaterial3D
+static var _splats: Array = []
+
+static func _blood_material() -> StandardMaterial3D:
+	if _splat_mat:
+		return _splat_mat
+	var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var r := RandomNumberGenerator.new(); r.seed = 77
+	# main blob + droplets, soft edges
+	var blobs := [[64.0, 64.0, 34.0]]
+	for i in 14:
+		var a := r.randf() * TAU
+		var d := r.randf_range(26.0, 58.0)
+		blobs.append([64.0 + cos(a) * d, 64.0 + sin(a) * d, r.randf_range(1.2, 4.5)])
+	for y in 128:
+		for x in 128:
+			var v := 0.0
+			for b in blobs:
+				var dd: float = Vector2(x - b[0], y - b[1]).length() / b[2]
+				v = maxf(v, clampf(1.6 - dd * 1.2, 0.0, 1.0))
+			if v > 0.0:
+				var shade := r.randf_range(0.85, 1.0)
+				img.set_pixel(x, y, Color(0.32 * shade, 0.015, 0.02, minf(v * 1.4, 0.95)))
+	img.generate_mipmaps()
+	_splat_mat = StandardMaterial3D.new()
+	_splat_mat.albedo_texture = ImageTexture.create_from_image(img)
+	_splat_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_splat_mat.roughness = 0.25
+	_splat_mat.metallic_specular = 0.7
+	return _splat_mat
+
+static func _splat_mesh() -> Mesh:
+	if not _meshes.has("splat"):
+		var q := QuadMesh.new(); q.size = Vector2(1, 1)
+		_meshes["splat"] = q
+	return _meshes["splat"]
+
+## A blood decal stuck to a surface. Keeps the most recent 40.
+static func blood_splat(root: Node, pos: Vector3, normal: Vector3, size := 0.6) -> MeshInstance3D:
+	if normal.length() < 0.5:
+		return null
+	var mi := MeshInstance3D.new()
+	mi.mesh = _splat_mesh()
+	mi.material_override = _blood_material()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mi)
+	var up := Vector3.UP if absf(normal.y) < 0.95 else Vector3.FORWARD
+	var b := Basis.looking_at(-normal, up).rotated(normal.normalized(), randf() * TAU)
+	mi.global_transform = Transform3D(b, pos + normal * 0.012)
+	mi.scale = Vector3(size, size, 1)
+	_splats.append(mi)
+	if _splats.size() > 40:
+		var old = _splats.pop_front()
+		if is_instance_valid(old):
+			old.queue_free()
+	return mi
+
+## Bullet hits a person: spray + splatter on the wall behind and the floor below.
+static func blood_hit(root: Node3D, pos: Vector3, dir: Vector3, normal: Vector3) -> void:
+	particles(root, pos, (normal + dir * 0.6).normalized(), "blood", 18)
+	var space := root.get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(pos + dir * 0.4, pos + dir * 3.2, 1)
+	var hit := space.intersect_ray(q)
+	if hit:
+		blood_splat(root, hit.position, hit.normal, randf_range(0.45, 0.9))
+	var qd := PhysicsRayQueryParameters3D.create(pos, pos + Vector3(0, -2.6, 0) + dir * 0.6, 1)
+	var hd := space.intersect_ray(qd)
+	if hd:
+		blood_splat(root, hd.position, hd.normal, randf_range(0.3, 0.55))
+
+## Slowly spreading pool under a body.
+static func blood_pool(root: Node3D, pos: Vector3) -> void:
+	var space := root.get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(pos + Vector3(0, 0.8, 0), pos + Vector3(0, -1.5, 0), 1)
+	var hit := space.intersect_ray(q)
+	if not hit:
+		return
+	var mi := blood_splat(root, hit.position, Vector3.UP, 0.15)
+	if mi:
+		var tw := mi.create_tween()
+		tw.tween_property(mi, "scale", Vector3(1.6, 1.6, 1), 6.0).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)

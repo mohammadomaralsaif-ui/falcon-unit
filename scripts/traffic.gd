@@ -19,6 +19,8 @@ class Car:
 	var stuck := 0.0
 	var want := 10.0
 	var tick := 0
+	var snd: AudioStreamPlayer3D
+	var honk_cd := 0.0
 
 func setup(_city: Node, count: int) -> void:
 	city = _city
@@ -54,6 +56,14 @@ func setup(_city: Node, count: int) -> void:
 		cs.shape = bs; cs.position = Vector3(0, 0.75, 0)
 		c.body.add_child(cs)
 		add_child(c.body)
+		c.snd = AudioStreamPlayer3D.new()
+		c.snd.stream = Sfx.streams["engine"]
+		c.snd.unit_size = 4.0
+		c.snd.max_distance = 45.0
+		c.snd.volume_db = -14.0
+		c.snd.pitch_scale = rng.randf_range(0.85, 1.15)
+		c.body.add_child(c.snd)
+		c.snd.play()
 		_place(c)
 		cars.append(c)
 
@@ -132,6 +142,13 @@ func _physics_process(dt: float) -> void:
 			c.stuck += dt
 		else:
 			c.stuck = 0.0
+		if c.tick % 6 == 0:
+			c.snd.pitch_scale = 0.7 + c.speed / 22.0
+		# drivers lean on the horn when something blocks them for a while
+		c.honk_cd -= dt
+		if c.stuck > 2.5 and c.honk_cd <= 0.0 and not _far_from_player(c.body.global_position, 40.0):
+			c.honk_cd = randf_range(3.0, 6.0)
+			Sfx.play_3d("horn", c.body.global_position, -2.0, randf_range(0.85, 1.1))
 		if c.stuck > 12.0 and _far_from_player(c.body.global_position, 60.0):
 			# respawn on a random street far from the player instead of sliding through things
 			c.stuck = 0.0

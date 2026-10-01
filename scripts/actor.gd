@@ -28,6 +28,23 @@ var follow_offset := Vector3.ZERO
 var cur_anim := ""
 var accuracy := 0.42
 var damage := 10.0
+var escort_h: Node3D = null    # hostage this teammate is walking out
+var _wp := Vector3.ZERO
+var _wp_goal := Vector3.INF
+var _wp_t := 0.0
+
+## Next point to walk to (navmesh path when available, straight line otherwise). Re-planned 4x a second.
+func _nav_to(goal: Vector3, dt: float) -> Vector3:
+	_wp_t -= dt
+	if _wp_t <= 0.0 or _wp_goal.distance_to(goal) > 1.5:
+		_wp_t = 0.25
+		_wp_goal = goal
+		_wp = main.nav_step(global_position, goal)
+	var d := _wp - global_position
+	d.y = 0
+	if d.length() < 0.4:
+		_wp_t = 0.0
+	return d
 
 func setup(_main: Node, _side: String, pos: Vector3, yaw: float, name_ := "") -> void:
 	main = _main
@@ -152,10 +169,11 @@ func _enemy_ai(dt: float) -> Vector3:
 				fire_cd = 0.12
 		return Vector3.ZERO
 	if state == "alert" and hunter:
-		var d := last_seen - global_position
-		d.y = 0
-		if d.length() > 2.0:
-			_face(last_seen, dt, 6.0)
+		var far := last_seen - global_position
+		far.y = 0
+		if far.length() > 2.0:
+			var d := _nav_to(last_seen, dt)
+			_face(global_position + d, dt, 6.0)
 			return d.normalized() * 3.2
 	elif state == "idle":
 		rotation.y = home_yaw + sin(Time.get_ticks_msec() * 0.0004 + position.x) * 0.7
@@ -175,11 +193,23 @@ func _team_ai(dt: float) -> Vector3:
 				bd = d; target = e
 	var move := Vector3.ZERO
 	var goal: Vector3 = pl.global_position + pl.global_transform.basis * follow_offset
+	var spd_cap := 99.0
+	if escort_h and is_instance_valid(escort_h) and not escort_h.dead and not escort_h.rescued:
+		# escort duty: collect the hostage, then walk them out of the bank at their pace
+		var hd: float = global_position.distance_to(escort_h.global_position)
+		if hd > 4.0:
+			goal = escort_h.global_position
+		else:
+			goal = main.city.door_pos + Vector3(0, 0, 9.0)
+			spd_cap = 2.3 if hd < 2.6 else 0.0
+	elif escort_h:
+		escort_h = null
 	var dg := goal - global_position
 	dg.y = 0
 	if dg.length() > 1.0:
-		var spd := 6.5 if dg.length() > 7.0 else 4.0
-		move = dg.normalized() * spd
+		var spd := minf(6.5 if dg.length() > 7.0 else 4.0, spd_cap)
+		if spd > 0.0:
+			move = _nav_to(goal, dt).normalized() * spd
 	if target and is_instance_valid(target):
 		var ang := _face(target.global_position, dt, 7.0)
 		if fire_cd <= 0.0 and ang < 0.3:
@@ -208,6 +238,8 @@ func _shoot_at(t: Node3D) -> void:
 		acc = 0.0
 	if randf() < acc and t.has_method("take_hit"):
 		var killed: bool = t.take_hit(damage if side == "enemy" else randf_range(22, 34), false, self)
+		var bdir := (tp - from).normalized()
+		Fx.blood_hit(main, tp + Vector3(randf_range(-0.15, 0.15), randf_range(-0.3, 0.2), 0), bdir, -bdir)
 		if side == "team" and killed:
 			main.on_team_kill(self)
 	else:
@@ -244,6 +276,12 @@ func take_hit(dmg: float, head := false, from: Node3D = null) -> bool:
 	hp -= dmg
 	if from:
 		alert(from.global_position)
+	if hp > 0.0:
+		# flinch: knocked back a little and can't fire straight away
+		fire_cd = maxf(fire_cd, 0.4)
+		var tw := create_tween()
+		tw.tween_property(model, "rotation:x", 0.22, 0.07)
+		tw.tween_property(model, "rotation:x", 0.0, 0.2)
 	if hp <= 0.0:
 		die(head, from)
 		return true
@@ -267,3 +305,4 @@ func die(head := false, from: Node3D = null) -> void:
 	tw.parallel().tween_property(model, "position:y", 0.15, 0.5)
 	if main:
 		main.on_actor_dead(self, head, from)
+		get_tree().create_timer(0.6).timeout.connect(func(): Fx.blood_pool(main, global_position))

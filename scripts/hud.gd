@@ -394,7 +394,8 @@ func _process(dt: float) -> void:
 				"yell":
 					b.visible = not in_car and main.phase == "assault"
 				"interact":
-					b.visible = not in_car and prompt.text != "" and not prompt.text.contains("سيارة")
+					b.visible = in_car or (prompt.text != "" and not prompt.text.contains("سيارة"))
+					b.get_child(0).text = "زمّور" if in_car else "تفاعل"
 				"vehicle":
 					b.visible = near_car
 				"jump":
