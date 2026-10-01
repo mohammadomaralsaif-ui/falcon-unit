@@ -11,6 +11,7 @@ var grip: Node3D        # right hand target
 var guard: Node3D       # left hand target
 var body: Node3D        # the Person node (faces -Z, metres, Y up)
 var _b := {}
+var crouch := 0.0       # 0..1: lower the hips and bend the legs (feet stay planted)
 var K := Transform3D.IDENTITY   # "civilian space" (Y up, +Z forward, metres) -> skeleton space
 
 func _bone(n: String) -> int:
@@ -43,6 +44,8 @@ func _process_modification() -> void:
 	var inv := sk.global_transform.affine_inverse()
 	if body:
 		K = inv * body.global_transform * Transform3D(Basis(Vector3.UP, PI), Vector3.ZERO)
+	if crouch > 0.01 and not mode.begins_with("kneel"):
+		_crouch(sk)
 	match mode:
 		"rifle":
 			if grip and guard and grip.is_inside_tree():
@@ -85,6 +88,68 @@ func _kneel(sk: Skeleton3D) -> void:
 	hc.y = 0.55
 	hips.origin = _toS(hc)
 	sk.set_bone_global_pose(_bone("Hips"), hips)
+
+func _crouch(sk: Skeleton3D) -> void:
+	var hi := _bone("Hips")
+	if hi < 0:
+		return
+	var feet := {}
+	for s in ["Left", "Right"]:
+		var f := _bone(s + "Foot")
+		if f >= 0:
+			feet[s] = sk.get_bone_global_pose(f).origin
+	var hips := sk.get_bone_global_pose(hi)
+	var hc := _toC(hips.origin)
+	hc.y -= 0.42 * crouch
+	hc.z -= 0.08 * crouch
+	hips.origin = _toS(hc)
+	sk.set_bone_global_pose(hi, hips)
+	# lean the chest forward a little, like a real low-ready stance
+	var sp := _bone("Spine")
+	if sp >= 0:
+		var g := sk.get_bone_global_pose(sp)
+		g.basis = Basis(_dirS(Vector3(1, 0, 0)), 0.3 * crouch) * g.basis
+		sk.set_bone_global_pose(sp, g)
+	for s in feet:
+		var x := 0.15 if s == "Left" else -0.15
+		_leg_ik(s, feet[s], _dirS(Vector3(x, 0.0, 1.0)))
+
+## Two-bone IK for a leg: thigh + shin reach the foot target, knee bends toward `pole` (skeleton space).
+func _leg_ik(side: String, target: Vector3, pole: Vector3) -> void:
+	var sk := get_skeleton()
+	var ua := _bone(side + "UpLeg")
+	var fa := _bone(side + "Leg")
+	var ha := _bone(side + "Foot")
+	if ua < 0 or fa < 0 or ha < 0:
+		return
+	var foot_basis := sk.get_bone_global_pose(ha).basis
+	var gu := sk.get_bone_global_pose(ua)
+	var gf := sk.get_bone_global_pose(fa)
+	var gh := sk.get_bone_global_pose(ha)
+	var S := gu.origin
+	var a := S.distance_to(gf.origin)
+	var b := gf.origin.distance_to(gh.origin)
+	var to := target - S
+	var d := clampf(to.length(), absf(a - b) + 0.01, a + b - 0.005)
+	var dir := to.normalized()
+	var x := (a * a - b * b + d * d) / (2.0 * d)
+	var h := sqrt(maxf(a * a - x * x, 0.0))
+	var perp := pole - dir * pole.dot(dir)
+	if perp.length() < 0.001:
+		return
+	perp = perp.normalized()
+	var E := S + dir * x + perp * h
+	var T := S + dir * d
+	gu.basis = Basis(_arc((gf.origin - S).normalized(), (E - S).normalized())) * gu.basis
+	sk.set_bone_global_pose(ua, gu)
+	gf = sk.get_bone_global_pose(fa)
+	gh = sk.get_bone_global_pose(ha)
+	gf.basis = Basis(_arc((gh.origin - gf.origin).normalized(), (T - gf.origin).normalized())) * gf.basis
+	sk.set_bone_global_pose(fa, gf)
+	# keep the foot flat as it was in the animation
+	gh = sk.get_bone_global_pose(ha)
+	gh.basis = foot_basis
+	sk.set_bone_global_pose(ha, gh)
 
 static func _arc(a: Vector3, b: Vector3) -> Quaternion:
 	var d := clampf(a.dot(b), -1.0, 1.0)

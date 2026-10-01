@@ -45,6 +45,7 @@ var door_body: StaticBody3D
 var enemy_spawns: Array[Vector3] = []
 var hostage_spawns: Array[Vector3] = []
 var spawn_point := Transform3D.IDENTITY
+var sniper_nests: Array = []      # [roof position, yaw] on the tall buildings facing the target (sniper missions)
 var cordon_point := Vector3.ZERO
 var flashers: Array = []
 var baked := {}
@@ -540,10 +541,23 @@ func _block(bi: int, bj: int) -> void:
 		_mi(mh, mat("manhole"), Vector3(cx + rng.randf_range(-20, 20), 0.01, z0 - SIDEWALK - rng.randf_range(2.0, 6.0)), false)
 	var lot := (B - 1.0) / 2.0
 	var park := rng.randf() < 0.12
+	var overlook := style == "yard" and Vector2i(bi, bj) == bank_block + Vector2i(0, 1)
 	for lx in 2:
 		for lz in 2:
 			var bx := x0 + 0.5 + lx * lot + lot * 0.5
 			var bz := z0 + 0.5 + lz * lot + lot * 0.5
+			if overlook and lz == 0:
+				# sniper overwatch: a tall block across the street from the target yard
+				var fw := lot - 1.0
+				var fd := lot - 1.0
+				var fl := 7
+				_building(Vector3(bx, 0.16, bz), fw, fd, fl, lx, lz)
+				var top := 0.16 + fl * FLOOR_H
+				for e in [[Vector3(0, 0, fd * 0.5), Vector3(fw, 1.1, 0.3)], [Vector3(0, 0, -fd * 0.5), Vector3(fw, 1.1, 0.3)], [Vector3(fw * 0.5, 0, 0), Vector3(0.3, 1.1, fd)], [Vector3(-fw * 0.5, 0, 0), Vector3(0.3, 1.1, fd)]]:
+					_static_box(e[1], Vector3(bx, top + 0.55, bz) + e[0])
+				_static_box(Vector3(fw, 0.2, fd), Vector3(bx, top + 0.1, bz))
+				sniper_nests.append([Vector3(bx, top + 0.25, bz - fd * 0.5 + 0.55), 0.0])
+				continue
 			if park and lx == 0 and lz == 0:
 				_trees_in_lot(bx, bz, lot)
 				continue
@@ -599,6 +613,20 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 		_mi(_box_mesh(Vector3(w + 0.16, 0.14, d + 0.16)), mat("white"), base + Vector3(0, fl * FLOOR_H - 0.05, 0))
 	for e in [[Vector3(0, 0, d * 0.5), Vector3(w + 0.3, 0.9, 0.22)], [Vector3(0, 0, -d * 0.5), Vector3(w + 0.3, 0.9, 0.22)], [Vector3(w * 0.5, 0, 0), Vector3(0.22, 0.9, d + 0.3)], [Vector3(-w * 0.5, 0, 0), Vector3(0.22, 0.9, d + 0.3)]]:
 		_mi(_box_mesh(e[1]), mat("white"), base + e[0] + Vector3(0, h + 0.8, 0))
+	# dark stone plinth at street level + white limestone corner quoins (typical Amman facades)
+	_mi(_box_mesh(Vector3(w + 0.14, 0.55, d + 0.14)), mat("granite"), base + Vector3(0, 0.27, 0))
+	for qx in [-1, 1]:
+		for qz in [-1, 1]:
+			_mi(_box_mesh(Vector3(0.42, h - FLOOR_H, 0.42)), mat("white"), base + Vector3(qx * w * 0.5, FLOOR_H + (h - FLOOR_H) * 0.5, qz * d * 0.5))
+	# set-back penthouse ("روف") on taller buildings
+	if floors >= 4 and rng.randf() < 0.45:
+		var pw := w * 0.55
+		var pd := d * 0.5
+		var pp := base + Vector3(rng.randf_range(-0.15, 0.15) * w, h + 0.35, -d * 0.2)
+		var ph_st := SurfaceTool.new(); ph_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_walls(ph_st, pp, pw, pd, 0.0, FLOOR_H * 0.95, 3.4, FLOOR_H)
+		_mi(ph_st.commit(), stone_m)
+		_mi(_box_mesh(Vector3(pw + 0.6, 0.18, pd + 0.6)), mat("white"), pp + Vector3(0, FLOOR_H * 0.95 + 0.09, 0))
 	# stair room on the roof
 	var srp := base + Vector3(rng.randf_range(-w * 0.25, w * 0.25), h + 0.35, rng.randf_range(-d * 0.25, d * 0.25))
 	_mi(_box_mesh(Vector3(3.0, 2.6, 3.2)), stone_m, srp + Vector3(0, 1.3, 0))
@@ -904,7 +932,8 @@ func _bank_block(bi: int, bj: int) -> void:
 	bank_origin = Vector3(ox, 0.16, oz)
 	var wall_st := SurfaceTool.new(); wall_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var out_st := SurfaceTool.new(); out_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var wh := 4.2
+	var yard := style == "yard"
+	var wh := 4.2 if not yard else 2.6
 	var wall_mesh := _box_mesh(Vector3(CELL, wh, CELL))
 	for r in rows:
 		var line: String = imap[r]
@@ -964,23 +993,37 @@ func _bank_block(bi: int, bj: int) -> void:
 				"D":
 					door_pos = p
 					door_body = StaticBody3D.new()
-					var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(CELL, 3.2, 0.3); cs.shape = bs
-					cs.position = Vector3(0, 1.6, 0)
+					var dh := 3.2 if not yard else wh
+					var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(CELL, dh, 0.3); cs.shape = bs
+					cs.position = Vector3(0, dh * 0.5, 0)
 					door_body.add_child(cs)
 					for s in [-1, 1]:
-						var leaf := MeshInstance3D.new(); leaf.mesh = _box_mesh(Vector3(CELL * 0.5 - 0.05, 3.1, 0.12)); leaf.material_override = mat("door")
-						leaf.position = Vector3(s * CELL * 0.25, 1.55, 0)
+						var leaf := MeshInstance3D.new(); leaf.mesh = _box_mesh(Vector3(CELL * 0.5 - 0.05, dh - 0.1, 0.12)); leaf.material_override = mat("door")
+						leaf.position = Vector3(s * CELL * 0.25, (dh - 0.1) * 0.5, 0)
 						door_body.add_child(leaf)
 					door_body.position = p
 					add_child(door_body)
+					if yard:
+						continue
 					var lintel := _mi(_box_mesh(Vector3(CELL, wh - 3.2, CELL)), mat("plaster"), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
 					lintel.material_override = mat("plaster")
 					_static_box(Vector3(CELL, wh - 3.2, CELL), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
-	var in_mat: String = {"bank": "interior", "apartment": "plaster", "mall": "white"}[style]
-	var out_mat: String = {"bank": "granite", "apartment": "stone%d" % (bi % 5), "mall": "darkglass"}[style]
-	var floor_mat: String = {"bank": "marble", "apartment": "tile", "mall": "marble"}[style]
+	var in_mat: String = {"bank": "interior", "apartment": "plaster", "mall": "white", "yard": "sidewalk"}[style]
+	var out_mat: String = {"bank": "granite", "apartment": "stone%d" % (bi % 5), "mall": "darkglass", "yard": "plaster"}[style]
+	var floor_mat: String = {"bank": "marble", "apartment": "tile", "mall": "marble", "yard": "asphalt"}[style]
 	var walls := _mi(wall_st.commit(), mat(in_mat))
 	_mi(out_st.commit(), mat(out_mat))
+	if yard:
+		# open-air compound: no roof, no ceiling lights. A couple of floodlights on poles.
+		_mi(_box_mesh(Vector3(cols * CELL, 0.05, rows * CELL)), mat(floor_mat), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5), false)
+		_static_box(Vector3(cols * CELL, 0.05, rows * CELL), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5))
+		for k in 2:
+			var lp := bank_origin + Vector3(cols * CELL * (0.25 + k * 0.5), 0, CELL * 1.2)
+			var pole := CylinderMesh.new(); pole.top_radius = 0.07; pole.bottom_radius = 0.09; pole.height = 7.0
+			_mi(pole, mat("pole"), lp + Vector3(0, 3.5, 0))
+			_mi(_box_mesh(Vector3(0.7, 0.3, 0.4)), mat("lamp"), lp + Vector3(0, 7.0, 0.2), false)
+		cordon_point = door_pos + Vector3(0, 0, 14.0)
+		return
 	# residential / office floors stacked above the mission floor
 	var floors_up: int = mission.get("floors_above", 0)
 	if floors_up > 0:

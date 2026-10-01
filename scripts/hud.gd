@@ -1,4 +1,5 @@
 extends CanvasLayer
+const Voice = preload("res://scripts/voice.gd")
 ## All 2D UI: briefing, mission HUD, radio subtitles, waypoint, minimap, results, touch controls.
 
 var main: Node
@@ -13,6 +14,7 @@ var banner: Label
 var banner_sub: Label
 var prompt: Label
 var crosshair: Control
+var scope: Control
 var hitmark: Control
 var hit_t := 0.0
 var hit_kill := false
@@ -193,13 +195,41 @@ func _build_hud() -> void:
 	crosshair = Control.new(); crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	crosshair.set_anchors_preset(Control.PRESET_CENTER)
 	crosshair.draw.connect(func():
+		var pl = main.player if main else null
+		if pl and pl.scoped:
+			return
 		var a := 0.85
-		var gap: float = 6.0 + (1.0 - (main.player.aim if main and main.player else 0.0)) * 6.0
+		var aimk: float = pl.aim if pl else 0.0
+		var gap: float = 4.0 + (1.0 - aimk) * 8.0 + (pl.bloom * 10.0 if pl else 0.0) - (pl.crouch_k * 2.0 if pl else 0.0)
+		var col := Color(1, 0.25, 0.2, a) if pl and pl.on_target else Color(1, 1, 1, a)
 		for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
 			crosshair.draw_line(d * gap, d * (gap + 9), Color(0, 0, 0, 0.6), 4)
-			crosshair.draw_line(d * gap, d * (gap + 9), Color(1, 1, 1, a), 2)
-		crosshair.draw_circle(Vector2.ZERO, 1.6, Color(1, 1, 1, a)))
+			crosshair.draw_line(d * gap, d * (gap + 9), col, 2)
+		crosshair.draw_circle(Vector2.ZERO, 1.6, col))
 	root.add_child(crosshair)
+	scope = Control.new(); scope.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scope.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scope.draw.connect(func():
+		var vs := scope.size
+		var c := vs * 0.5
+		var r := minf(vs.x, vs.y) * 0.46
+		var black := Color(0, 0, 0, 0.97)
+		# black mask outside the lens: thick ring + side panels
+		scope.draw_arc(c, r + 400.0, 0, TAU, 96, black, 800.0)
+		scope.draw_rect(Rect2(0, 0, c.x - r - 2, vs.y), black)
+		scope.draw_rect(Rect2(c.x + r + 2, 0, vs.x - c.x - r, vs.y), black)
+		scope.draw_arc(c, r, 0, TAU, 96, Color(0.05, 0.05, 0.05), 6.0)
+		var red: bool = main.player.on_target if main and main.player else false
+		var lc := Color(0.9, 0.15, 0.1) if red else Color(0, 0, 0, 0.9)
+		scope.draw_line(Vector2(c.x - r, c.y), Vector2(c.x - 14, c.y), lc, 2.0)
+		scope.draw_line(Vector2(c.x + 14, c.y), Vector2(c.x + r, c.y), lc, 2.0)
+		scope.draw_line(Vector2(c.x, c.y - r), Vector2(c.x, c.y - 14), lc, 2.0)
+		scope.draw_line(Vector2(c.x, c.y + 14), Vector2(c.x, c.y + r), lc, 2.0)
+		for k in range(1, 5):
+			scope.draw_line(Vector2(c.x - 8, c.y + k * r * 0.12), Vector2(c.x + 8, c.y + k * r * 0.12), lc, 1.5)
+		scope.draw_circle(c, 2.0, Color(0.9, 0.15, 0.1)))
+	scope.visible = false
+	root.add_child(scope)
 	hitmark = Control.new(); hitmark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hitmark.set_anchors_preset(Control.PRESET_CENTER)
 	hitmark.draw.connect(func():
@@ -245,7 +275,7 @@ func _build_hud() -> void:
 	waypoint.add_child(wp_lbl)
 
 # ------------------------------------------------------------------ public API
-const TOUCH_HINTS := {"[E]": "(زر تفاعل)", "[F]": "(زر سيارة)", "[H]": "(زر صفارة)", "[Q]": "(زر استسلم!)", "[R]": "(زر تعبئة)", "[X]": "(زر سلاح)", "[G]": "(زر فلاش)"}
+const TOUCH_HINTS := {"[E]": "(زر تفاعل)", "[F]": "(زر سيارة)", "[H]": "(زر صفارة)", "[Q]": "(زر استسلم!)", "[R]": "(زر تعبئة)", "[X]": "(زر سلاح)", "[G]": "(زر فلاش)", "[C]": "(زر انحناء)", "[T]": "(زر أوامر)"}
 
 ## On phones, replace keyboard key hints with the on-screen button names.
 func _touchify(t: String) -> String:
@@ -264,6 +294,7 @@ func radio(who: String, text: String, dur := 4.0) -> void:
 func clear_radio() -> void:
 	radio_queue.clear()
 	radio_t = 0.0
+	Voice.stop()
 
 func show_banner(text: String, sub := "", dur := 3.0) -> void:
 	banner.text = text
@@ -331,10 +362,13 @@ func _process(dt: float) -> void:
 	elif radio_queue.size() > 0:
 		var m: Array = radio_queue.pop_front()
 		radio_who.text = "◉  " + m[0]
-		radio_txt.text = m[1]
+		radio_txt.text = _touchify(m[1])
 		radio_t = m[2]
 		radio_box.visible = true
-		Sfx.play("beep", -10.0)
+		Sfx.play("radio", -8.0)
+		if Voice.available():
+			Voice.say(m[0], m[1])
+			radio_t = maxf(m[2], Voice.estimate(m[1], m[0]))
 	# banner
 	if banner_t > 0.0:
 		banner_t -= udt
@@ -354,18 +388,23 @@ func _process(dt: float) -> void:
 	var low: float = 1.0 - pl.hp / 100.0 if pl else 0.0
 	vignette.modulate.a = maxf(vig_a, low * 0.7 if low > 0.4 else 0.0)
 	var in_car: bool = main.in_vehicle
-	var playing: bool = not (main.phase in ["brief", "result", "intro"])
+	var playing: bool = not (main.phase in ["brief", "result", "intro"]) and main.cutscene_t <= 0.0
 	crosshair.visible = playing and not in_car and pl.alive
 	crosshair.queue_redraw()
+	scope.visible = playing and not in_car and pl.alive and pl.scoped
+	if scope.visible:
+		scope.queue_redraw()
 	hp_bar.get_parent().visible = playing and not in_car
 	hp_bar.value = pl.hp
 	ammo_lbl.visible = playing and not in_car
 	ammo_lbl.text = pl.WEAPONS[pl.weapon].name + "   " + ("إعادة تعبئة…" if pl.reload_t > 0.0 else "%d  ⁄  %d" % [pl.ammo, pl.reserve])
 	speed_lbl.visible = playing and in_car
 	if in_car:
-		speed_lbl.text = "%d كم/س" % int(main.vehicle.speed_kmh)
-	objectives.get_parent().visible = playing
-	minimap.visible = playing
+		var vh: float = main.vehicle.health
+		speed_lbl.text = ("%d كم/س   ·   السيارة %d%%" % [int(main.vehicle.speed_kmh), int(vh)]) if not main.vehicle.broken else "السيارة معطّلة ✖"
+		speed_lbl.add_theme_color_override("font_color", Color(1, 0.4, 0.3) if vh < 40.0 else Color.WHITE)
+	objectives.get_parent().visible = playing and not pl.scoped
+	minimap.visible = playing and not pl.scoped
 	timer_lbl.visible = playing
 	timer_lbl.text = main.timer_text()
 	var urgent_now: bool = main.timer_urgent() and fmod(Time.get_ticks_msec() * 0.002, 1.0) < 0.6
@@ -407,13 +446,18 @@ func _process(dt: float) -> void:
 			match k:
 				"siren":
 					b.visible = in_car
-				"fire", "aim", "reload", "switch":
+				"fire", "aim", "reload", "switch", "crouch":
 					b.visible = not in_car
+					if k == "crouch":
+						b.get_child(0).text = "وقوف" if pl.crouch else "انحناء"
+				"orders":
+					b.visible = not in_car and main.team.any(func(t): return not t.dead and t.visible)
+					b.get_child(0).text = "اتبعوني" if main.team_order == "hold" else "اثبتوا"
 				"yell":
 					b.visible = not in_car and main.phase == "assault"
 				"interact":
 					b.visible = in_car or (prompt.text != "" and not prompt.text.contains("سيارة"))
-					b.get_child(0).text = "زمّور" if in_car else "تفاعل"
+					b.get_child(0).text = "زامور" if in_car else "تفاعل"
 				"vehicle":
 					b.visible = near_car
 				"jump":
@@ -537,7 +581,7 @@ func show_briefing(on_start: Callable) -> void:
 			Missions.team_size = main.team_size
 			Missions.difficulty = main.difficulty
 			get_tree().reload_current_scene(), 19)
-		mb.custom_minimum_size = Vector2(172, 64)
+		mb.custom_minimum_size = Vector2(minf(172.0, 600.0 / Missions.LIST.size() - 8.0), 64)
 		mb.disabled = locked
 		mb.modulate = Color.WHITE if i == Missions.current else (Color(1, 1, 1, 0.3) if locked else Color(1, 1, 1, 0.6))
 		mrow.add_child(mb)
@@ -696,7 +740,7 @@ func _build_touch() -> void:
 	var specs := {
 		"fire": ["نار", 70], "aim": ["تصويب", 46], "reload": ["تعبئة", 38], "jump": ["قفز", 40],
 		"interact": ["تفاعل", 44], "vehicle": ["سيارة", 40], "yell": ["استسلم!", 42], "siren": ["صفارة", 38],
-		"pause": ["II", 26], "flash": ["فلاش", 36], "switch": ["سلاح", 34],
+		"pause": ["II", 26], "flash": ["فلاش", 36], "switch": ["سلاح", 34], "crouch": ["انحناء", 36], "orders": ["اثبتوا", 34],
 	}
 	for k in specs:
 		var r: int = specs[k][1]
@@ -734,6 +778,7 @@ func _layout_touch() -> void:
 		"yell": Vector2(vs.x - 250, vs.y - 370), "siren": Vector2(vs.x - 120, vs.y - 150),
 		"pause": Vector2(vs.x * 0.5 + 200, 34), "flash": Vector2(vs.x - 120, vs.y - 420),
 		"switch": Vector2(vs.x - 240, vs.y - 475),
+		"crouch": Vector2(vs.x - 370, vs.y - 345), "orders": Vector2(vs.x - 500, vs.y - 110),
 	}
 	for k in touch_buttons:
 		var b: TouchScreenButton = touch_buttons[k]

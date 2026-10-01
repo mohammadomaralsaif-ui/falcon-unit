@@ -349,6 +349,10 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 
 ## Collapse a built car into one MeshInstance (one surface per material) + its text labels.
 static func compact(node: Node3D) -> Node3D:
+	# rigged parts (e.g. the SWAT truck's rear doors) need their skeleton: keep such models as they are
+	for sk in node.find_children("*", "MeshInstance3D", true, false):
+		if sk.skin and sk.visible:
+			return node
 	var groups := {}
 	var labels := []
 	var stack := [[node, Transform3D.IDENTITY]]

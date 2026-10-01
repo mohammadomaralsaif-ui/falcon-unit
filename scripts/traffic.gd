@@ -1,4 +1,5 @@
 extends Node3D
+const Fx = preload("res://scripts/fx.gd")
 ## Civilian traffic: cars drive on the right-hand lane of the road grid, turn at junctions,
 ## brake for anything in front of them (including the player).
 
@@ -21,6 +22,7 @@ class Car:
 	var tick := 0
 	var snd: AudioStreamPlayer3D
 	var honk_cd := 0.0
+	var hit_t := 0.0
 
 func setup(_city: Node, count: int) -> void:
 	city = _city
@@ -68,6 +70,16 @@ func setup(_city: Node, count: int) -> void:
 		cars.append(c)
 
 var main: Node
+
+## The player's car rammed this civilian car.
+func on_hit(body: Node, rel_speed: float) -> void:
+	for c: Car in cars:
+		if c.body == body:
+			c.hit_t = clampf(rel_speed * 0.6, 3.0, 9.0)
+			c.speed = 0.0
+			c.stuck = 0.0
+			Fx.particles(main, c.body.global_position + Vector3(0, 0.9, 0), Vector3.UP, "dust", 5)
+			return
 
 func _far_from_player(p: Vector3, d: float) -> bool:
 	if not main:
@@ -133,11 +145,19 @@ func _physics_process(dt: float) -> void:
 				var dist: float = (hit.position - p).length()
 				c.want = clampf((dist - 4.5) * 1.4, 0.0, c.max_speed)
 		var want: float = c.want
+		if c.hit_t > 0.0:
+			# just got rammed: the driver stops, hazards on, leans on the horn
+			c.hit_t -= dt
+			want = 0.0
+			if c.honk_cd <= 0.0:
+				c.honk_cd = randf_range(1.2, 2.5)
+				Sfx.play_3d("horn", c.body.global_position, 0.0, randf_range(0.85, 1.1))
 		# slow for turns near the junction
 		var remain := (1.0 - c.t) * seg
 		if remain < 9.0:
 			want = minf(want, 6.0)
-		c.speed = move_toward(c.speed, want, dt * (9.0 if want < c.speed else 3.0))
+		c.speed = move_toward(c.speed, want, dt * (30.0 if c.hit_t > 0.0 else (9.0 if want < c.speed else 3.0)))
+		c.body.set_meta("traffic_speed", c.speed)
 		if c.speed < 0.3:
 			c.stuck += dt
 		else:

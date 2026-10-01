@@ -108,32 +108,48 @@ func play(n: String, speed := 1.0) -> void:
 	anim.speed_scale = speed
 
 var _rifle := []
-var _pistol := []
+var _guns := {}
 var weapon := "rifle"
-const PISTOL_REST := Vector3(0.04, 1.4, -0.56)
-const RIFLE_REST := Vector3(0.17, 1.3, -0.3)
+var crouch := 0.0
+const RESTS := {"rifle": Vector3(0.17, 1.3, -0.3), "pistol": Vector3(0.04, 1.4, -0.56), "sniper": Vector3(0.17, 1.32, -0.28)}
 
-## Swap between the rifle and the sidearm (SWAT only). Hands follow the new weapon.
+## Swap the weapon in hand (SWAT only): rifle, pistol (Glock) or sniper. Hands follow the new weapon.
 func set_weapon(kind: String) -> void:
 	if _rifle.is_empty() or kind == weapon:
 		return
-	if kind == "pistol" and _pistol.is_empty():
-		var p := Humanoid.pistol()
-		add_child(p)
-		var a := Node3D.new(); a.position = Vector3(0.0, -0.045, 0.05); p.add_child(a)
-		var b := Node3D.new(); b.position = Vector3(-0.025, -0.07, 0.03); p.add_child(b)
-		_pistol = [p, a, b]
+	if _guns.is_empty():
+		_guns["rifle"] = _rifle
+	if not _guns.has(kind):
+		var g: Node3D
+		var a := Node3D.new()
+		var b := Node3D.new()
+		if kind == "pistol":
+			g = Humanoid.pistol()
+			a.position = Vector3(0.0, -0.045, 0.05)
+			b.position = Vector3(-0.025, -0.07, 0.03)
+		else:
+			g = Humanoid.sniper()
+			a.position = Vector3(0.0, -0.03, 0.06)
+			b.position = Vector3(-0.02, -0.02, -0.42)
+		add_child(g)
+		g.add_child(a); g.add_child(b)
+		_guns[kind] = [g, a, b]
 	weapon = kind
-	var on: Array = _pistol if kind == "pistol" else _rifle
-	var off: Array = _rifle if kind == "pistol" else _pistol
-	if not off.is_empty():
-		off[0].visible = false
+	for k in _guns:
+		_guns[k][0].visible = false
+	var on: Array = _guns[kind]
 	gun = on[0]
 	muzzle = gun.get_node("Muzzle")
 	pose.grip = on[1]
 	pose.guard = on[2]
-	gun_rest = PISTOL_REST if kind == "pistol" else RIFLE_REST
+	gun_rest = RESTS[kind]
 	gun.visible = pose.mode == "rifle"
+	set_aim(aim_pitch)
+
+## 0 = standing, 1 = crouched (legs bent by IK, weapon lowered with the body).
+func set_crouch(k: float) -> void:
+	crouch = k
+	pose.crouch = k
 	set_aim(aim_pitch)
 
 func set_mode(m: String) -> void:
@@ -147,7 +163,7 @@ func set_aim(p: float) -> void:
 	aim_pitch = p
 	if gun:
 		gun.rotation.x = p
-		gun.position = gun_rest + Vector3(0, sin(p) * 0.12, 0)
+		gun.position = gun_rest + Vector3(0, sin(p) * 0.12 - crouch * 0.48, 0)
 
 func _all(n: Node) -> Array:
 	var out := []

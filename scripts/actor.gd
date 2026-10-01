@@ -25,6 +25,8 @@ var last_seen := Vector3.ZERO
 var hunter := false
 var home_yaw := 0.0
 var follow_offset := Vector3.ZERO
+var team_index := 0
+var hold_pos := Vector3.INF
 var cur_anim := ""
 var accuracy := 0.42
 var damage := 10.0
@@ -159,7 +161,7 @@ func _enemy_ai(dt: float) -> Vector3:
 	if think <= 0.0:
 		think = randf_range(0.15, 0.3)
 		var best: Node3D = null
-		var bd := 48.0
+		var bd: float = main.enemy_sight
 		for t in main.enemy_targets():
 			var tp: Vector3 = t.global_position + Vector3(0, 1.4, 0)
 			var d := global_position.distance_to(tp)
@@ -243,6 +245,16 @@ func _team_ai(dt: float) -> Vector3:
 	var move := Vector3.ZERO
 	var goal: Vector3 = pl.global_position + pl.global_transform.basis * follow_offset
 	var spd_cap := 99.0
+	var low := false
+	# breach drill: when the leader is at the door, the team stacks up on both sides of it
+	var door: Vector3 = main.city.door_pos
+	if main.phase in ["staging", "breach"] and pl.global_position.distance_to(door) < 9.0:
+		var sd := -1.0 if team_index % 2 == 0 else 1.0
+		goal = door + Vector3(sd * (1.9 + (team_index / 2) * 0.8), 0, 1.1 + (team_index / 2) * 0.7)
+		low = true
+	elif main.team_order == "hold" and hold_pos != Vector3.INF:
+		goal = hold_pos
+		low = target == null
 	if escort_h and is_instance_valid(escort_h) and not escort_h.dead and not escort_h.rescued:
 		# escort duty: collect the hostage, then walk them out of the bank at their pace
 		var hd: float = global_position.distance_to(escort_h.global_position)
@@ -253,6 +265,7 @@ func _team_ai(dt: float) -> Vector3:
 			spd_cap = 2.3 if hd < 2.6 else 0.0
 	elif escort_h:
 		escort_h = null
+	model.set_crouch(move_toward(model.crouch, 1.0 if low and velocity.length() < 1.0 else 0.0, dt * 4.0))
 	var dg := goal - global_position
 	dg.y = 0
 	if dg.length() > 1.0:
@@ -279,6 +292,8 @@ func _shoot_at(t: Node3D) -> void:
 		acc = 0.35 * clampf(1.2 - dist / 45.0, 0.35, 1.0)
 		if t.get("stun") and t.stun > 0.0:
 			acc = 0.75
+	elif t == main.player and main.player.crouch_k > 0.5:
+		acc *= 0.55   # crouched behind cover is much harder to hit
 	var end := tp
 	# the bullet only lands if nothing solid (walls, cars) is in the way right now
 	var los := PhysicsRayQueryParameters3D.create(from, tp, 1 | 8)

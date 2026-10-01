@@ -24,6 +24,7 @@ const ACTIONS := {
 	"pause": [KEY_ESCAPE],
 	"flash": [KEY_G],
 	"switch": [KEY_X, KEY_TAB],
+	"orders": [KEY_T],
 }
 
 func _ready() -> void:
@@ -74,7 +75,7 @@ func reset() -> void:
 	mouse_look = Vector2.ZERO
 	_touch_pressed.clear()
 	_touch_just.clear()
-	for a in ["fire", "aim", "jump", "interact", "vehicle", "reload", "yell", "siren", "sprint", "flash", "switch"]:
+	for a in ["fire", "aim", "jump", "interact", "vehicle", "reload", "yell", "siren", "sprint", "flash", "switch", "crouch", "orders"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
 

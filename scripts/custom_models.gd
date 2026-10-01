@@ -52,13 +52,18 @@ static func _rotation_for(file: String) -> float:
 	var e = _setup.get(file.get_file(), {})
 	return deg_to_rad(float(e.get("rotate", 0.0))) if e is Dictionary else 0.0
 
+static func _opt(file: String, key: String) -> bool:
+	_rotation_for(file)
+	var e = _setup.get(file.get_file(), {})
+	return bool(e.get(key, false)) if e is Dictionary else false
+
 static func _aabb(n: Node, xf: Transform3D, acc: Array) -> void:
 	for c in n.get_children():
 		if c is Node3D:
 			if not c.visible:
 				continue
 			var cx: Transform3D = xf * c.transform
-			if c is MeshInstance3D and c.mesh:
+			if c is MeshInstance3D and c.mesh and not c.skin:
 				var bb: AABB = cx * c.mesh.get_aabb()
 				acc[0] = bb if acc[0] == null else (acc[0] as AABB).merge(bb)
 			_aabb(c, cx, acc)
@@ -75,9 +80,10 @@ static func car(kind: String, length: float, seed_val: int) -> Node3D:
 	for ap in inst.find_children("*", "AnimationPlayer", true, false):
 		ap.queue_free()
 	# Sketchfab exports often carry a big shadow plane and rigged door helpers: hide them
+	var keep_skin := _opt(path, "keep_skinned")
 	for mi in inst.find_children("*", "MeshInstance3D", true, false):
 		var nm := String(mi.name).to_lower()
-		if mi.skin or nm.contains("sombra") or nm.contains("shadow") or nm.begins_with("plane") or nm.contains("ground"):
+		if (mi.skin and not keep_skin) or nm.contains("sombra") or nm.contains("shadow") or nm.begins_with("plane") or nm.contains("ground"):
 			mi.visible = false
 	var holder := Node3D.new()
 	var spin := Node3D.new()

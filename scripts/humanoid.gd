@@ -79,6 +79,33 @@ static func pistol() -> Node3D:
 	g.add_child(t2)
 	return g
 
+## Bolt-action sniper rifle: the long rifle body with a big scope on top. Origin at the grip.
+static func sniper() -> Node3D:
+	var g := Node3D.new()
+	var real := CustomModels.weapon("sniper", 1.2, 0.36)
+	if not real:
+		real = CustomModels.weapon("rifle_swat", 1.2, 0.36)
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(0.05, 0.05, 0.06); m.metallic = 0.7; m.roughness = 0.35
+	if real:
+		g.add_child(real)
+	else:
+		var body := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.05, 0.09, 1.1); bm.material = m
+		body.mesh = bm; body.position = Vector3(0, 0.02, -0.2); g.add_child(body)
+	var sc := MeshInstance3D.new()
+	var cm := CylinderMesh.new(); cm.top_radius = 0.034; cm.bottom_radius = 0.034; cm.height = 0.36; cm.material = m
+	sc.mesh = cm; sc.rotation.x = PI / 2; sc.position = Vector3(0, 0.125, -0.1)
+	g.add_child(sc)
+	for z in [-0.3, 0.06]:
+		var lens := MeshInstance3D.new()
+		var lm := CylinderMesh.new(); lm.top_radius = 0.037; lm.bottom_radius = 0.037; lm.height = 0.06; lm.material = m
+		lens.mesh = lm; lens.rotation.x = PI / 2; lens.position = Vector3(0, 0.125, z)
+		g.add_child(lens)
+	for mi in g.find_children("*", "GeometryInstance3D", true, false):
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var t := Marker3D.new(); t.name = "Muzzle"; t.position = Vector3(0, 0.03, -0.84)
+	g.add_child(t)
+	return g
+
 static func rifle(kind := "m4") -> Node3D:
 	## Built facing -Z, origin at the pistol grip. Geometry is built once per kind and shared.
 	# real weapon models dropped into assets/weapons/ win

@@ -1,1 +1,11 @@
-{"sedan_mustang.glb": {"rotate": 180}, "cashvan_md84.glb": {"rotate": 180}}
+{
+ "sedan_mustang.glb": {
+  "rotate": 180
+ },
+ "cashvan_md84.glb": {
+  "rotate": 180
+ },
+ "swat_vehicle.glb": {
+  "keep_skinned": true
+ }
+}

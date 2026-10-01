@@ -129,6 +129,47 @@ const LIST := [
 			"######D#######",
 		],
 	},
+	{
+		"id": "sniper",
+		"type": "sniper",
+		"title": "عين الصقر",
+		"subtitle": "مهمة قنص – غطاء من فوق السطوح",
+		"area": "ماركا",
+		"clock": "٦:١٥ م",
+		"sky": "golden",
+		"block": Vector2i(2, 1),
+		"style": "yard",
+		"sign": "",
+		"floors_above": 0,
+		"enemies": [5, 6, 7],
+		"accuracy": 0.8,
+		"executioner": true,
+		"deadline": 240.0,
+		"deadline_kind": "execute",
+		"bomb_time": 0.0,
+		"finale": "",
+		"leader": "",
+		"news": "مسلّحون يحتجزون عمّالاً داخل ساحة مستودعات في ماركا",
+		"news_line": "…الأمن العام يطوّق المنطقة، ومصادر تتحدث عن انتشار قنّاصة على أسطح البنايات المجاورة.",
+		"negotiator_line": "الساحة مفتوحة وما في طريق نقتحم بدون ما يعدموا الرهائن. الحل الوحيد من فوق.",
+		"commander_line": "الصقر ١، إنت على السطح المقابل. إذا شافوا رفيقهم وقع رح يتحرّكوا عالرهائن… ابدأ بالأقرب للرهائن.",
+		"brief": ["حيّد كل المسلحين من السطح. الفريق الأرضي بيدخل لما تخلص.", "اضغط [تصويب] للمنظار، وانحني [C] ورا الحاجز إذا ضربوا عليك."],
+		"story": "مساءً في ماركا. عصابة مسلحة محتجزة عمّال جوّا ساحة مستودعات مكشوفة. الاقتحام الأرضي مستحيل بدون خسائر… إنت القنّاص على السطح المقابل.",
+		"map": [
+			"##############",
+			"#E....C....E.#",
+			"#..H.....H...#",
+			"#....##..E...#",
+			"#.E..##...C..#",
+			"#........P...#",
+			"#..C...E.....#",
+			"#.....H...##.#",
+			"#.E.......##.#",
+			"#....C....E..#",
+			"#..P.........#",
+			"######D#######",
+		],
+	},
 ]
 
 static func get_m() -> Dictionary:
@@ -140,7 +181,12 @@ const SAVE := "user://progress.cfg"
 static func unlocked() -> int:
 	var cf := ConfigFile.new()
 	if cf.load(SAVE) == OK:
-		return clampi(int(cf.get_value("progress", "unlocked", 1)), 1, LIST.size())
+		var u := int(cf.get_value("progress", "unlocked", 1))
+		# missions added in an update: completing the one before still opens them
+		for i in LIST.size():
+			if str(cf.get_value("ratings", LIST[i].id, "")) != "":
+				u = maxi(u, i + 2)
+		return clampi(u, 1, LIST.size())
 	return 1
 
 static func complete(index: int, rating: String) -> void:

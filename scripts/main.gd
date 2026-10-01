@@ -14,6 +14,7 @@ const EscapeVan = preload("res://scripts/escape_van.gd")
 const Pedestrians = preload("res://scripts/pedestrians.gd")
 const Missions = preload("res://scripts/missions.gd")
 const CustomModels = preload("res://scripts/custom_models.gd")
+const Voice = preload("res://scripts/voice.gd")
 
 var city: Node3D
 var traffic: Node3D
@@ -76,6 +77,14 @@ var defuse_hold := 0.0
 var flashbangs := 3
 var night := false
 var executioners: Array = []
+var enemy_sight := 48.0
+var team_order := "follow"        # follow | hold   ([T] / "أوامر")
+var cutscene_t := 0.0             # cinematic dialogue with the colonel (player frozen)
+var cut_shots: Array = []
+var cut_i := 0
+var cut_k := 0.0
+var repair_hold := 0.0
+var sniper_mission := false
 
 const TEAM_NAMES := ["الصقر ٢", "الصقر ٣", "الصقر ٤", "الصقر ٥"]
 const TEAM_OFFSETS := [Vector3(-1.4, 0, 2.0), Vector3(1.4, 0, 2.2), Vector3(-1.6, 0, 4.2), Vector3(1.6, 0, 4.4)]
@@ -92,6 +101,9 @@ func _ready() -> void:
 	deadline = M.deadline
 	bomb_t = M.bomb_time
 	night = M.sky == "night"
+	sniper_mission = M.get("type", "") == "sniper"
+	if sniper_mission:
+		enemy_sight = 80.0
 	_environment()
 	city = Node3D.new()
 	city.set_script(City)
@@ -147,8 +159,8 @@ func _ready() -> void:
 	tag.position = Vector3(0, 2.15, 0)
 	colonel.add_child(tag)
 	ambience = AudioStreamPlayer.new()
-	ambience.stream = Sfx.streams["ambience"]
-	ambience.volume_db = -14.0
+	ambience.stream = Sfx.ambience(night)
+	ambience.volume_db = -7.0
 	add_child(ambience)
 	ambience.play()
 	peds = Node3D.new()
@@ -341,6 +353,8 @@ func _start_mission() -> void:
 		e.setup(self, "enemy", spawns[i] + Vector3(randf_range(-0.6, 0.6), 0.1, randf_range(-0.6, 0.6)), randf() * TAU)
 		e.accuracy = [0.28, 0.4, 0.55][difficulty] * float(M.accuracy)
 		e.damage = [6.0, 9.0, 13.0][difficulty]
+		if sniper_mission:
+			e.hunter = false
 		add_child(e)
 		enemies.append(e)
 	# one gunman per mission guards the hostages and will execute one if the assault drags on
@@ -367,6 +381,9 @@ func _start_intro() -> void:
 		[c + Vector3(-16, 2.2, 26), c + Vector3(9, 3.2, 21), c + Vector3(0, 2.2, 0), 6.5],
 		[vp + Vector3(-7, 1.4, -9), vp + Vector3(5, 2.2, -8), vp + Vector3(0, 1.0, 0), 6.0],
 	]
+	if sniper_mission and city.sniper_nests.size() > 0:
+		var np: Vector3 = city.sniper_nests[0][0]
+		intro_shots[2] = [np + Vector3(-4, 1.5, 4), np + Vector3(1, 1.2, 2.5), c + Vector3(0, 0, -12), 6.0]
 	intro_i = -1
 	_next_shot()
 
@@ -386,6 +403,9 @@ func _next_shot() -> void:
 			_begin_drive()
 
 func _begin_drive() -> void:
+	if sniper_mission:
+		_begin_sniper()
+		return
 	phase = "drive"
 	intro_i = 99
 	hud.set_letterbox(false)
@@ -397,7 +417,40 @@ func _begin_drive() -> void:
 	hud.radio("الصقر ٢", "الفريق جاهز بالخلف يا سيدي. عبوة الاقتحام معنا." if team_size > 0 else "الوحدة المساندة عالقة بالأزمة. أنت لوحدك يا الصقر ١.", 4.0)
 	hud.show_banner(M.title, "%s · %s" % [M.area, M.clock], 3.5)
 	hud.set_waypoint(city.cordon_point + Vector3(0, 1, 0))
-	hud.set_objectives(["◆ قُد السيارة إلى الطوق الأمني – %s" % M.title, "◇ [H] صفارة · [E] زمّور · [F] نزول/ركوب"])
+	hud.set_objectives(["◆ قُد السيارة إلى الطوق الأمني – %s" % M.title, "◇ [H] صفارة · [E] زامور · [F] نزول/ركوب"])
+
+# ---- sniper mission: start on the rooftop across from the target, scoped rifle in hand
+func _begin_sniper() -> void:
+	phase = "sniper"
+	intro_i = 99
+	hud.set_letterbox(false)
+	hud.set_prompt("")
+	in_vehicle = false
+	vehicle.set_driving(false)
+	var nest: Array = city.sniper_nests[0] if city.sniper_nests.size() > 0 else [city.door_pos + Vector3(0, 0, 20), 0.0]
+	player.global_position = nest[0]
+	player.yaw = float(nest[1])
+	player.rotation.y = player.yaw
+	player.pitch = -0.28
+	player.set_active(true)
+	player.give_sniper()
+	_capture_mouse(true)
+	hud.clear_radio()
+	hud.show_banner(M.title, "%s · %s" % [M.area, M.clock], 3.5)
+	hud.radio(COLONEL, "الصقر ١، إنت بالموقع. عندك %d أهداف بالساحة." % enemies.size(), 4.0)
+	for line in M.brief:
+		hud.radio(COLONEL, line, 5.0)
+	hud.radio("الفريق الأرضي", "جاهزين عند البوابة. بنستنى إشارتك.", 3.0)
+	hud.set_waypoint(city.bank_origin + Vector3(city.imap[0].length() * city.CELL * 0.5, 1.0, city.imap.size() * city.CELL * 0.5))
+	sniper_text()
+
+func sniper_text() -> void:
+	var alive := 0
+	for e in enemies:
+		if not e.dead:
+			alive += 1
+	var lines := ["◆ حيّد المسلحين بالساحة: باقي %d" % alive, "◆ احمِ الرهائن (%d / %d أحياء)" % [hostages.size() - hostages_lost, hostages.size()], "◇ [زر يمين / تصويب] منظار · [C] انحناء · [X] مسدس", "✖ لا تصيب الرهائن"]
+	hud.set_objectives(lines)
 
 func _arrive() -> void:
 	phase = "arrive"
@@ -425,7 +478,59 @@ func _talk_colonel() -> void:
 	if M.finale == "van":
 		hud.radio(NEGOTIATOR, "انتبه… %s ذكي. ما بستبعد يكون عامل طريق هروب." % LEADER, 4.0)
 	hud.set_waypoint(city.door_pos + Vector3(0, 1.6, 1.6))
-	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي", "◆ ازرع عبوة الاقتحام [E]"])
+	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي – الفريق رح يصطف معك على الجنبين", "◆ ازرع عبوة الاقتحام [E]", "◇ [C] انحناء · [T] أوامر للفريق"])
+	_start_dialogue_cam()
+
+## Cinematic dialogue: shot / reverse-shot between the colonel and the team leader, letterboxed.
+func _start_dialogue_cam() -> void:
+	var total := 0.0
+	for m in hud.radio_queue:
+		total += maxf(float(m[2]), Voice.estimate(m[1], m[0]) if Voice.available() else 0.0)
+	cutscene_t = clampf(total + 0.5, 4.0, 26.0)
+	var cp: Vector3 = colonel.global_position
+	var pp: Vector3 = player.global_position
+	var d := (cp - pp); d.y = 0
+	d = d.normalized()
+	var side := Vector3(-d.z, 0, d.x)
+	# both face each other
+	player.yaw = atan2(-d.x, -d.z)
+	player.rotation.y = player.yaw
+	colonel.rotation.y = atan2(d.x, d.z)
+	var head_c := cp + Vector3(0, 1.62, 0)
+	var head_p := pp + Vector3(0, 1.62, 0)
+	cut_shots = [
+		[pp - d * 1.1 + side * 0.55 + Vector3(0, 1.75, 0), pp - d * 0.8 + side * 0.45 + Vector3(0, 1.72, 0), head_c],      # over the player's shoulder
+		[cp + d * 1.1 - side * 0.5 + Vector3(0, 1.72, 0), cp + d * 0.85 - side * 0.42 + Vector3(0, 1.7, 0), head_p],       # reverse: over the colonel
+		[(pp + cp) * 0.5 + side * 3.2 + Vector3(0, 1.5, 0), (pp + cp) * 0.5 + side * 2.6 + Vector3(0, 1.6, 0), (head_c + head_p) * 0.5],  # two-shot
+	]
+	cut_i = 0
+	cut_k = 0.0
+	hud.set_letterbox(true)
+	cine_cam.current = true
+
+func _update_dialogue_cam(dt: float) -> void:
+	cutscene_t -= dt
+	cut_k += dt / 4.5
+	if cut_k >= 1.0:
+		cut_k = 0.0
+		cut_i = (cut_i + 1) % cut_shots.size()
+	var sh: Array = cut_shots[cut_i]
+	var k := cut_k * cut_k * (3.0 - 2.0 * cut_k)
+	cine_cam.global_position = (sh[0] as Vector3).lerp(sh[1], k)
+	cine_cam.look_at(sh[2])
+	cine_cam.fov = 42.0
+	hud.set_prompt("اضغط للتخطّي")
+	if cutscene_t <= 0.0:
+		_end_dialogue_cam()
+
+func _end_dialogue_cam() -> void:
+	cutscene_t = 0.0
+	hud.set_letterbox(false)
+	hud.set_prompt("")
+	cine_cam.fov = 55.0
+	player.cam.current = true
+	input_guard = 0.4
+	Controls.block_fire()
 
 func _plant_charge() -> void:
 	phase = "breach"
@@ -609,6 +714,8 @@ func _process(dt: float) -> void:
 		return
 	if phase == "result":
 		return
+	if cutscene_t > 0.0:
+		_update_dialogue_cam(dt)
 	mission_time += dt
 	if shake > 0.0:
 		shake = maxf(shake - dt * 1.5, 0.0)
@@ -620,7 +727,7 @@ func _process(dt: float) -> void:
 	ram_cd -= dt
 	input_guard -= real_dt
 	# hostage-taker deadline before the breach
-	if phase in ["drive", "arrive", "staging"]:
+	if phase in ["drive", "arrive", "staging", "sniper"]:
 		deadline -= dt
 		if M.deadline > 0.0 and deadline <= 0.0:
 			_deadline_hit()
@@ -675,7 +782,10 @@ func _process(dt: float) -> void:
 			_end(false, "%s هرب بالأموال. المطاردة طالت كثير." % LEADER)
 	elif phase == "arrest" and leader:
 		hud.set_waypoint(leader.global_position + Vector3(0, 2.2, 0))
-	_interactions()
+	if cutscene_t <= 0.0:
+		_interactions()
+	if Controls.just("orders") and not in_vehicle and player.alive and input_guard <= 0.0 and cutscene_t <= 0.0:
+		_give_order()
 	if phase == "assault" and Controls.just("yell") and not in_vehicle and input_guard <= 0.0:
 		_yell()
 
@@ -683,7 +793,7 @@ func timer_text() -> String:
 	if bomb and not bomb_defused and phase in ["drive", "arrive", "staging", "breach", "assault"]:
 		var tb := maxf(bomb_t, 0.0)
 		return "العبوة  %02d:%02d" % [int(tb) / 60, int(tb) % 60]
-	if phase in ["drive", "arrive", "staging"] and M.deadline > 0.0:
+	if phase in ["drive", "arrive", "staging", "sniper"] and M.deadline > 0.0:
 		var t := maxf(deadline, 0.0)
 		var lbl: String = "مهلة الخاطفين" if M.deadline_kind == "execute" else "إتلاف الأدلة بعد"
 		return "%s  %02d:%02d" % [lbl, int(t) / 60, int(t) % 60]
@@ -695,7 +805,7 @@ func timer_text() -> String:
 func timer_urgent() -> bool:
 	if bomb and not bomb_defused and bomb_t < 60.0:
 		return true
-	return (phase in ["drive", "arrive", "staging"] and M.deadline > 0.0 and deadline < 60.0) or (phase == "chase" and chase_t > 180.0)
+	return (phase in ["drive", "arrive", "staging", "sniper"] and M.deadline > 0.0 and deadline < 60.0) or (phase == "chase" and chase_t > 180.0)
 
 func _deadline_hit() -> void:
 	if M.deadline_kind == "evidence":
@@ -775,7 +885,19 @@ func _interactions() -> void:
 	elif phase == "arrest" and leader and not leader_cuffed and pp.distance_to(leader.global_position) < 2.6:
 		text = "[E] اعتقال %s" % LEADER
 		action = _arrest_leader
-	if text == "" and pp.distance_to(vehicle.global_position) < 4.5:
+	if text == "" and vehicle.broken and pp.distance_to(vehicle.global_position) < 4.5:
+		if Controls.held("interact"):
+			repair_hold += get_process_delta_time()
+			text = "تصليح ميداني… %d%%" % int(repair_hold / 6.0 * 100.0)
+			if repair_hold >= 6.0:
+				repair_hold = 0.0
+				vehicle.repair()
+				Sfx.play("reload", -2.0, 0.7)
+				hud.show_banner("", "السيارة اشتغلت… بس انتبه عليها", 2.0)
+		else:
+			repair_hold = 0.0
+			text = "[E] اضغط مطوّل لتصليح السيارة"
+	elif text == "" and pp.distance_to(vehicle.global_position) < 4.5:
 		text = "[F] ركوب السيارة"
 	hud.set_prompt(text)
 	if action.is_valid() and Controls.just("interact"):
@@ -962,6 +1084,7 @@ func _exit_vehicle() -> void:
 				t.set_script(Actor)
 				t.setup(self, "team", Vector3.ZERO, player.yaw, TEAM_NAMES[i])
 				t.follow_offset = TEAM_OFFSETS[i]
+				t.team_index = i
 				t.accuracy = 0.4
 				add_child(t)
 				team.append(t)
@@ -979,6 +1102,29 @@ func _exit_vehicle() -> void:
 			cands.append(out + Vector3(0, 0, 0))
 			t.global_position = _free_spot(cands, [vehicle.get_rid(), player.get_rid()])
 			t.rotation.y = player.yaw
+
+## [T] team orders: follow me <-> hold this position. The team answers on the radio.
+func _give_order() -> void:
+	var alive_team := team.filter(func(t): return not t.dead and t.visible)
+	if alive_team.is_empty():
+		hud.radio("الصقر ١", "ما في حدا معي… أنا لحالي.", 2.0)
+		return
+	if team_order == "follow":
+		team_order = "hold"
+		for t in alive_team:
+			t.hold_pos = t.global_position
+		hud.radio("الصقر ١", ["اثبتوا مكانكم وغطّوا!", "خليكم هون، أمّنوا المكان!"].pick_random(), 2.0)
+		hud.radio(alive_team[0].display_name, ["تمام، ثابتين ومغطّينك.", "علم، ماسكين المكان."].pick_random(), 2.0)
+		hud.show_banner("", "أمر للفريق: اثبتوا مكانكم", 1.5)
+	else:
+		team_order = "follow"
+		hud.radio("الصقر ١", ["اتبعوني! تحرّك!", "معي يا شباب، يلّا!"].pick_random(), 2.0)
+		hud.radio(alive_team[0].display_name, ["وراك!", "متحرّكين معك."].pick_random(), 1.6)
+		hud.show_banner("", "أمر للفريق: اتبعوني", 1.5)
+
+func on_vehicle_broken() -> void:
+	hud.show_banner("السيارة تعطّلت!", "انزل [F] واضغط [E] مطوّل جنبها لتصليحها", 3.5)
+	hud.radio("الصقر ١", "المحرك وقف! السيارة طفت!", 2.5)
 
 func _free_spot(cands: Array, exclude: Array) -> Vector3:
 	var space := get_world_3d().direct_space_state
@@ -1014,7 +1160,22 @@ func _enter_vehicle() -> void:
 		t.collision_layer = 0
 
 func _check_win() -> void:
-	if ended or phase != "assault":
+	if ended:
+		return
+	if phase == "sniper":
+		for e in enemies:
+			if not e.dead:
+				return
+		for h in hostages:
+			if not h.dead:
+				h.rescued = true
+				hostages_saved += 1
+		hud.clear_radio()
+		hud.radio("الفريق الأرضي", "الساحة نظيفة! داخلين… الرهائن معنا وبخير.", 3.5)
+		hud.radio(COLONEL, "عمل قنّاص محترف يا الصقر ١. ولا طلقة ضايعة.", 3.5)
+		_end(true, "")
+		return
+	if phase != "assault":
 		return
 	for e in enemies:
 		if not e.dead and not e.cuffed:
@@ -1127,6 +1288,13 @@ func on_actor_dead(a, head: bool, from) -> void:
 			player.stats.heads += 1
 	if phase == "assault":
 		mission_assault_text()
+	if phase == "sniper":
+		# the others see their friend drop and go for the hostages / look for the shooter
+		for o in enemies:
+			if o != a and not o.dead and o.global_position.distance_to(a.global_position) < 16.0 and o.can_see(a.global_position + Vector3(0, 0.8, 0)):
+				o.alert(a.global_position)
+		sniper_text()
+		hud.radio("الفريق الأرضي", ["إصابة مؤكدة.", "الهدف سقط.", "تم التحييد، كمّل.", "ضربة نظيفة."].pick_random(), 1.8)
 	_check_win()
 
 func on_team_kill(_a) -> void:
@@ -1146,6 +1314,11 @@ func on_player_dead() -> void:
 func on_hostage_dead(_h, from) -> void:
 	hostages_lost += 1
 	mission_assault_text()
+	if phase == "sniper":
+		sniper_text()
+		if hostages_lost >= hostages.size() and from != player:
+			_end(false, "أعدموا كل الرهائن.")
+			return
 	if from == player:
 		_end(false, "قُتلت رهينة بنيرانك.")
 	else:
@@ -1163,6 +1336,11 @@ func _notification(what: int) -> void:
 			hud.toggle_pause()
 
 func _unhandled_input(e: InputEvent) -> void:
+	if cutscene_t > 0.0 and cutscene_t < 999.0 and ((e is InputEventKey and e.pressed and not e.echo) or (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed)):
+		get_viewport().set_input_as_handled()
+		hud.clear_radio()
+		_end_dialogue_cam()
+		return
 	if phase == "intro" and intro_t > 0.5 and intro_i < 3:
 		if (e is InputEventKey and e.pressed) or (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):
 			get_viewport().set_input_as_handled()

@@ -25,7 +25,11 @@ func _ready() -> void:
 	streams["step"] = _step()
 	streams["flesh"] = _flesh()
 	streams["reload"] = _reload()
-	streams["ambience"] = _ambience()
+	streams["radio"] = _radio()
+	streams["sniper"] = _shot(0.9, 1.0, 95.0)
+	streams["bolt"] = _bolt()
+	streams["sputter"] = _sputter()
+	streams["glass"] = _glass()
 	for i in 12:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
@@ -36,6 +40,13 @@ func _ready() -> void:
 		p3.max_distance = 120.0
 		add_child(p3)
 		_pool3d.append(p3)
+
+## City background loop, generated on first use (it is the biggest procedural sound).
+func ambience(night: bool) -> AudioStreamWAV:
+	var k := "ambience_night" if night else "ambience"
+	if not streams.has(k):
+		streams[k] = _ambience(night)
+	return streams[k]
 
 ## Positional one-shot (panned + attenuated by the engine).
 func play_3d(name: String, pos: Vector3, vol_db := 0.0, pitch := 1.0) -> void:
@@ -120,22 +131,26 @@ func _siren() -> AudioStreamWAV:
 	return _wav(s, true)
 
 func _engine() -> AudioStreamWAV:
-	## V6-ish rumble: firing pulses at 3x the crank frequency + exhaust noise. 1 s loop of whole cycles.
+	## V8-ish: firing pulses at 120 Hz with strong mid harmonics (phone speakers can't play deep bass),
+	## exhaust rasp and intake hiss. 1 s loop of whole cycles so it loops without a click.
 	var n := RATE
 	var s := PackedFloat32Array()
 	s.resize(n)
 	var lp := 0.0
-	var lp2 := 0.0
+	var hp_prev := 0.0
 	var crank := 30.0
 	for i in n:
 		var t := float(i) / RATE
-		var ph := fmod(t * crank * 3.0, 1.0)
-		var pulse := exp(-ph * 9.0) * (1.0 if int(t * crank * 3.0) % 3 != 1 else 0.8)
-		var hum := sin(TAU * crank * t) * 0.35 + sin(TAU * crank * 2.0 * t) * 0.2
+		var fire := t * crank * 4.0
+		var ph := fmod(fire, 1.0)
+		var cyl := int(fire) % 4
+		var pulse: float = exp(-ph * 6.0) * float([1.0, 0.82, 0.93, 0.76][cyl])
+		var harm := sin(TAU * 120.0 * t) * 0.45 + sin(TAU * 240.0 * t) * 0.32 + sin(TAU * 360.0 * t + 0.6) * 0.22 + sin(TAU * 480.0 * t) * 0.14 + sin(TAU * 600.0 * t + 1.1) * 0.08
 		var noise := randf() * 2.0 - 1.0
-		lp += (noise - lp) * 0.08
-		lp2 += ((pulse * 1.2 + hum + lp * 0.5) - lp2) * 0.25
-		s[i] = lp2 * 0.55
+		lp += (noise - lp) * 0.3
+		var rasp: float = (lp - hp_prev) * pulse
+		hp_prev = lp
+		s[i] = clampf(harm * (0.45 + pulse * 0.7) * 0.55 + rasp * 0.5 + lp * 0.05, -1.0, 1.0) * 0.85
 	return _wav(s, true)
 
 func _screech() -> AudioStreamWAV:
@@ -219,23 +234,105 @@ func _reload() -> AudioStreamWAV:
 				s[st + i] += (sin(TAU * 2400.0 * t) * 0.5 + (randf() - 0.5)) * exp(-t * 90.0) * 0.6
 	return _wav(s)
 
-func _ambience() -> AudioStreamWAV:
-	## distant city: low traffic rumble with the odd far-away horn and bird chirp. 8 s loop.
-	var n := RATE * 8
+func _ambience(night := false) -> AudioStreamWAV:
+	## city bed: cars swishing past, distant horns, a dog, birds by day / crickets at night. 12 s loop.
+	var n := RATE * 12
 	var s := PackedFloat32Array()
 	s.resize(n)
 	var lp := 0.0
-	var lp2 := 0.0
+	var bp := 0.0
+	var bp2 := 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3 if not night else 5
+	var passes := []
+	for k in (4 if night else 7):
+		passes.append([rng.randf_range(0.0, 12.0), rng.randf_range(2.5, 4.5), rng.randf_range(0.5, 1.0)])
+	var horns := [[2.3, 0.35, 380.0], [7.6, 0.22, 450.0], [9.1, 0.5, 410.0]]
 	for i in n:
 		var t := float(i) / RATE
 		var noise := randf() * 2.0 - 1.0
-		lp += (noise - lp) * 0.02
-		lp2 += (lp - lp2) * 0.3
-		var v := lp2 * 2.2
-		var hp := fmod(t, 8.0)
-		if hp > 2.0 and hp < 2.35:
-			v += signf(sin(TAU * 380.0 * t)) * 0.03
-		if hp > 5.1 and hp < 5.3:
-			v += sin(TAU * (3200.0 + 900.0 * sin(TAU * 12.0 * t)) * t) * 0.025 * sin(PI * (hp - 5.1) / 0.2)
-		s[i] = v
+		lp += (noise - lp) * 0.06
+		bp += (noise - bp) * 0.35
+		bp2 += (bp - bp2) * 0.08
+		var band := bp - bp2          # 300 Hz – 3 kHz hiss: what tyres on asphalt sound like
+		var v := lp * 0.5
+		for ps in passes:
+			var dt: float = fposmod(t - ps[0], 12.0)
+			if dt < ps[1]:
+				var e: float = sin(PI * dt / ps[1])
+				v += band * e * e * 0.9 * ps[2]
+		for h in (horns if not night else [horns[1]]):
+			var dh: float = t - h[0]
+			if dh > 0.0 and dh < h[1]:
+				v += (signf(sin(TAU * h[2] * t)) * 0.5 + signf(sin(TAU * h[2] * 1.25 * t)) * 0.5) * 0.05
+		if not night:
+			for b in [1.2, 1.45, 5.3, 5.5, 5.7, 10.4]:
+				var db: float = t - b
+				if db > 0.0 and db < 0.12:
+					v += sin(TAU * (3400.0 + 1600.0 * sin(TAU * 18.0 * db)) * db) * 0.05 * sin(PI * db / 0.12)
+		else:
+			var cr := fmod(t * 3.1, 1.0)
+			if cr < 0.35:
+				v += sin(TAU * 4300.0 * t) * 0.025 * (0.5 + 0.5 * sin(TAU * 32.0 * t))
+		for d in [3.9, 4.25]:
+			var dd: float = t - d
+			if dd > 0.0 and dd < 0.18:
+				v += sin(TAU * (520.0 - dd * 900.0) * dd) * 0.07 * exp(-dd * 14.0) + band * 0.05 * exp(-dd * 20.0)
+		s[i] = clampf(v * 1.6, -1.0, 1.0)
 	return _wav(s, true)
+
+func _radio() -> AudioStreamWAV:
+	## push-to-talk: click + short band-limited static
+	var n := int(0.22 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var a := 0.0
+	var b := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var noise := randf() * 2.0 - 1.0
+		a += (noise - a) * 0.5
+		b += (a - b) * 0.1
+		var v := (a - b) * 0.5 * (1.0 if t < 0.18 else (0.22 - t) / 0.04)
+		if t < 0.012:
+			v += sin(TAU * 1700.0 * t) * 0.6
+		s[i] = v
+	return _wav(s)
+
+func _bolt() -> AudioStreamWAV:
+	var n := int(0.7 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for c in [0.0, 0.18, 0.42, 0.55]:
+		var st := int(c * RATE)
+		for i in int(0.06 * RATE):
+			if st + i < n:
+				var t := float(i) / RATE
+				s[st + i] += (sin(TAU * 1700.0 * t) * 0.4 + (randf() - 0.5) * 0.9) * exp(-t * 70.0) * 0.7
+	return _wav(s)
+
+func _sputter() -> AudioStreamWAV:
+	## dying engine: irregular backfire pops
+	var n := int(1.2 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for c in [0.0, 0.21, 0.29, 0.55, 0.9, 0.97]:
+		var st := int(c * RATE)
+		for i in int(0.1 * RATE):
+			if st + i < n:
+				var t := float(i) / RATE
+				s[st + i] += ((randf() * 2.0 - 1.0) * 0.8 + sin(TAU * 140.0 * t) * 0.8) * exp(-t * 35.0)
+	return _wav(s)
+
+func _glass() -> AudioStreamWAV:
+	var n := int(0.8 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for k in 26:
+		var st := int(randf_range(0.0, 0.5) * RATE)
+		var f := randf_range(2500.0, 6500.0)
+		for i in int(0.08 * RATE):
+			if st + i < n:
+				var t := float(i) / RATE
+				s[st + i] += sin(TAU * f * t) * exp(-t * 60.0) * 0.18
+	return _wav(s)
