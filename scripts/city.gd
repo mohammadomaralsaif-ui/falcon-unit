@@ -879,6 +879,7 @@ func _bank_block(bi: int, bj: int) -> void:
 					door_pos = p
 					door_body = StaticBody3D.new()
 					var cs := CollisionShape3D.new(); var bs := BoxShape3D.new(); bs.size = Vector3(CELL, 3.2, 0.3); cs.shape = bs
+					cs.position = Vector3(0, 1.6, 0)
 					door_body.add_child(cs)
 					for s in [-1, 1]:
 						var leaf := MeshInstance3D.new(); leaf.mesh = _box_mesh(Vector3(CELL * 0.5 - 0.05, 3.1, 0.12)); leaf.material_override = mat("door")
@@ -888,6 +889,7 @@ func _bank_block(bi: int, bj: int) -> void:
 					add_child(door_body)
 					var lintel := _mi(_box_mesh(Vector3(CELL, wh - 3.2, CELL)), mat("plaster"), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
 					lintel.material_override = mat("plaster")
+					_static_box(Vector3(CELL, wh - 3.2, CELL), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
 	var walls := _mi(wall_st.commit(), mat("interior"))
 	_mi(out_st.commit(), mat("granite"))
 	# floor + roof
@@ -1055,6 +1057,7 @@ func merge_static() -> void:
 			per_chunk[ck] = [ArrayMesh.new(), int(parts[4])]
 		var am: ArrayMesh = per_chunk[ck][0]
 		if am.get_surface_count() >= 250:
+			push_warning("merge_static: chunk %s hit the 250-surface limit, geometry dropped" % ck)
 			continue
 		groups[key].commit(am)
 		am.surface_set_material(am.get_surface_count() - 1, mats[key][0])

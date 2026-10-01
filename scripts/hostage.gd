@@ -59,12 +59,13 @@ func _physics_process(dt: float) -> void:
 		if global_position.distance_to(pl) > 2.2 and trail.size() > 0:
 			trail_idx = mini(trail_idx, trail.size() - 1)
 			goal = trail[trail_idx]
-			if Vector2(goal.x - global_position.x, goal.z - global_position.z).length() < 0.5 and trail_idx < trail.size() - 1:
+			if Vector2(goal.x - global_position.x, goal.z - global_position.z).length() < 0.9 and trail_idx < trail.size() - 1:
 				trail_idx += 1
 				goal = trail[trail_idx]
 			spd = 4.6 if global_position.distance_to(pl) > 5.0 else 2.2
 		# out of the bank?
-		if global_position.z > main.city.door_pos.z + 3.5:
+		var dz: float = main.city.door_pos.z
+		if global_position.z > dz + 3.5 or (global_position.z > dz + 1.2 and main.player.global_position.z > dz + 3.0):
 			rescued = true
 			freed = false
 			main.on_hostage_saved(self)

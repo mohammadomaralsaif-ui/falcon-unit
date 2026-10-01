@@ -34,6 +34,8 @@ var radio_t := 0.0
 var banner_t := 0.0
 var countdown_lbl: Label
 var letterbox: Array = []
+var _timer_red := false
+var pause_menu: Control
 
 # touch state
 var joy_finger := -1
@@ -242,8 +244,18 @@ func _build_hud() -> void:
 	waypoint.add_child(wp_lbl)
 
 # ------------------------------------------------------------------ public API
+const TOUCH_HINTS := {"[E]": "(زر تفاعل)", "[F]": "(زر سيارة)", "[H]": "(زر صفارة)", "[Q]": "(زر استسلم!)", "[R]": "(زر تعبئة)"}
+
+## On phones, replace keyboard key hints with the on-screen button names.
+func _touchify(t: String) -> String:
+	if not Controls.is_touch:
+		return t
+	for k in TOUCH_HINTS:
+		t = t.replace(k, TOUCH_HINTS[k])
+	return t.replace("اضغط E", "اضغط زر التفاعل")
+
 func set_objectives(lines: Array) -> void:
-	objectives.text = "\n".join(lines)
+	objectives.text = _touchify("\n".join(lines))
 
 func radio(who: String, text: String, dur := 4.0) -> void:
 	radio_queue.append([who, text, dur])
@@ -254,7 +266,7 @@ func clear_radio() -> void:
 
 func show_banner(text: String, sub := "", dur := 3.0) -> void:
 	banner.text = text
-	banner_sub.text = sub
+	banner_sub.text = _touchify(sub)
 	banner_t = dur
 	var tw := create_tween()
 	banner.scale = Vector2(1.15, 1.15)
@@ -262,7 +274,7 @@ func show_banner(text: String, sub := "", dur := 3.0) -> void:
 	tw.parallel().tween_property(banner_sub, "modulate:a", 1.0, 0.4)
 
 func set_prompt(text: String) -> void:
-	prompt.text = text
+	prompt.text = _touchify(text)
 
 func hit_marker(kill: bool) -> void:
 	hit_t = 0.3
@@ -338,7 +350,10 @@ func _process(dt: float) -> void:
 	minimap.visible = playing
 	timer_lbl.visible = playing
 	timer_lbl.text = main.timer_text()
-	timer_lbl.add_theme_color_override("font_color", Color(1, 0.35, 0.3) if main.timer_urgent() and fmod(Time.get_ticks_msec() * 0.002, 1.0) < 0.6 else Color(1, 1, 1, 0.9))
+	var urgent_now: bool = main.timer_urgent() and fmod(Time.get_ticks_msec() * 0.002, 1.0) < 0.6
+	if urgent_now != _timer_red:
+		_timer_red = urgent_now
+		timer_lbl.add_theme_color_override("font_color", Color(1, 0.35, 0.3) if urgent_now else Color(1, 1, 1, 0.9))
 	minimap.queue_redraw()
 	# waypoint projection
 	var cam := get_viewport().get_camera_3d()
@@ -360,18 +375,33 @@ func _process(dt: float) -> void:
 	else:
 		waypoint.visible = false
 	if touch_root:
-		touch_root.visible = playing
+		var show_touch := playing and not get_tree().paused
+		if touch_root.visible and not show_touch:
+			# controls are going away: forget any finger that was on the stick / look area
+			joy_finger = -1
+			look_finger = -1
+			Controls.reset()
+		touch_root.visible = show_touch
 		_layout_touch()
-		var drive_only := ["fire", "aim", "reload", "jump", "yell", "interact"]
+		var near_car: bool = in_car or (pl.global_position.distance_to(main.vehicle.global_position) < 4.5)
 		for k in touch_buttons:
 			var b: TouchScreenButton = touch_buttons[k]
-			if k == "siren":
-				b.visible = in_car
-			elif k in ["fire", "aim", "reload", "yell"]:
-				b.visible = not in_car
-			elif k == "jump":
-				b.visible = true
-				b.get_child(0).text = "فرامل" if in_car else "قفز"
+			match k:
+				"siren":
+					b.visible = in_car
+				"fire", "aim", "reload":
+					b.visible = not in_car
+				"yell":
+					b.visible = not in_car and main.phase == "assault"
+				"interact":
+					b.visible = not in_car and prompt.text != "" and not prompt.text.contains("سيارة")
+				"vehicle":
+					b.visible = near_car
+				"jump":
+					b.visible = true
+					b.get_child(0).text = "فرامل" if in_car else "قفز"
+				"pause":
+					b.visible = true
 
 func _draw_minimap() -> void:
 	if not main or not main.city:
@@ -406,6 +436,11 @@ func _draw_minimap() -> void:
 		minimap.draw_circle(o, 6, GOLD)
 	# enemies spotted
 	for e in main.enemies:
+		if e.surrendered and not e.cuffed and not e.dead:
+			var spos: Vector2 = to_map.call(e.global_position)
+			if spos.distance_to(center) < R2:
+				minimap.draw_circle(spos, 4.5, Color(1, 0.85, 0.2))
+			continue
 		if not e.dead and not e.surrendered and e.state == "alert" and main.door_open:
 			var ep: Vector2 = to_map.call(e.global_position)
 			if ep.distance_to(center) < R2:
@@ -510,6 +545,46 @@ func show_briefing(on_start: Callable) -> void:
 	hl.custom_minimum_size.x = 520
 	vb.add_child(hl)
 
+func toggle_pause() -> void:
+	if pause_menu:
+		pause_menu.queue_free()
+		pause_menu = null
+		get_tree().paused = false
+		if not Controls.is_touch and main.phase not in ["brief", "result"]:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			Controls.block_fire()
+		return
+	get_tree().paused = true
+	Controls.reset()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	pause_menu = Control.new()
+	pause_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(pause_menu)
+	var shade := ColorRect.new(); shade.color = Color(0, 0, 0, 0.55)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_menu.add_child(shade)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.04, 0.07, 0.92), GOLD))
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.custom_minimum_size = Vector2(440, 0)
+	pause_menu.add_child(panel)
+	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 12)
+	panel.add_child(vb)
+	vb.add_child(_label("إيقاف مؤقت", 44, GOLD))
+	var cont := _button("متابعة", toggle_pause, 30); cont.custom_minimum_size.y = 60
+	vb.add_child(cont)
+	var again := _button("إعادة المهمة", func():
+		get_tree().paused = false
+		Engine.time_scale = 1.0
+		get_tree().reload_current_scene(), 30)
+	again.custom_minimum_size.y = 60
+	vb.add_child(again)
+	var quit := _button("خروج من اللعبة", func(): get_tree().quit(), 26)
+	quit.custom_minimum_size.y = 54
+	vb.add_child(quit)
+
 func close_briefing() -> void:
 	if briefing:
 		briefing.queue_free()
@@ -562,7 +637,8 @@ func _build_touch() -> void:
 	add_child(touch_root)
 	var specs := {
 		"fire": ["نار", 70], "aim": ["تصويب", 46], "reload": ["تعبئة", 38], "jump": ["قفز", 40],
-		"interact": ["E تفاعل", 44], "vehicle": ["سيارة", 40], "yell": ["استسلم!", 42], "siren": ["صفارة", 38],
+		"interact": ["تفاعل", 44], "vehicle": ["سيارة", 40], "yell": ["استسلم!", 42], "siren": ["صفارة", 38],
+		"pause": ["II", 26],
 	}
 	for k in specs:
 		var r: int = specs[k][1]
@@ -598,6 +674,7 @@ func _layout_touch() -> void:
 		"reload": Vector2(vs.x - 110, vs.y - 300), "jump": Vector2(vs.x - 240, vs.y - 240),
 		"interact": Vector2(vs.x - 380, vs.y - 110), "vehicle": Vector2(vs.x - 380, vs.y - 230),
 		"yell": Vector2(vs.x - 250, vs.y - 370), "siren": Vector2(vs.x - 120, vs.y - 150),
+		"pause": Vector2(vs.x * 0.5 + 200, 34),
 	}
 	for k in touch_buttons:
 		var b: TouchScreenButton = touch_buttons[k]
@@ -617,7 +694,14 @@ func _on_button(p: Vector2) -> bool:
 
 func _on_fire(p: Vector2) -> bool:
 	var b: TouchScreenButton = touch_buttons["fire"]
+	if not b.visible:
+		return false
 	return b.visible and p.distance_to(b.position + Vector2(70, 70)) < 76
+
+func _unhandled_input(e: InputEvent) -> void:
+	if pause_menu and e.is_action_pressed("pause"):
+		toggle_pause()
+		get_viewport().set_input_as_handled()
 
 func _input(e: InputEvent) -> void:
 	if not Controls.is_touch or not touch_root or not touch_root.visible:

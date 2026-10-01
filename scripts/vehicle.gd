@@ -31,6 +31,8 @@ func _ready() -> void:
 	center_of_mass = Vector3(0, 0.25, 0.1)
 	linear_damp = 0.05
 	angular_damp = 0.6
+	contact_monitor = true
+	max_contacts_reported = 4
 	var body := CarMesh.compact(CarMesh.build("swat", Color(), false))
 	add_child(body)
 	flashers = body.get_meta("flashers")
@@ -66,15 +68,6 @@ func _ready() -> void:
 	light_b = OmniLight3D.new(); light_b.light_color = Color(0.15, 0.35, 1); light_b.omni_range = 14.0
 	light_b.position = Vector3(0.5, s.roof + 0.4, bar_z)
 	add_child(light_r); add_child(light_b)
-	# headlights
-	for sd in [-1.0, 1.0]:
-		var sl := SpotLight3D.new()
-		sl.light_color = Color(1, 0.95, 0.85); sl.light_energy = 2.0
-		sl.spot_range = 35.0; sl.spot_angle = 28.0
-		sl.position = Vector3(sd * 0.7, 0.85, s.L * 0.5)
-		sl.rotation.y = PI
-		sl.rotation.x = -0.06
-		add_child(sl)
 	engine_snd = AudioStreamPlayer3D.new(); engine_snd.stream = Sfx.streams["engine"]; engine_snd.unit_size = 8.0
 	siren_snd = AudioStreamPlayer3D.new(); siren_snd.stream = Sfx.streams["siren"]; siren_snd.unit_size = 14.0; siren_snd.volume_db = -6.0
 	add_child(engine_snd); add_child(siren_snd)
@@ -92,7 +85,7 @@ func set_driving(on: bool) -> void:
 		cam.current = true
 	else:
 		engine_force = 0.0
-		brake = 8.0
+		brake = 40.0
 		steering = 0.0
 
 func _cam_target() -> Transform3D:
@@ -123,8 +116,9 @@ func _physics_process(dt: float) -> void:
 	if siren_on:
 		var ph := fmod(_flash_t * 3.2, 1.0)
 		var red_on := ph < 0.5
-		light_r.light_energy = 3.0 if red_on else 0.0
-		light_b.light_energy = 0.0 if red_on else 3.0
+		# real lights only while driving (the Mobile renderer has a small per-mesh light budget)
+		light_r.light_energy = (3.0 if red_on else 0.0) if driving else 0.0
+		light_b.light_energy = (0.0 if red_on else 3.0) if driving else 0.0
 		if flashers.has("red"):
 			flashers.red.emission_energy_multiplier = 6.0 if red_on else 0.3
 			flashers.blue.emission_energy_multiplier = 0.3 if red_on else 6.0
@@ -138,7 +132,7 @@ func _physics_process(dt: float) -> void:
 	engine_snd.volume_db = -10.0 if driving else -24.0
 	if not driving:
 		return
-	if Controls.just("siren"):
+	if Controls.just("siren") and (not main or main.input_guard <= 0.0):
 		siren_on = not siren_on
 	var mv := Controls.move_vector()
 	var throttle := mv.y

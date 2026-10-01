@@ -93,9 +93,13 @@ func _physics_process(dt: float) -> void:
 	var car: VehicleBody3D = main.vehicle
 	var car_speed: float = car.linear_velocity.length()
 	for p in peds:
-		if p.node.global_position.distance_to(ref) > 190.0:
+		var dref: float = p.node.global_position.distance_to(ref)
+		if dref > 190.0:
 			_respawn(p)
 			continue
+		# far-away walkers: stop skinning/animation work, hide beyond the fog
+		p.node.anim.active = dref < 75.0
+		p.node.visible = dref < 150.0
 		# dodge an approaching car
 		var to_car: Vector3 = car.global_position - p.node.global_position
 		var want_dodge := 0.0

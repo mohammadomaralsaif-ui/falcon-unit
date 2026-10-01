@@ -53,6 +53,8 @@ var intro_i := -1
 var intro_t := 0.0
 var talked := false
 var peds: Node3D
+var input_guard := 0.0
+var chase_pending := false
 
 const COLONEL := "العقيد سامر الخطيب"
 const NEGOTIATOR := "المفاوِضة الرائد ليلى"
@@ -62,6 +64,9 @@ const TEAM_NAMES := ["الصقر ٢", "الصقر ٣", "الصقر ٤", "الص�
 const TEAM_OFFSETS := [Vector3(-1.4, 0, 2.0), Vector3(1.4, 0, 2.2), Vector3(-1.6, 0, 4.2), Vector3(1.6, 0, 4.4)]
 
 func _ready() -> void:
+	Controls.reset()
+	Engine.time_scale = 1.0
+	get_tree().paused = false
 	_environment()
 	city = Node3D.new()
 	city.set_script(City)
@@ -72,6 +77,7 @@ func _ready() -> void:
 	traffic = Node3D.new()
 	traffic.set_script(Traffic)
 	add_child(traffic)
+	traffic.main = self
 	traffic.setup(city, 22)
 	vehicle = VehicleBody3D.new()
 	vehicle.set_script(Vehicle)
@@ -292,7 +298,7 @@ func mission_assault_text() -> void:
 			alive += 1
 	var lines := [
 		"◆ المسلحون المتبقّون: %d" % alive,
-		"◆ حرّر الرهائن [E] وأخرجهم من المصرف (%d / %d)" % [hostages_saved, hostages.size()],
+		"◆ حرّر الرهائن [E] وأخرجهم لبرّا المصرف (%d / %d)" % [hostages_saved, hostages.size()],
 		"◇ [Q] أمر بالاستسلام · [E] تكبيل المستسلم",
 	]
 	if hostages_lost > 0:
@@ -307,9 +313,19 @@ func mission_assault_text() -> void:
 				bd = d; best = h
 	var escorting := hostages.any(func(h): return h.freed and not h.dead)
 	if escorting:
-		hud.set_waypoint(city.door_pos + Vector3(0, 1.4, 6.0))
+		hud.set_waypoint(city.door_pos + Vector3(0, 0.6, 11.0))
+	elif best:
+		hud.set_waypoint(best.global_position + Vector3(0, 1.4, 0))
 	else:
-		hud.set_waypoint(best.global_position + Vector3(0, 1.4, 0) if best else null)
+		# nobody left to free: point at the nearest suspect who surrendered but isn't cuffed yet
+		var sus = null
+		var sd := 1e9
+		for e in enemies:
+			if e.surrendered and not e.cuffed and not e.dead:
+				var d: float = e.global_position.distance_to(player.global_position)
+				if d < sd:
+					sd = d; sus = e
+		hud.set_waypoint(sus.global_position + Vector3(0, 2.2, 0) if sus else null)
 
 # ---- twist: the leader escapes in the cash van
 func _start_chase() -> void:
@@ -408,6 +424,7 @@ func _process(dt: float) -> void:
 			cam.v_offset = randf_range(-1, 1) * shake * 0.25
 	yell_cd -= dt
 	ram_cd -= dt
+	input_guard -= real_dt
 	# hostage-taker deadline before the breach
 	if phase in ["drive", "arrive", "staging"]:
 		deadline -= dt
@@ -423,9 +440,12 @@ func _process(dt: float) -> void:
 				for h in hostages:
 					h.trail_idx = maxi(h.trail_idx - 1, 0)
 	# vehicle enter / exit
-	if Controls.just("vehicle"):
+	if Controls.just("vehicle") and input_guard <= 0.0:
 		if in_vehicle:
-			_exit_vehicle()
+			if vehicle.speed_kmh > 15.0:
+				hud.show_banner("", "خفّف السرعة حتى تنزل", 1.2)
+			else:
+				_exit_vehicle()
 		elif player.alive and player.global_position.distance_to(vehicle.global_position) < 4.5:
 			_enter_vehicle()
 	if phase == "drive":
@@ -436,12 +456,13 @@ func _process(dt: float) -> void:
 		chase_t += dt
 		hud.set_waypoint(van.global_position + Vector3(0, 3.0, 0))
 		hud.set_objectives(["◆ الحق فان %s وأوقفه" % LEADER, "◇ اصدمه بالسيارة أو أطلق النار عليه", "حالة الفان: %d%%" % int(van.hp)])
-		if in_vehicle and ram_cd <= 0.0 and vehicle.global_position.distance_to(van.global_position) < 5.2:
+		if in_vehicle and ram_cd <= 0.0 and (van in vehicle.get_colliding_bodies() or vehicle.global_position.distance_to(van.global_position) < 3.0):
 			var vv: Vector3 = van.global_transform.basis.z * van.speed
 			var rel: float = (vehicle.linear_velocity - vv).length()
 			if rel > 3.0:
 				ram_cd = 0.6
-				van.damage(rel * 2.6)
+				van.damage(rel * 2.2)
+				vehicle.linear_velocity *= 0.75
 				shake = 0.7
 				Sfx.play("boom", -8.0, 1.8)
 				Fx.particles(self, (vehicle.global_position + van.global_position) * 0.5 + Vector3(0, 0.8, 0), Vector3.UP, "spark", 20)
@@ -450,7 +471,7 @@ func _process(dt: float) -> void:
 	elif phase == "arrest" and leader:
 		hud.set_waypoint(leader.global_position + Vector3(0, 2.2, 0))
 	_interactions()
-	if phase == "assault" and Controls.just("yell") and not in_vehicle:
+	if phase == "assault" and Controls.just("yell") and not in_vehicle and input_guard <= 0.0:
 		_yell()
 
 func timer_text() -> String:
@@ -571,9 +592,13 @@ func _yell() -> void:
 func _exit_vehicle() -> void:
 	in_vehicle = false
 	vehicle.set_driving(false)
+	_reset_shake()
+	trail.clear()
 	var b := vehicle.global_transform.basis
-	var out := vehicle.global_position + b.x * 1.9
-	out.y = maxf(vehicle.global_position.y, 0.2)
+	var vp := vehicle.global_position
+	var y := maxf(vp.y, 0.0) + 0.2
+	var flat := func(v: Vector3) -> Vector3: return Vector3(v.x, y, v.z)
+	var out: Vector3 = _free_spot([flat.call(vp + b.x * 1.9), flat.call(vp - b.x * 1.9), flat.call(vp - b.z * 3.6), flat.call(vp + b.z * 3.6), flat.call(vp + b.x * 3.0)], [vehicle.get_rid()])
 	player.global_position = out
 	var f := b.z; f.y = 0
 	player.yaw = atan2(f.x, f.z) + PI
@@ -597,12 +622,38 @@ func _exit_vehicle() -> void:
 			t.visible = true
 			t.process_mode = Node.PROCESS_MODE_INHERIT
 			t.collision_layer = 16
-			t.global_position = vehicle.global_position - b.x * 1.9 + b.z * (-1.5 - i * 1.2)
-			t.global_position.y = out.y
+			var cands := []
+			for k in 6:
+				cands.append(out + b.z * (-1.6 - k * 1.1) + b.x * (0.0 if k % 2 == 0 else -0.9))
+				cands.append(out + b.z * (1.6 + k * 1.1))
+			cands.append(out + Vector3(0, 0, 0))
+			t.global_position = _free_spot(cands, [vehicle.get_rid(), player.get_rid()])
 			t.rotation.y = player.yaw
+
+func _free_spot(cands: Array, exclude: Array) -> Vector3:
+	var space := get_world_3d().direct_space_state
+	var sh := CapsuleShape3D.new(); sh.radius = 0.38; sh.height = 1.7
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = sh
+	q.collision_mask = 1 | 2 | 8 | 16
+	q.exclude = exclude
+	for c in cands:
+		q.transform = Transform3D(Basis(), c + Vector3(0, 0.95, 0))
+		if space.intersect_shape(q, 1).is_empty():
+			return c
+	return (cands[0] as Vector3) + Vector3(0, 2.6, 0)
+
+func _reset_shake() -> void:
+	shake = 0.0
+	for c in [player.cam, vehicle.cam, cine_cam]:
+		if c:
+			c.h_offset = 0.0
+			c.v_offset = 0.0
 
 func _enter_vehicle() -> void:
 	in_vehicle = true
+	_reset_shake()
+	trail.clear()
 	player.set_active(false)
 	vehicle.set_driving(true)
 	for t in team:
@@ -621,8 +672,13 @@ func _check_win() -> void:
 	for h in hostages:
 		if not h.rescued and not h.dead:
 			return
+	if chase_pending:
+		return
+	chase_pending = true
 	hud.radio(COLONEL, "المصرف آمن. عمل ممتاز… لحظة، شو صاير ورا المبنى؟", 3.5)
 	await get_tree().create_timer(3.0).timeout
+	if ended or not player.alive:
+		return
 	_start_chase()
 
 func _end(win: bool, reason: String) -> void:
@@ -724,14 +780,26 @@ func _capture_mouse(on: bool) -> void:
 		return
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if on else Input.MOUSE_MODE_VISIBLE
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
+		if phase not in ["brief", "result"] and hud and not get_tree().paused:
+			hud.toggle_pause()
+
 func _unhandled_input(e: InputEvent) -> void:
 	if phase == "intro" and intro_t > 0.5 and intro_i < 3:
 		if (e is InputEventKey and e.pressed) or (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):
+			get_viewport().set_input_as_handled()
+			input_guard = 0.4
+			Controls.block_fire()
 			_begin_drive()
 			return
+	if e.is_action_pressed("pause") and phase not in ["brief", "result", "intro"]:
+		hud.toggle_pause()
+		get_viewport().set_input_as_handled()
+		return
 	if Controls.is_touch:
 		return
-	if e.is_action_pressed("pause"):
-		_capture_mouse(false)
-	elif e is InputEventMouseButton and e.pressed and phase not in ["brief", "result", "intro"] and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	if e is InputEventMouseButton and e.pressed and phase not in ["brief", "result", "intro"] and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused:
 		_capture_mouse(true)
+		Controls.block_fire()
+		get_viewport().set_input_as_handled()

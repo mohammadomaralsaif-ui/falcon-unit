@@ -17,6 +17,8 @@ class Car:
 	var speed := 0.0
 	var max_speed := 10.0
 	var stuck := 0.0
+	var want := 10.0
+	var tick := 0
 
 func setup(_city: Node, count: int) -> void:
 	city = _city
@@ -54,6 +56,14 @@ func setup(_city: Node, count: int) -> void:
 		add_child(c.body)
 		_place(c)
 		cars.append(c)
+
+var main: Node
+
+func _far_from_player(p: Vector3, d: float) -> bool:
+	if not main:
+		return true
+	var ref: Vector3 = main.vehicle.global_position if main.in_vehicle else main.player.global_position
+	return p.distance_to(ref) > d
 
 func _key(a: Vector2i, b: Vector2i) -> String:
 	return "%d,%d>%d,%d" % [a.x, a.y, b.x, b.y]
@@ -101,14 +111,18 @@ func _physics_process(dt: float) -> void:
 		var seg := a.distance_to(b)
 		var d := (b - a) / seg
 		# look ahead for obstacles
-		var p: Vector3 = c.body.global_position + Vector3(0, 0.8, 0)
-		var q := PhysicsRayQueryParameters3D.create(p + d * 2.4, p + d * 13.0, 1 | 4 | 8 | 16)
-		q.exclude = [c.body.get_rid()]
-		var hit := space.intersect_ray(q)
-		var want: float = c.max_speed
-		if hit:
-			var dist: float = (hit.position - p).length()
-			want = clampf((dist - 4.5) * 1.4, 0.0, c.max_speed)
+		# obstacle check every 3rd physics tick (staggered per car)
+		c.tick += 1
+		if c.tick % 3 == 0:
+			var p: Vector3 = c.body.global_position + Vector3(0, 0.8, 0)
+			var q := PhysicsRayQueryParameters3D.create(p + d * 2.4, p + d * 13.0, 1 | 4 | 8 | 16)
+			q.exclude = [c.body.get_rid()]
+			var hit := space.intersect_ray(q)
+			c.want = c.max_speed
+			if hit:
+				var dist: float = (hit.position - p).length()
+				c.want = clampf((dist - 4.5) * 1.4, 0.0, c.max_speed)
+		var want: float = c.want
 		# slow for turns near the junction
 		var remain := (1.0 - c.t) * seg
 		if remain < 9.0:
@@ -118,14 +132,22 @@ func _physics_process(dt: float) -> void:
 			c.stuck += dt
 		else:
 			c.stuck = 0.0
-		if c.stuck > 12.0:
-			# give up and teleport down the road (out of sight usually)
+		if c.stuck > 12.0 and _far_from_player(c.body.global_position, 60.0):
+			# respawn on a random street far from the player instead of sliding through things
 			c.stuck = 0.0
-			c.t = 0.0
-			var tmp: Vector2i = c.from
-			c.from = c.to
-			var nb := _neighbors(c.from, tmp)
-			c.to = nb[randi() % nb.size()] if nb.size() else tmp
+			for tries in 20:
+				var a2 := Vector2i(randi_range(0, city.N), randi_range(0, city.N))
+				var nb2 := _neighbors(a2, Vector2i(-99, -99))
+				if nb2.is_empty():
+					continue
+				c.from = a2
+				c.to = nb2[randi() % nb2.size()]
+				c.t = randf_range(0.2, 0.8)
+				if _far_from_player(_lane_pos(c), 80.0):
+					break
+			c.speed = 0.0
+			_place(c)
+			continue
 		c.t += c.speed * dt / seg
 		if c.t >= 1.0:
 			var nb := _neighbors(c.to, c.from)

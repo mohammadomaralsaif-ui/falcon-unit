@@ -77,7 +77,7 @@ func _physics_process(dt: float) -> void:
 	pivot.position.x = lerpf(0.55, 0.7, aim)
 	cam.fov = lerpf(68.0, 50.0, aim)
 	var mv := Controls.move_vector()
-	var sprint := Controls.held("sprint") and mv.y > 0.3 and aim < 0.3
+	var sprint := Controls.held("sprint") and mv.y > 0.3 and aim < 0.3 and not Controls.held("fire")
 	var spd := 7.2 if sprint else 4.2
 	if aim > 0.5:
 		spd = 2.6

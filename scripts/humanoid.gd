@@ -62,7 +62,16 @@ static func bone_named(sk: Skeleton3D, part: String) -> int:
 	return -1
 
 static func rifle(kind := "m4") -> Node3D:
-	## Built facing -Z, origin at the pistol grip.
+	## Built facing -Z, origin at the pistol grip. Geometry is built once per kind and shared.
+	if _gun_cache.has(kind):
+		var g2 := Node3D.new()
+		var mi := MeshInstance3D.new()
+		mi.mesh = _gun_cache[kind]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g2.add_child(mi)
+		var tip2 := Marker3D.new(); tip2.name = "Muzzle"; tip2.position = Vector3(0, 0.045, -0.7)
+		g2.add_child(tip2)
+		return g2
 	var g := Node3D.new()
 	var metal := StandardMaterial3D.new(); metal.albedo_color = Color(0.07, 0.07, 0.08); metal.metallic = 0.8; metal.roughness = 0.35
 	var poly := StandardMaterial3D.new(); poly.roughness = 0.65
@@ -109,6 +118,31 @@ static func rifle(kind := "m4") -> Node3D:
 			mi.position = Vector3(0, -0.035 - i * 0.065, -0.11 - i * i * 0.018)
 			mi.rotation.x = -0.25 * i
 			g.add_child(mi)
+	_gun_cache[kind] = _merge(g)
 	var tip := Marker3D.new(); tip.name = "Muzzle"; tip.position = Vector3(0, 0.045, -0.7)
 	g.add_child(tip)
 	return g
+
+static var _gun_cache := {}
+
+## Collapse all box parts of a weapon into one mesh (one surface per material).
+static func _merge(g: Node3D) -> ArrayMesh:
+	var groups := {}
+	for c in g.get_children():
+		if c is MeshInstance3D:
+			var m: Material = c.material_override
+			if not groups.has(m):
+				var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				groups[m] = st
+			groups[m].append_from(c.mesh, 0, c.transform)
+			g.remove_child(c)
+			c.free()
+	var am := ArrayMesh.new()
+	for m in groups:
+		groups[m].commit(am)
+		am.surface_set_material(am.get_surface_count() - 1, m)
+	var mi := MeshInstance3D.new()
+	mi.mesh = am
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	g.add_child(mi)
+	return am

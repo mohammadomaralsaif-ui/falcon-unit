@@ -5,6 +5,29 @@ static var _tracer_mat: StandardMaterial3D
 static var _spark_mat: StandardMaterial3D
 static var _smoke_mat: StandardMaterial3D
 static var _blood_mat: StandardMaterial3D
+static var _meshes := {}
+
+## Shared meshes so effects don't allocate new geometry every shot.
+static func _mesh(key: String) -> Mesh:
+	if not _meshes.has(key):
+		match key:
+			"tracer":
+				var b := BoxMesh.new(); b.size = Vector3(0.025, 0.025, 1.0); _meshes[key] = b
+			"spark":
+				var b := BoxMesh.new(); b.size = Vector3(0.03, 0.03, 0.03); _meshes[key] = b
+			"blood":
+				var b := BoxMesh.new(); b.size = Vector3(0.05, 0.05, 0.05); _meshes[key] = b
+			"dust":
+				var q := QuadMesh.new(); q.size = Vector2(0.3, 0.3); _meshes[key] = q
+			"smoke":
+				var q := QuadMesh.new(); q.size = Vector2(1.5, 1.5); _meshes[key] = q
+			"flash_long":
+				var q := QuadMesh.new(); q.size = Vector2(0.16, 0.42); _meshes[key] = q
+			"flash_front":
+				var q := QuadMesh.new(); q.size = Vector2(0.2, 0.2); _meshes[key] = q
+			"hole":
+				var q := QuadMesh.new(); q.size = Vector2(0.09, 0.09); _meshes[key] = q
+	return _meshes[key]
 
 static func _init_mats() -> void:
 	if _tracer_mat:
@@ -44,15 +67,14 @@ static func tracer(root: Node, a: Vector3, b: Vector3, col := Color(1, 0.85, 0.5
 	if len < 0.5:
 		return
 	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.025, 0.025, minf(len, 6.0))
-	mi.mesh = bm
+	mi.mesh = _mesh("tracer")
 	mi.material_override = _tracer_mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
 	var dir := (b - a).normalized()
 	var start := a + dir * minf(len, 6.0) * 0.5
 	mi.look_at_from_position(start, start + dir, Vector3.UP if abs(dir.y) < 0.99 else Vector3.RIGHT)
+	mi.scale = Vector3(1, 1, minf(len, 6.0))
 	var tw := mi.create_tween()
 	tw.tween_property(mi, "global_position", b - dir * minf(len, 6.0) * 0.5, minf(len / 300.0, 0.2))
 	tw.tween_callback(mi.queue_free)
@@ -76,24 +98,19 @@ static func particles(root: Node, pos: Vector3, normal: Vector3, kind := "spark"
 	p.emitting = false
 	p.amount = amount
 	p.explosiveness = 0.95
-	var m := BoxMesh.new()
 	match kind:
 		"spark":
-			m.size = Vector3(0.03, 0.03, 0.03)
-			p.mesh = m; p.material_override = _spark_mat
+			p.mesh = _mesh("spark"); p.material_override = _spark_mat
 			p.lifetime = 0.35; p.initial_velocity_min = 3; p.initial_velocity_max = 8; p.gravity = Vector3(0, -9.8, 0)
 		"blood":
-			m.size = Vector3(0.05, 0.05, 0.05)
-			p.mesh = m; p.material_override = _blood_mat
+			p.mesh = _mesh("blood"); p.material_override = _blood_mat
 			p.lifetime = 0.6; p.initial_velocity_min = 1.5; p.initial_velocity_max = 4; p.gravity = Vector3(0, -9.8, 0)
 		"dust":
-			var q := QuadMesh.new(); q.size = Vector2(0.3, 0.3)
-			p.mesh = q; p.material_override = _smoke_mat
+			p.mesh = _mesh("dust"); p.material_override = _smoke_mat
 			p.lifetime = 0.9; p.initial_velocity_min = 0.3; p.initial_velocity_max = 1.2; p.gravity = Vector3(0, 0.3, 0)
 			p.scale_amount_min = 1.0; p.scale_amount_max = 2.5
 		"smoke":
-			var q := QuadMesh.new(); q.size = Vector2(1.5, 1.5)
-			p.mesh = q; p.material_override = _smoke_mat
+			p.mesh = _mesh("smoke"); p.material_override = _smoke_mat
 			p.lifetime = 2.5; p.initial_velocity_min = 0.5; p.initial_velocity_max = 2.5; p.gravity = Vector3(0, 0.6, 0)
 			p.scale_amount_min = 1.0; p.scale_amount_max = 3.0
 	p.direction = normal if normal.length() > 0.1 else Vector3.UP
@@ -124,18 +141,16 @@ static func muzzle(root: Node, tip: Node3D) -> void:
 		_flash_mat.albedo_texture = gt
 	var n := Node3D.new()
 	tip.add_child(n)
-	for k in 3:
+	for k in 2:
 		var mi := MeshInstance3D.new()
-		var q := QuadMesh.new(); q.size = Vector2(0.16, 0.42)
-		mi.mesh = q
+		mi.mesh = _mesh("flash_long")
 		mi.material_override = _flash_mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.rotation = Vector3(PI / 2, 0, k * PI / 3.0 + randf() * 0.5)
+		mi.rotation = Vector3(PI / 2, 0, k * PI / 2.0 + randf() * 0.6)
 		mi.position.z = -0.12
 		n.add_child(mi)
 	var front := MeshInstance3D.new()
-	var fq := QuadMesh.new(); fq.size = Vector2(0.2, 0.2)
-	front.mesh = fq; front.material_override = _flash_mat
+	front.mesh = _mesh("flash_front"); front.material_override = _flash_mat
 	front.rotation.z = randf() * TAU
 	n.add_child(front)
 	var t := root.get_tree().create_timer(0.045)
@@ -157,8 +172,7 @@ static func bullet_hole(root: Node, pos: Vector3, normal: Vector3) -> void:
 	if normal.length() < 0.5:
 		return
 	var mi := MeshInstance3D.new()
-	var q := QuadMesh.new(); q.size = Vector2(0.09, 0.09)
-	mi.mesh = q
+	mi.mesh = _mesh("hole")
 	mi.material_override = _hole_mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)

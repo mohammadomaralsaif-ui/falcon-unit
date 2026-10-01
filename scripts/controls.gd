@@ -63,8 +63,31 @@ func set_touch(action: String, down: bool) -> void:
 		_touch_just[action] = Time.get_ticks_msec()
 	_touch_pressed[action] = down
 
+var _fire_blocked := false
+
+## Clear all touch / look state (scene reload, controls hidden).
+func reset() -> void:
+	touch_move = Vector2.ZERO
+	touch_look = Vector2.ZERO
+	mouse_look = Vector2.ZERO
+	_touch_pressed.clear()
+	_touch_just.clear()
+	for a in ["fire", "aim", "jump", "interact", "vehicle", "reload", "yell", "siren", "sprint"]:
+		if InputMap.has_action(a):
+			Input.action_release(a)
+
+## Ignore the fire button until it is released (e.g. the click that recaptures the mouse).
+func block_fire() -> void:
+	_fire_blocked = true
+
+func _process(_dt: float) -> void:
+	if _fire_blocked and not Input.is_action_pressed("fire") and not _touch_pressed.get("fire", false):
+		_fire_blocked = false
+
 func held(action: String) -> bool:
-	if action == "sprint" and is_touch and touch_move.y > 0.9:
+	if action == "fire" and _fire_blocked:
+		return false
+	if action == "sprint" and is_touch and touch_move.y > 0.92 and not held("fire") and not held("aim"):
 		return true
 	return Input.is_action_pressed(action) or _touch_pressed.get(action, false)
 

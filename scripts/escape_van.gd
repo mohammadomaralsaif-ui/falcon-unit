@@ -16,6 +16,7 @@ var hp := 100.0
 var disabled := false
 var smoke_t := 0.0
 var siren_cd := 0.0
+var blocked_t := 0.0
 
 func setup(_main: Node, a: Vector2i, b: Vector2i) -> void:
 	main = _main
@@ -50,10 +51,11 @@ func _place(blend: float) -> void:
 	var np := cur.origin.lerp(_lane(), blend)
 	global_transform = Transform3D(Basis(Vector3.UP, ny), np)
 
-func take_hit(dmg: float, _head := false, _from: Node3D = null) -> bool:
+func take_hit(dmg: float, head := false, _from: Node3D = null) -> bool:
 	if disabled:
 		return false
-	damage(dmg * 0.25)
+	# armoured van: no "headshots", ~25 rifle hits to wreck the engine
+	damage((dmg / 3.2 if head else dmg) * 0.12)
 	return false
 
 func damage(d: float) -> void:
@@ -89,7 +91,16 @@ func _physics_process(dt: float) -> void:
 	q.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if hit and not disabled:
-		want = minf(want, clampf((hit.position.distance_to(p) - 5.0) * 1.2, 2.0, want))
+		want = minf(want, clampf((hit.position.distance_to(p) - 5.0) * 1.2, 0.0, want))
+		# boxed in by the SUV: the driver panics and the engine gets wrecked trying to push through
+		if hit.collider == main.vehicle and speed < 1.5:
+			blocked_t += dt
+			if blocked_t > 1.2:
+				damage(dt * 22.0)
+		else:
+			blocked_t = 0.0
+	else:
+		blocked_t = 0.0
 	if (1.0 - t) * seg < 10.0:
 		want = minf(want, 10.0)
 	speed = move_toward(speed, want, dt * (12.0 if want < speed else 5.0))

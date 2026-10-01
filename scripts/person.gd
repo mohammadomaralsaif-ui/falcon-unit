@@ -66,9 +66,11 @@ func _init(_role := "swat", seed_val := 0) -> void:
 		pose.mode = "rifle"
 	else:
 		pose.mode = "none"
+	# only the skinned body casts shadows; gear, labels and the rifle don't (big draw-call saving)
 	for c in _all(model):
 		if c is GeometryInstance3D:
-			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			var skinned: bool = c is MeshInstance3D and c.get_parent() == skel
+			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if skinned else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 func _ready() -> void:
 	play("Idle")

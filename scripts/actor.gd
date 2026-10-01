@@ -40,7 +40,7 @@ func setup(_main: Node, _side: String, pos: Vector3, yaw: float, name_ := "") ->
 
 func _ready() -> void:
 	collision_layer = 2 if side == "enemy" else 16
-	collision_mask = 1 | 4 | 8
+	collision_mask = 1 | 4 | 8 | (16 if side == "enemy" else 2)
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new(); cap.radius = 0.35; cap.height = 1.8
 	cs.shape = cap; cs.position = Vector3(0, 0.9, 0)
@@ -104,7 +104,7 @@ func _eye() -> Vector3:
 	return global_position + Vector3(0, 1.6, 0)
 
 func can_see(p: Vector3) -> bool:
-	var q := PhysicsRayQueryParameters3D.create(_eye(), p, 1)
+	var q := PhysicsRayQueryParameters3D.create(_eye(), p, 1 | 8)
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
 func _face(p: Vector3, dt: float, rate := 6.0) -> float:
@@ -140,9 +140,9 @@ func _enemy_ai(dt: float) -> Vector3:
 		else:
 			target = null
 	if target and is_instance_valid(target):
-		_face(target.global_position, dt, 5.0)
+		var ang := _face(target.global_position, dt, 5.0)
 		react -= dt
-		if react <= 0.0 and fire_cd <= 0.0:
+		if react <= 0.0 and fire_cd <= 0.0 and ang < 0.45:
 			_shoot_at(target)
 			burst += 1
 			if burst >= 3:
@@ -201,6 +201,11 @@ func _shoot_at(t: Node3D) -> void:
 		if t.get("stun") and t.stun > 0.0:
 			acc = 0.75
 	var end := tp
+	# the bullet only lands if nothing solid (walls, cars) is in the way right now
+	var los := PhysicsRayQueryParameters3D.create(from, tp, 1 | 8)
+	los.exclude = [get_rid()]
+	if not get_world_3d().direct_space_state.intersect_ray(los).is_empty():
+		acc = 0.0
 	if randf() < acc and t.has_method("take_hit"):
 		var killed: bool = t.take_hit(damage if side == "enemy" else randf_range(22, 34), false, self)
 		if side == "team" and killed:
@@ -214,7 +219,6 @@ func _shoot_at(t: Node3D) -> void:
 			Fx.particles(main, hit.position, hit.normal, "spark", 5)
 			Fx.bullet_hole(main, hit.position, hit.normal)
 	Fx.tracer(main, from, end, Color(1, 0.6, 0.3) if side == "enemy" else Color(0.6, 0.8, 1))
-	Fx.flash(main, from, 2.5)
 	Fx.muzzle(main, muzzle)
 	Sfx.play_at("far", from, main.listener_pos(), 2.0)
 	main.on_gunfire(from)
