@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhak7hxqiebaq"
-path="res://.godot/imported/civilian_woman_Ch37_1002_Diffuse.webp-802069d2ba45733b1c9b6cc9fd157053.ctex"
+path.s3tc="res://.godot/imported/civilian_woman_Ch37_1002_Diffuse.webp-802069d2ba45733b1c9b6cc9fd157053.s3tc.ctex"
+path.etc2="res://.godot/imported/civilian_woman_Ch37_1002_Diffuse.webp-802069d2ba45733b1c9b6cc9fd157053.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "4f77d910fe2af8bd546dc2a119011732"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/civilian_woman_Ch37_1002_Diffuse.webp"
-dest_files=["res://.godot/imported/civilian_woman_Ch37_1002_Diffuse.webp-802069d2ba45733b1c9b6cc9fd157053.ctex"]
+dest_files=["res://.godot/imported/civilian_woman_Ch37_1002_Diffuse.webp-802069d2ba45733b1c9b6cc9fd157053.s3tc.ctex", "res://.godot/imported/civilian_woman_Ch37_1002_Diffuse.webp-802069d2ba45733b1c9b6cc9fd157053.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=512
+detect_3d/compress_to=0

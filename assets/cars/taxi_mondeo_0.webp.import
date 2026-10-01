@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0gm2stf246cj"
-path="res://.godot/imported/taxi_mondeo_0.webp-b0f50b97030c361ab164c1017a589565.ctex"
+path.s3tc="res://.godot/imported/taxi_mondeo_0.webp-b0f50b97030c361ab164c1017a589565.s3tc.ctex"
+path.etc2="res://.godot/imported/taxi_mondeo_0.webp-b0f50b97030c361ab164c1017a589565.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "fd3f30178a29310c29de79c82fa7a7f9"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cars/taxi_mondeo_0.webp"
-dest_files=["res://.godot/imported/taxi_mondeo_0.webp-b0f50b97030c361ab164c1017a589565.ctex"]
+dest_files=["res://.godot/imported/taxi_mondeo_0.webp-b0f50b97030c361ab164c1017a589565.s3tc.ctex", "res://.godot/imported/taxi_mondeo_0.webp-b0f50b97030c361ab164c1017a589565.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

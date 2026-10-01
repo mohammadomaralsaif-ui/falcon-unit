@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c36mgpypfcnmx"
-path="res://.godot/imported/sedan_mustang_5.webp-6d927168f36710a4796cd298dd589630.ctex"
+path.s3tc="res://.godot/imported/sedan_mustang_5.webp-6d927168f36710a4796cd298dd589630.s3tc.ctex"
+path.etc2="res://.godot/imported/sedan_mustang_5.webp-6d927168f36710a4796cd298dd589630.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b8944a9423ab1e23ec5058bed8887a96"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cars/sedan_mustang_5.webp"
-dest_files=["res://.godot/imported/sedan_mustang_5.webp-6d927168f36710a4796cd298dd589630.ctex"]
+dest_files=["res://.godot/imported/sedan_mustang_5.webp-6d927168f36710a4796cd298dd589630.s3tc.ctex", "res://.godot/imported/sedan_mustang_5.webp-6d927168f36710a4796cd298dd589630.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

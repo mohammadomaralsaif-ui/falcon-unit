@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dow0ttsdun2fx"
-path="res://.godot/imported/sedan_bmw_33.webp-5fd3f1e272ebb5bdca5b99f5d3e5a837.ctex"
+path.s3tc="res://.godot/imported/sedan_bmw_33.webp-5fd3f1e272ebb5bdca5b99f5d3e5a837.s3tc.ctex"
+path.etc2="res://.godot/imported/sedan_bmw_33.webp-5fd3f1e272ebb5bdca5b99f5d3e5a837.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7fd6d8be4abbd0f2bc28b6d58ea5210f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cars/sedan_bmw_33.webp"
-dest_files=["res://.godot/imported/sedan_bmw_33.webp-5fd3f1e272ebb5bdca5b99f5d3e5a837.ctex"]
+dest_files=["res://.godot/imported/sedan_bmw_33.webp-5fd3f1e272ebb5bdca5b99f5d3e5a837.s3tc.ctex", "res://.godot/imported/sedan_bmw_33.webp-5fd3f1e272ebb5bdca5b99f5d3e5a837.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

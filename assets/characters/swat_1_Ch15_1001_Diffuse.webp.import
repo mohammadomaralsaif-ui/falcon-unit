@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ci20xfn1e172b"
-path="res://.godot/imported/swat_1_Ch15_1001_Diffuse.webp-f09420dfb1a954627719634b3b0e9aeb.ctex"
+path.s3tc="res://.godot/imported/swat_1_Ch15_1001_Diffuse.webp-f09420dfb1a954627719634b3b0e9aeb.s3tc.ctex"
+path.etc2="res://.godot/imported/swat_1_Ch15_1001_Diffuse.webp-f09420dfb1a954627719634b3b0e9aeb.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "dc0826b5bee0f6e8f5b831de54abdb4b"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/swat_1_Ch15_1001_Diffuse.webp"
-dest_files=["res://.godot/imported/swat_1_Ch15_1001_Diffuse.webp-f09420dfb1a954627719634b3b0e9aeb.ctex"]
+dest_files=["res://.godot/imported/swat_1_Ch15_1001_Diffuse.webp-f09420dfb1a954627719634b3b0e9aeb.s3tc.ctex", "res://.godot/imported/swat_1_Ch15_1001_Diffuse.webp-f09420dfb1a954627719634b3b0e9aeb.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -34,4 +36,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=1024
-detect_3d/compress_to=1
+detect_3d/compress_to=0

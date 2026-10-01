@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cbwc0cihgl5td"
-path="res://.godot/imported/civilian_medic_Ch16_1002_Diffuse.webp-8c13fe862dbe3c1ff39bea30f79d7758.ctex"
+path.s3tc="res://.godot/imported/civilian_medic_Ch16_1002_Diffuse.webp-8c13fe862dbe3c1ff39bea30f79d7758.s3tc.ctex"
+path.etc2="res://.godot/imported/civilian_medic_Ch16_1002_Diffuse.webp-8c13fe862dbe3c1ff39bea30f79d7758.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "f36f4c6deea35b19e74917d1dc14b448"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/civilian_medic_Ch16_1002_Diffuse.webp"
-dest_files=["res://.godot/imported/civilian_medic_Ch16_1002_Diffuse.webp-8c13fe862dbe3c1ff39bea30f79d7758.ctex"]
+dest_files=["res://.godot/imported/civilian_medic_Ch16_1002_Diffuse.webp-8c13fe862dbe3c1ff39bea30f79d7758.s3tc.ctex", "res://.godot/imported/civilian_medic_Ch16_1002_Diffuse.webp-8c13fe862dbe3c1ff39bea30f79d7758.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=512
+detect_3d/compress_to=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://iwwd5t5wpjee"
-path="res://.godot/imported/civilian_2_Remy_Body_Diffuse.webp-ca83526038af4bf299dbfee28a855fab.ctex"
+path.s3tc="res://.godot/imported/civilian_2_Remy_Body_Diffuse.webp-ca83526038af4bf299dbfee28a855fab.s3tc.ctex"
+path.etc2="res://.godot/imported/civilian_2_Remy_Body_Diffuse.webp-ca83526038af4bf299dbfee28a855fab.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "5b368d485054462e590efcdff26c4a89"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/civilian_2_Remy_Body_Diffuse.webp"
-dest_files=["res://.godot/imported/civilian_2_Remy_Body_Diffuse.webp-ca83526038af4bf299dbfee28a855fab.ctex"]
+dest_files=["res://.godot/imported/civilian_2_Remy_Body_Diffuse.webp-ca83526038af4bf299dbfee28a855fab.s3tc.ctex", "res://.godot/imported/civilian_2_Remy_Body_Diffuse.webp-ca83526038af4bf299dbfee28a855fab.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=512
+detect_3d/compress_to=0

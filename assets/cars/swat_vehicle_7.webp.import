@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dijj7povs5uro"
-path="res://.godot/imported/swat_vehicle_7.webp-7b01ac857ea9500cc84ac5d84f70c6bc.ctex"
+path.s3tc="res://.godot/imported/swat_vehicle_7.webp-7b01ac857ea9500cc84ac5d84f70c6bc.s3tc.ctex"
+path.etc2="res://.godot/imported/swat_vehicle_7.webp-7b01ac857ea9500cc84ac5d84f70c6bc.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "de57c59da3eb0f7dde71598b33537ed7"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cars/swat_vehicle_7.webp"
-dest_files=["res://.godot/imported/swat_vehicle_7.webp-7b01ac857ea9500cc84ac5d84f70c6bc.ctex"]
+dest_files=["res://.godot/imported/swat_vehicle_7.webp-7b01ac857ea9500cc84ac5d84f70c6bc.s3tc.ctex", "res://.godot/imported/swat_vehicle_7.webp-7b01ac857ea9500cc84ac5d84f70c6bc.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

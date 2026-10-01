@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bt3fk1gkmapt1"
-path="res://.godot/imported/officer_1_Ch33_1002_Diffuse.webp-ed0fe3edef7ae573fd7835fae7091c09.ctex"
+path.s3tc="res://.godot/imported/officer_1_Ch33_1002_Diffuse.webp-ed0fe3edef7ae573fd7835fae7091c09.s3tc.ctex"
+path.etc2="res://.godot/imported/officer_1_Ch33_1002_Diffuse.webp-ed0fe3edef7ae573fd7835fae7091c09.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c9e20303d4f4e0129fda3e5045da330c"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/officer_1_Ch33_1002_Diffuse.webp"
-dest_files=["res://.godot/imported/officer_1_Ch33_1002_Diffuse.webp-ed0fe3edef7ae573fd7835fae7091c09.ctex"]
+dest_files=["res://.godot/imported/officer_1_Ch33_1002_Diffuse.webp-ed0fe3edef7ae573fd7835fae7091c09.s3tc.ctex", "res://.godot/imported/officer_1_Ch33_1002_Diffuse.webp-ed0fe3edef7ae573fd7835fae7091c09.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=512
+detect_3d/compress_to=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://deckum6dup41p"
-path="res://.godot/imported/rifle_swat_7.webp-190835be525e8d416b210ff5d0a25a46.ctex"
+path.s3tc="res://.godot/imported/rifle_swat_7.webp-190835be525e8d416b210ff5d0a25a46.s3tc.ctex"
+path.etc2="res://.godot/imported/rifle_swat_7.webp-190835be525e8d416b210ff5d0a25a46.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bb8a7a90bff844d3101e8fd06f39aaf6"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/weapons/rifle_swat_7.webp"
-dest_files=["res://.godot/imported/rifle_swat_7.webp-190835be525e8d416b210ff5d0a25a46.ctex"]
+dest_files=["res://.godot/imported/rifle_swat_7.webp-190835be525e8d416b210ff5d0a25a46.s3tc.ctex", "res://.godot/imported/rifle_swat_7.webp-190835be525e8d416b210ff5d0a25a46.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

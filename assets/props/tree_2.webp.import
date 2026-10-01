@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhea03a3d308s"
-path="res://.godot/imported/tree_2.webp-180a691fe1171198c081c263c82beacb.ctex"
+path.s3tc="res://.godot/imported/tree_2.webp-180a691fe1171198c081c263c82beacb.s3tc.ctex"
+path.etc2="res://.godot/imported/tree_2.webp-180a691fe1171198c081c263c82beacb.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e09c1cd5fc9482a9bd7f95216a61235a"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/props/tree_2.webp"
-dest_files=["res://.godot/imported/tree_2.webp-180a691fe1171198c081c263c82beacb.ctex"]
+dest_files=["res://.godot/imported/tree_2.webp-180a691fe1171198c081c263c82beacb.s3tc.ctex", "res://.godot/imported/tree_2.webp-180a691fe1171198c081c263c82beacb.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

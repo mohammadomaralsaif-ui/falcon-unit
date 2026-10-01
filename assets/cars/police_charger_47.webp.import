@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cr3peo8k8nyy4"
-path="res://.godot/imported/police_charger_47.webp-7b5d3b6ba8fb39ca8ecd2463d63912e9.ctex"
+path.s3tc="res://.godot/imported/police_charger_47.webp-7b5d3b6ba8fb39ca8ecd2463d63912e9.s3tc.ctex"
+path.etc2="res://.godot/imported/police_charger_47.webp-7b5d3b6ba8fb39ca8ecd2463d63912e9.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "2210a9c04c48c02e6318463cf19bb613"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cars/police_charger_47.webp"
-dest_files=["res://.godot/imported/police_charger_47.webp-7b5d3b6ba8fb39ca8ecd2463d63912e9.ctex"]
+dest_files=["res://.godot/imported/police_charger_47.webp-7b5d3b6ba8fb39ca8ecd2463d63912e9.s3tc.ctex", "res://.godot/imported/police_charger_47.webp-7b5d3b6ba8fb39ca8ecd2463d63912e9.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

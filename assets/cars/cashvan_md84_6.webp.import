@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://yl1qq4j7vetl"
-path="res://.godot/imported/cashvan_md84_6.webp-aa3dcea18a363c3c5b17bbf1c23cac50.ctex"
+path.s3tc="res://.godot/imported/cashvan_md84_6.webp-aa3dcea18a363c3c5b17bbf1c23cac50.s3tc.ctex"
+path.etc2="res://.godot/imported/cashvan_md84_6.webp-aa3dcea18a363c3c5b17bbf1c23cac50.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "6ecd9aeb03159bd5c044efc9419e7ff1"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/cars/cashvan_md84_6.webp"
-dest_files=["res://.godot/imported/cashvan_md84_6.webp-aa3dcea18a363c3c5b17bbf1c23cac50.ctex"]
+dest_files=["res://.godot/imported/cashvan_md84_6.webp-aa3dcea18a363c3c5b17bbf1c23cac50.s3tc.ctex", "res://.godot/imported/cashvan_md84_6.webp-aa3dcea18a363c3c5b17bbf1c23cac50.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=1024
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0

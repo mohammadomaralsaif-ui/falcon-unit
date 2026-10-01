@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://d3lhuwonug04"
-path="res://.godot/imported/swat_2_Soldier_head_diffuse.webp-5f6d839ee9956dcecdef8106f28bb165.ctex"
+path.s3tc="res://.godot/imported/swat_2_Soldier_head_diffuse.webp-5f6d839ee9956dcecdef8106f28bb165.s3tc.ctex"
+path.etc2="res://.godot/imported/swat_2_Soldier_head_diffuse.webp-5f6d839ee9956dcecdef8106f28bb165.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b4230fde37d149689f6a282720575d72"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/swat_2_Soldier_head_diffuse.webp"
-dest_files=["res://.godot/imported/swat_2_Soldier_head_diffuse.webp-5f6d839ee9956dcecdef8106f28bb165.ctex"]
+dest_files=["res://.godot/imported/swat_2_Soldier_head_diffuse.webp-5f6d839ee9956dcecdef8106f28bb165.s3tc.ctex", "res://.godot/imported/swat_2_Soldier_head_diffuse.webp-5f6d839ee9956dcecdef8106f28bb165.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -34,4 +36,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=1024
-detect_3d/compress_to=1
+detect_3d/compress_to=0

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://4tn11bajrc1"
-path="res://.godot/imported/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp-2182578e5202c7b64b4a215b6948782c.ctex"
+path.s3tc="res://.godot/imported/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp-2182578e5202c7b64b4a215b6948782c.s3tc.ctex"
+path.etc2="res://.godot/imported/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp-2182578e5202c7b64b4a215b6948782c.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b64f812fc1dcaec6f736ead959e1bc34"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/characters/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp"
-dest_files=["res://.godot/imported/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp-2182578e5202c7b64b4a215b6948782c.ctex"]
+dest_files=["res://.godot/imported/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp-2182578e5202c7b64b4a215b6948782c.s3tc.ctex", "res://.godot/imported/swat_1_ao_met_rough_Ch15_1001_Glossiness.webp-2182578e5202c7b64b4a215b6948782c.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/hdr_compression=1
@@ -33,5 +35,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=512
-detect_3d/compress_to=1
+process/size_limit=256
+detect_3d/compress_to=0
