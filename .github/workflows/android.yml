@@ -26,6 +26,8 @@ jobs:
           SDK="${ANDROID_HOME:-/usr/lib/android-sdk}"
           [ -d "$SDK" ] || SDK=/usr/lib/android-sdk
           echo "Android SDK: $SDK"
+          JDK="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(which java)")")")}"
+          echo "Java: $JDK"
           KS=/root/debug.keystore
           if [ ! -f "$KS" ]; then
             KS="$PWD/falcon.keystore"
@@ -33,7 +35,7 @@ jobs:
               -alias androiddebugkey -dname "CN=Falcon Unit,O=Falcon,C=JO" -keyalg RSA -keysize 2048 -validity 10000
           fi
           for f in editor_settings-4.tres editor_settings-4.3.tres; do
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$SDK" "$KS" > ~/.config/godot/$f
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$SDK" "$JDK" "$KS" > ~/.config/godot/$f
           done
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$KS" >> $GITHUB_ENV
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey" >> $GITHUB_ENV
