@@ -1,12 +1,16 @@
 extends StaticBody3D
-## Bank hostage: kneeling civilian with hands behind the head. Press E nearby to free them.
+## Bank hostage: kneels with hands on head. Press E to free them, then they follow the
+## player's exact path (breadcrumb trail) out of the building to the ambulance.
 
-const Humanoid = preload("res://scripts/humanoid.gd")
+const Person = preload("res://scripts/person.gd")
 
 var main: Node
 var dead := false
-var rescued := false
+var freed := false     # following the player
+var rescued := false   # out of the building, safe
 var model: Node3D
+var trail_idx := 0
+var gone := false
 
 func _ready() -> void:
 	collision_layer = 32
@@ -15,72 +19,73 @@ func _ready() -> void:
 	var cap := CapsuleShape3D.new(); cap.radius = 0.35; cap.height = 1.3
 	cs.shape = cap; cs.position = Vector3(0, 0.65, 0)
 	add_child(cs)
-	model = Humanoid.civilian()
+	model = Person.new("hostage")
 	add_child(model)
-	_pose()
-
-func _pose() -> void:
-	var sk := Humanoid.skeleton(model)
-	if not sk:
-		return
-	# kneel: lower the whole body and fold the legs; hands on head
-	_rot_global(sk, "LeftUpLeg", Vector3(1, 0, 0), -1.5)
-	_rot_global(sk, "RightUpLeg", Vector3(1, 0, 0), -1.5)
-	_rot_global(sk, "LeftLeg", Vector3(1, 0, 0), 1.5)
-	_rot_global(sk, "RightLeg", Vector3(1, 0, 0), 1.5)
-	model.position.y = -0.45
-	_arm_up(sk, "Left")
-	_arm_up(sk, "Right")
-
-func _bone(sk: Skeleton3D, n: String) -> int:
-	for i in sk.get_bone_count():
-		var bn := sk.get_bone_name(i)
-		if bn == n or bn.ends_with(":" + n) or bn.ends_with("_" + n):
-			return i
-	return -1
-
-## Rotate a bone in skeleton space (axis given in skeleton/global space) about its rest pose.
-func _rot_global(sk: Skeleton3D, n: String, axis: Vector3, ang: float) -> void:
-	var b := _bone(sk, n)
-	if b < 0:
-		return
-	var p := sk.get_bone_parent(b)
-	var parent_g := sk.get_bone_global_pose(p).basis if p >= 0 else Basis()
-	var g := sk.get_bone_global_pose(b).basis
-	var ng := Basis(axis.normalized(), ang) * g
-	sk.set_bone_pose_rotation(b, (parent_g.inverse() * ng).get_rotation_quaternion())
-
-func _arm_up(sk: Skeleton3D, side: String) -> void:
-	var arm := _bone(sk, side + "Arm")
-	var fore := _bone(sk, side + "ForeArm")
-	if arm < 0 or fore < 0:
-		return
-	var a_pos := sk.get_bone_global_pose(arm).origin
-	var f_pos := sk.get_bone_global_pose(fore).origin
-	var out := (f_pos - a_pos)
-	var sgn := 1.0 if out.x > 0 else -1.0
-	# upper arm: raise slightly and swing back so the elbow points out to the side
-	_rot_global(sk, side + "Arm", Vector3(0, 0, 1), sgn * 0.5)
-	# forearm folds up toward the head
-	_rot_global(sk, side + "ForeArm", Vector3(0, 1, 0), sgn * 2.4)
+	model.set_mode("kneel_head")
 
 func take_hit(_dmg: float, _head := false, from: Node3D = null) -> bool:
 	if dead or rescued:
 		return false
 	dead = true
+	freed = false
+	model.set_mode("none")
+	model.anim.pause()
 	var tw := create_tween()
 	tw.tween_property(model, "rotation:x", -PI / 2, 0.5)
+	tw.parallel().tween_property(model, "position:y", 0.15, 0.5)
 	if main:
 		main.on_hostage_dead(self, from)
 	return true
 
-func rescue() -> void:
-	if dead or rescued:
+func free_hostage(trail_size: int) -> void:
+	if dead or freed or rescued:
 		return
-	rescued = true
+	freed = true
+	model.set_mode("none")
+	model.play("Idle")
+	trail_idx = maxi(trail_size - 1, 0)
+
+func _physics_process(dt: float) -> void:
+	if dead or gone or not main:
+		return
+	var goal := Vector3.INF
+	var spd := 0.0
+	if rescued:
+		goal = main.city.cordon_point + Vector3(13, 0, 4)
+		spd = 3.0
+	elif freed:
+		var trail: Array = main.trail
+		var pl: Vector3 = main.player.global_position
+		if global_position.distance_to(pl) > 2.2 and trail.size() > 0:
+			trail_idx = mini(trail_idx, trail.size() - 1)
+			goal = trail[trail_idx]
+			if Vector2(goal.x - global_position.x, goal.z - global_position.z).length() < 0.5 and trail_idx < trail.size() - 1:
+				trail_idx += 1
+				goal = trail[trail_idx]
+			spd = 4.6 if global_position.distance_to(pl) > 5.0 else 2.2
+		# out of the bank?
+		if global_position.z > main.city.door_pos.z + 3.5:
+			rescued = true
+			freed = false
+			main.on_hostage_saved(self)
+	if goal == Vector3.INF:
+		model.play("Idle")
+		return
+	var d := goal - global_position
+	d.y = 0
+	if d.length() < 0.6:
+		model.play("Idle")
+		if rescued:
+			gone = true
+			var tw := create_tween()
+			tw.tween_interval(1.5)
+			tw.tween_callback(_vanish)
+		return
+	var step := d.normalized() * minf(spd * dt, d.length())
+	global_position += step
+	rotation.y = lerp_angle(rotation.y, atan2(-d.x, -d.z), 1.0 - exp(-dt * 10.0))
+	model.play("Run" if spd > 3.5 else "Walk", spd / (5.5 if spd > 3.5 else 1.6))
+
+func _vanish() -> void:
+	visible = false
 	collision_layer = 0
-	var tw := create_tween()
-	tw.tween_property(model, "position:y", 0.0, 0.4)
-	tw.tween_interval(1.0)
-	tw.tween_property(model, "scale", Vector3(0.01, 0.01, 0.01), 0.5)
-	tw.tween_callback(func(): visible = false)

@@ -1,14 +1,13 @@
 extends CharacterBody3D
 ## AI soldier used for both gunmen (side = "enemy") and SWAT teammates (side = "team").
 
-const Humanoid = preload("res://scripts/humanoid.gd")
+const Person = preload("res://scripts/person.gd")
 const Fx = preload("res://scripts/fx.gd")
 
 var main: Node
 var side := "enemy"
 var display_name := ""
 var model: Node3D
-var anim: AnimationPlayer
 var gun: Node3D
 var muzzle: Marker3D
 var hp := 100.0
@@ -46,16 +45,10 @@ func _ready() -> void:
 	var cap := CapsuleShape3D.new(); cap.radius = 0.35; cap.height = 1.8
 	cs.shape = cap; cs.position = Vector3(0, 0.9, 0)
 	add_child(cs)
-	var tint: Color = Color(0.75, 0.8, 0.92) if side == "team" else [Color(0.42, 0.36, 0.3), Color(0.35, 0.35, 0.33), Color(0.3, 0.29, 0.27), Color(0.47, 0.41, 0.33)].pick_random()
-	model = Humanoid.soldier(tint)
+	model = Person.new("swat" if side == "team" else "robber")
 	add_child(model)
-	anim = Humanoid.anim(model)
-	if anim:
-		anim.seek(randf() * 2.0)
-	gun = Humanoid.rifle("m4" if side == "team" else "ak")
-	gun.position = Vector3(0.16, 1.22, -0.32)
-	add_child(gun)
-	muzzle = gun.get_node("Muzzle")
+	gun = model.gun
+	muzzle = model.muzzle
 	if side == "team":
 		var tag := Label3D.new()
 		tag.text = "▼ " + display_name
@@ -79,7 +72,6 @@ func _physics_process(dt: float) -> void:
 		velocity.y = 0.0
 	var move := Vector3.ZERO
 	if surrendered:
-		_play("TPose")
 		velocity.x = 0; velocity.z = 0
 		move_and_slide()
 		return
@@ -102,12 +94,11 @@ func _physics_process(dt: float) -> void:
 		var tp := target.global_position + Vector3(0, 1.3, 0)
 		var d := tp - (global_position + Vector3(0, 1.3, 0))
 		aim_pitch = atan2(d.y, Vector2(d.x, d.z).length())
-	gun.rotation.x = lerpf(gun.rotation.x, aim_pitch if target else -0.5, 1.0 - exp(-dt * 8.0))
+	model.set_aim(lerpf(model.aim_pitch, aim_pitch if target else -0.35, 1.0 - exp(-dt * 8.0)))
 
 func _play(n: String) -> void:
-	if anim and n != cur_anim:
-		anim.play(n, 0.25)
-		cur_anim = n
+	var hs := Vector2(velocity.x, velocity.z).length()
+	model.play(n, clampf(hs / (5.5 if n == "Run" else 1.6), 0.7, 1.5) if n != "Idle" else 1.0)
 
 func _eye() -> Vector3:
 	return global_position + Vector3(0, 1.6, 0)
@@ -255,15 +246,15 @@ func take_hit(dmg: float, head := false, from: Node3D = null) -> bool:
 func surrender() -> void:
 	surrendered = true
 	target = null
-	gun.visible = false
+	model.set_mode("hands_up")
 
 func die(head := false, from: Node3D = null) -> void:
 	dead = true
 	for c in get_children():
 		if c is CollisionShape3D:
 			c.set_deferred("disabled", true)
-	if anim:
-		anim.pause()
+	model.anim.pause()
+	model.set_mode("none")
 	gun.visible = false
 	var tw := create_tween()
 	tw.tween_property(model, "rotation:x", -PI / 2 * (1 if randf() < 0.6 else -1), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)

@@ -1,7 +1,7 @@
 extends CharacterBody3D
 ## Third-person police officer: over-the-shoulder camera, sprint, aim, shoot, reload.
 
-const Humanoid = preload("res://scripts/humanoid.gd")
+const Person = preload("res://scripts/person.gd")
 const Fx = preload("res://scripts/fx.gd")
 
 signal shot_fired(pos: Vector3)
@@ -36,13 +36,11 @@ func _ready() -> void:
 	var cap := CapsuleShape3D.new(); cap.radius = 0.35; cap.height = 1.8
 	cs.shape = cap; cs.position = Vector3(0, 0.9, 0)
 	add_child(cs)
-	model = Humanoid.soldier(Color(0.75, 0.8, 0.92))
+	model = Person.new("swat", 1)
 	add_child(model)
-	anim = Humanoid.anim(model)
-	gun = Humanoid.rifle("m4")
-	gun.position = Vector3(0.16, 1.22, -0.32)
-	add_child(gun)
-	muzzle = gun.get_node("Muzzle")
+	anim = model.anim
+	gun = model.gun
+	muzzle = model.muzzle
 	pivot = Node3D.new(); pivot.position = Vector3(0.55, 1.6, 0)
 	add_child(pivot)
 	spring = SpringArm3D.new(); spring.spring_length = 2.8; spring.margin = 0.2
@@ -99,13 +97,9 @@ func _physics_process(dt: float) -> void:
 		want = "Run"
 	elif hs > 0.4:
 		want = "Walk"
-	if anim and want != cur_anim:
-		anim.play(want, 0.25)
-		cur_anim = want
-	if anim:
-		anim.speed_scale = clampf(hs / (5.5 if want == "Run" else 1.6), 0.7, 1.6) if want != "Idle" else 1.0
+	model.play(want, clampf(hs / (5.5 if want == "Run" else 1.6), 0.7, 1.6) if want != "Idle" else 1.0)
 	# weapon
-	gun.rotation.x = lerpf(gun.rotation.x, pitch * 0.8 if aim > 0.2 or fire_cd > -0.8 else -0.5, 1.0 - exp(-dt * 12.0))
+	model.set_aim(lerpf(model.aim_pitch, pitch * 0.8 if aim > 0.2 or fire_cd > -0.8 else -0.35, 1.0 - exp(-dt * 12.0)))
 	if reload_t > 0.0:
 		reload_t -= dt
 		gun.rotation.z = sin(reload_t * 4.0) * 0.5
@@ -167,8 +161,8 @@ func take_hit(dmg: float, _head := false, from: Node3D = null) -> bool:
 	if hp <= 0.0:
 		hp = 0.0
 		alive = false
-		if anim:
-			anim.stop()
+		model.anim.pause()
+		model.set_mode("none")
 		var tw := create_tween()
 		tw.tween_property(model, "rotation:x", -PI / 2, 0.6)
 		if main:

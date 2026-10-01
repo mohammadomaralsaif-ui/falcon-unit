@@ -205,7 +205,7 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 	var base_kind := "sedan"
 	if kind == "suv" or kind == "swat":
 		base_kind = "suv"
-	elif kind == "ambulance":
+	elif kind == "ambulance" or kind == "cashvan":
 		base_kind = "van"
 	var s: Dictionary = SPECS[base_kind]
 	var L: float = s.L; var W: float = s.W; var hl := L * 0.5; var r: float = s.r; var wz: float = s.wz
@@ -216,6 +216,8 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 		color = Color(0.95, 0.95, 0.94)
 	elif kind == "swat":
 		color = Color(0.07, 0.11, 0.2)
+	elif kind == "cashvan":
+		color = Color(0.22, 0.27, 0.25)
 	var paint := mat("paint_%s" % color.to_html(), color, 0.45, 0.32, true)
 	var glass := mat("glass", Color(0.04, 0.06, 0.08), 0.6, 0.05, true)
 	var dark := mat("dark", Color(0.07, 0.07, 0.08), 0.2, 0.6)
@@ -312,6 +314,16 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 		_box(root, Vector3(0.52, 0.13, 0.27), Vector3(-0.3, bar_y + 0.08, (s.ws1 + s.re) * 0.5 + 0.3), red)
 		_box(root, Vector3(0.52, 0.13, 0.27), Vector3(0.3, bar_y + 0.08, (s.ws1 + s.re) * 0.5 + 0.3), blue)
 		fl = {"red": red, "blue": blue}
+	if kind == "cashvan":
+		for sd in [-1.0, 1.0]:
+			var t := Label3D.new()
+			t.text = "مصرف الشرق · نقل أموال"
+			t.font = load("res://assets/fonts/Tajawal-Bold.ttf")
+			t.font_size = 64; t.pixel_size = 0.006; t.outline_size = 0
+			t.modulate = Color(0.95, 0.85, 0.5)
+			t.position = Vector3(sd * (W * 0.5 + 0.03), s.belt + 0.25, -0.3)
+			t.rotation.y = sd * PI / 2
+			root.add_child(t)
 	if kind == "swat":
 		for i in 5:
 			_box(root, Vector3(0.06, 0.5, 0.06), Vector3(-0.6 + i * 0.3, base + 0.35, hl + 0.2), dark)

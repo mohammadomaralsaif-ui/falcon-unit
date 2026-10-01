@@ -135,7 +135,7 @@ func _build_hud() -> void:
 	op.add_child(objectives)
 	timer_lbl = _label("", 22, Color(1, 1, 1, 0.85))
 	timer_lbl.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	timer_lbl.position = Vector2(-60, 14); timer_lbl.size = Vector2(120, 30)
+	timer_lbl.position = Vector2(-160, 14); timer_lbl.size = Vector2(320, 30)
 	root.add_child(timer_lbl)
 	# minimap (top left)
 	minimap = Control.new()
@@ -324,7 +324,7 @@ func _process(dt: float) -> void:
 	var low: float = 1.0 - pl.hp / 100.0 if pl else 0.0
 	vignette.modulate.a = maxf(vig_a, low * 0.7 if low > 0.4 else 0.0)
 	var in_car: bool = main.in_vehicle
-	var playing: bool = main.phase != "brief" and main.phase != "result"
+	var playing: bool = not (main.phase in ["brief", "result", "intro"])
 	crosshair.visible = playing and not in_car and pl.alive
 	crosshair.queue_redraw()
 	hp_bar.get_parent().visible = playing and not in_car
@@ -336,9 +336,9 @@ func _process(dt: float) -> void:
 		speed_lbl.text = "%d كم/س" % int(main.vehicle.speed_kmh)
 	objectives.get_parent().visible = playing
 	minimap.visible = playing
-	timer_lbl.visible = playing and main.mission_time > 0.0
-	var t: float = main.mission_time
-	timer_lbl.text = "%02d:%02d" % [int(t) / 60, int(t) % 60]
+	timer_lbl.visible = playing
+	timer_lbl.text = main.timer_text()
+	timer_lbl.add_theme_color_override("font_color", Color(1, 0.35, 0.3) if main.timer_urgent() and fmod(Time.get_ticks_msec() * 0.002, 1.0) < 0.6 else Color(1, 1, 1, 0.9))
 	minimap.queue_redraw()
 	# waypoint projection
 	var cam := get_viewport().get_camera_3d()

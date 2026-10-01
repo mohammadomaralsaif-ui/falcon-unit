@@ -64,23 +64,51 @@ static func bone_named(sk: Skeleton3D, part: String) -> int:
 static func rifle(kind := "m4") -> Node3D:
 	## Built facing -Z, origin at the pistol grip.
 	var g := Node3D.new()
-	var metal := StandardMaterial3D.new(); metal.albedo_color = Color(0.09, 0.09, 0.1); metal.metallic = 0.75; metal.roughness = 0.38
-	var poly := StandardMaterial3D.new(); poly.albedo_color = Color(0.12, 0.12, 0.13) if kind == "m4" else Color(0.36, 0.2, 0.09); poly.roughness = 0.6
-	var parts := [
-		[Vector3(0.058, 0.075, 0.32), Vector3(0, 0.04, -0.06), metal],
-		[Vector3(0.05, 0.05, 0.2), Vector3(0, -0.01, -0.02), metal],
-		[Vector3(0.065, 0.065, 0.3), Vector3(0, 0.035, -0.36), poly],
-		[Vector3(0.02, 0.02, 0.2), Vector3(0, 0.04, -0.6), metal],
-		[Vector3(0.045, 0.09, 0.22), Vector3(0, 0.0, 0.2), poly],
-		[Vector3(0.035, 0.1, 0.04), Vector3(0, -0.07, 0.04), poly],
-		[Vector3(0.04, 0.16, 0.07), Vector3(0, -0.1, -0.12), metal],
-		[Vector3(0.035, 0.045, 0.08), Vector3(0, 0.1, -0.08), metal],
-	]
+	var metal := StandardMaterial3D.new(); metal.albedo_color = Color(0.07, 0.07, 0.08); metal.metallic = 0.8; metal.roughness = 0.35
+	var poly := StandardMaterial3D.new(); poly.roughness = 0.65
+	poly.albedo_color = Color(0.1, 0.1, 0.11) if kind == "m4" else Color(0.38, 0.2, 0.08)
+	var parts := []
+	if kind == "m4":
+		parts = [
+			[Vector3(0.05, 0.07, 0.26), Vector3(0, 0.045, -0.06), metal],      # upper receiver
+			[Vector3(0.046, 0.05, 0.2), Vector3(0, 0.0, -0.03), metal],        # lower receiver
+			[Vector3(0.06, 0.06, 0.3), Vector3(0, 0.045, -0.34), poly],        # handguard
+			[Vector3(0.012, 0.012, 0.012), Vector3(0, 0.08, -0.34), metal],    # rail bumps
+			[Vector3(0.018, 0.018, 0.16), Vector3(0, 0.045, -0.56), metal],    # barrel
+			[Vector3(0.028, 0.028, 0.05), Vector3(0, 0.045, -0.655), metal],   # muzzle device
+			[Vector3(0.035, 0.1, 0.045), Vector3(0, -0.06, 0.05), poly],       # grip
+			[Vector3(0.032, 0.14, 0.06), Vector3(0, -0.08, -0.1), metal],      # magazine
+			[Vector3(0.045, 0.07, 0.17), Vector3(0, 0.02, 0.2), poly],         # stock
+			[Vector3(0.05, 0.09, 0.03), Vector3(0, 0.0, 0.29), poly],          # butt pad
+			[Vector3(0.012, 0.03, 0.14), Vector3(0, 0.035, 0.08), metal],      # buffer tube
+			[Vector3(0.04, 0.045, 0.1), Vector3(0, 0.105, -0.08), metal],      # red-dot body
+			[Vector3(0.035, 0.035, 0.01), Vector3(0, 0.11, -0.135), metal],
+			[Vector3(0.02, 0.04, 0.02), Vector3(0, 0.09, -0.45), metal],       # front sight
+		]
+	else:
+		parts = [
+			[Vector3(0.05, 0.075, 0.3), Vector3(0, 0.03, -0.06), metal],
+			[Vector3(0.055, 0.055, 0.22), Vector3(0, 0.035, -0.32), poly],     # wooden handguard
+			[Vector3(0.018, 0.018, 0.22), Vector3(0, 0.05, -0.52), metal],
+			[Vector3(0.012, 0.012, 0.18), Vector3(0, 0.08, -0.4), metal],      # gas tube
+			[Vector3(0.02, 0.05, 0.02), Vector3(0, 0.075, -0.62), metal],
+			[Vector3(0.035, 0.1, 0.045), Vector3(0, -0.06, 0.05), metal],
+			[Vector3(0.05, 0.08, 0.26), Vector3(0, 0.0, 0.22), poly],          # wooden stock
+		]
 	for pt in parts:
 		var mi := MeshInstance3D.new()
 		var bm := BoxMesh.new(); bm.size = pt[0]
 		mi.mesh = bm; mi.position = pt[1]; mi.material_override = pt[2]
 		g.add_child(mi)
-	var tip := Marker3D.new(); tip.name = "Muzzle"; tip.position = Vector3(0, 0.04, -0.72)
+	if kind == "ak":
+		# curved magazine: three tilted segments
+		for i in 3:
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new(); bm.size = Vector3(0.034, 0.075, 0.06)
+			mi.mesh = bm; mi.material_override = metal
+			mi.position = Vector3(0, -0.035 - i * 0.065, -0.11 - i * i * 0.018)
+			mi.rotation.x = -0.25 * i
+			g.add_child(mi)
+	var tip := Marker3D.new(); tip.name = "Muzzle"; tip.position = Vector3(0, 0.045, -0.7)
 	g.add_child(tip)
 	return g
