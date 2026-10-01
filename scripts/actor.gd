@@ -27,6 +27,7 @@ var home_yaw := 0.0
 var follow_offset := Vector3.ZERO
 var team_index := 0
 var hold_pos := Vector3.INF
+var task_goal := Vector3.INF      # a place this teammate was told to go (e.g. plant the breaching charge)
 var cur_anim := ""
 var accuracy := 0.42
 var damage := 10.0
@@ -63,6 +64,8 @@ func setup(_main: Node, _side: String, pos: Vector3, yaw: float, name_ := "") ->
 	hunter = randf() < 0.45
 
 func _ready() -> void:
+	floor_max_angle = deg_to_rad(58.0)    # walk up curbs and door steps
+	floor_snap_length = 0.3
 	collision_layer = 2 if side == "enemy" else 16
 	collision_mask = 1 | 4 | 8 | (16 if side == "enemy" else 2)
 	var cs := CollisionShape3D.new()
@@ -248,7 +251,27 @@ func _team_ai(dt: float) -> Vector3:
 	var low := false
 	# breach drill: when the leader is at the door, the team stacks up on both sides of it
 	var door: Vector3 = main.city.door_pos
-	if main.phase in ["staging", "breach"] and pl.global_position.distance_to(door) < 9.0:
+	if task_goal != Vector3.INF:
+		goal = task_goal
+	elif main.team_order == "assault" and main.phase == "assault":
+		# "اقتحموا": push in and clear on their own — nearest gunman, then suspects to cuff, then hostages
+		var bd2 := 1e9
+		var found := false
+		for e in main.enemies:
+			if e.dead or e.cuffed:
+				continue
+			var d2: float = global_position.distance_to(e.global_position) + (0.0 if not e.surrendered else 30.0)
+			if d2 < bd2:
+				bd2 = d2; goal = e.global_position; found = true
+		if not found:
+			for h in main.hostages:
+				if not h.dead and not h.freed and not h.rescued:
+					var d3: float = global_position.distance_to(h.global_position)
+					if d3 < bd2:
+						bd2 = d3; goal = h.global_position; found = true
+		if found and target and bd2 < 7.0:
+			goal = global_position       # close enough and shooting: hold and fire
+	elif main.phase in ["staging", "breach"] and (pl.global_position.distance_to(door) < 9.0 or main.breacher != null):
 		var sd := -1.0 if team_index % 2 == 0 else 1.0
 		goal = door + Vector3(sd * (1.9 + (team_index / 2) * 0.8), 0, 1.1 + (team_index / 2) * 0.7)
 		low = true
@@ -275,7 +298,7 @@ func _team_ai(dt: float) -> Vector3:
 	if target and is_instance_valid(target):
 		var ang := _face(target.global_position, dt, 7.0)
 		if fire_cd <= 0.0 and ang < 0.3:
-			fire_cd = randf_range(0.25, 0.5)
+			fire_cd = randf_range(0.35, 0.75)
 			_shoot_at(target)
 	elif move.length() > 0.3:
 		_face(global_position + move, dt, 8.0)
@@ -289,7 +312,7 @@ func _shoot_at(t: Node3D) -> void:
 	var dist := from.distance_to(tp)
 	var acc: float = accuracy * clampf(1.15 - dist / 45.0, 0.3, 1.1)
 	if side == "team":
-		acc = 0.35 * clampf(1.2 - dist / 45.0, 0.35, 1.0)
+		acc = 0.28 * clampf(1.2 - dist / 45.0, 0.35, 1.0)
 		if t.get("stun") and t.stun > 0.0:
 			acc = 0.75
 	elif t == main.player and main.player.crouch_k > 0.5:

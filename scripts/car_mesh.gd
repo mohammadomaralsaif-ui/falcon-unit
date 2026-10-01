@@ -217,6 +217,8 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 	if real:
 		real.set_meta("flashers", {})
 		real.set_meta("spec", s)
+		if kind == "sedan":
+			real.set_meta("paint", color)   # baked models carry a paint mask in vertex alpha
 		return real
 	var L: float = s.L; var W: float = s.W; var hl := L * 0.5; var r: float = s.r; var wz: float = s.wz
 	var root := Node3D.new()

@@ -11,6 +11,7 @@ var grip: Node3D        # right hand target
 var guard: Node3D       # left hand target
 var body: Node3D        # the Person node (faces -Z, metres, Y up)
 var _b := {}
+var point_at := Vector3.ZERO   # world position the "point" gesture aims at
 var crouch := 0.0       # 0..1: lower the hips and bend the legs (feet stay planted)
 var K := Transform3D.IDENTITY   # "civilian space" (Y up, +Z forward, metres) -> skeleton space
 
@@ -55,6 +56,29 @@ func _process_modification() -> void:
 			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
 			_ik("Right", _toS(h + Vector3(-0.22, 0.32, 0.05)), Vector3(-1, 0, -0.3))
 			_ik("Left", _toS(h + Vector3(0.22, 0.32, 0.05)), Vector3(1, 0, -0.3))
+		"talk":
+			# explaining with the hands: both forearms up, moving with the speech rhythm
+			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
+			var t := Time.get_ticks_msec() * 0.001
+			_ik("Right", _toS(h + Vector3(-0.2 - 0.06 * sin(t * 2.1), -0.42 + 0.09 * sin(t * 3.3), 0.34 + 0.05 * sin(t * 1.7))), Vector3(-0.8, -1, -0.2))
+			_ik("Left", _toS(h + Vector3(0.18 + 0.04 * sin(t * 1.6 + 1.0), -0.5 + 0.05 * sin(t * 2.7 + 2.0), 0.3)), Vector3(0.8, -1, -0.2))
+		"point":
+			# arm stretched toward a place in the world (the bank door, the yard…)
+			var hw := sk.get_bone_global_pose(_bone("RightArm")).origin
+			var tgt := inv * point_at
+			var dir := (tgt - hw).normalized()
+			_ik("Right", hw + dir * 0.62 + _dirS(Vector3(0, 1, 0)) * 0.05, Vector3(-0.3, -1, 0))
+		"salute":
+			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
+			_ik("Right", _toS(h + Vector3(-0.14, 0.07, 0.1)), Vector3(-1, -0.2, -0.1))
+		"radio", "mic":
+			# handset / microphone held up near the mouth
+			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
+			_ik("Right", _toS(h + Vector3(-0.07, -0.13, 0.17)), Vector3(-0.7, -1, 0))
+		"camera":
+			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
+			_ik("Right", _toS(h + Vector3(-0.12, -0.12, 0.3)), Vector3(-0.8, -0.8, 0))
+			_ik("Left", _toS(h + Vector3(0.1, -0.2, 0.34)), Vector3(0.8, -0.8, 0))
 		"kneel_head", "kneel_back":
 			_kneel(sk)
 			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)

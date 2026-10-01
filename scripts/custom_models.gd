@@ -79,6 +79,10 @@ static func car(kind: String, length: float, seed_val: int) -> Node3D:
 	var inst: Node3D = ps.instantiate()
 	for ap in inst.find_children("*", "AnimationPlayer", true, false):
 		ap.queue_free()
+	# lights and cameras baked into the model file (glTF point lights have unlimited range) must go
+	for extra in inst.find_children("*", "Light3D", true, false) + inst.find_children("*", "Camera3D", true, false):
+		extra.get_parent().remove_child(extra)
+		extra.free()
 	# Sketchfab exports often carry a big shadow plane and rigged door helpers: hide them
 	var keep_skin := _opt(path, "keep_skinned")
 	for mi in inst.find_children("*", "MeshInstance3D", true, false):

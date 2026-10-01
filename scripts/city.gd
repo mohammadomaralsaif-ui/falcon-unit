@@ -3,6 +3,7 @@ extends Node3D
 ## street lamps, trees, parked cars, hills covered in houses, and the target bank compound.
 
 const CarMesh = preload("res://scripts/car_mesh.gd")
+const Settings = preload("res://scripts/settings.gd")
 const CustomModels = preload("res://scripts/custom_models.gd")
 
 const N := 5            # blocks per side
@@ -53,6 +54,7 @@ var font: Font
 var _mats := {}
 
 func build(seed_val := 7, m: Dictionary = {}) -> void:
+	Settings.load_all()
 	rng.seed = seed_val
 	mission = m
 	if m.has("block"):
@@ -76,6 +78,8 @@ func build(seed_val := 7, m: Dictionary = {}) -> void:
 	spawn_point = Transform3D(Basis(Vector3.UP, PI), Vector3(sx + 2.2, 0.8, sz))
 	_hills()
 	_parked_cars()
+	build_hq()
+	_build_trees()
 
 func road_center(k: int) -> float:
 	return k * P + R * 0.5
@@ -243,6 +247,10 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0, 0.3, 0.1); m.emission_enabled = true; m.emission = Color(0.1, 1, 0.4); m.emission_energy_multiplier = 3.0
 		"dish":
 			m.albedo_color = Color(0.85, 0.85, 0.83); m.roughness = 0.4; m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		"litwindow":
+			m.albedo_color = Color(0.9, 0.75, 0.45); m.emission_enabled = true; m.emission = Color(1.0, 0.8, 0.45); m.emission_energy_multiplier = 1.6
+		"cone":
+			m.albedo_color = Color(0.95, 0.4, 0.05); m.roughness = 0.6
 		"tape":
 			m.albedo_color = Color(0.95, 0.76, 0.18); m.roughness = 0.5; m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		"curb":
@@ -488,6 +496,7 @@ func _label(text: String, pos: Vector3, rot_y: float, size := 64, col := Color.W
 	l.modulate = col; l.outline_size = 8; l.outline_modulate = Color(0, 0, 0, 0.6)
 	l.position = pos; l.rotation.y = rot_y
 	l.double_sided = false
+	l.visibility_range_end = 75.0 if size < 100 else 140.0
 	add_child(l)
 	return l
 
@@ -561,7 +570,7 @@ func _block(bi: int, bj: int) -> void:
 			if park and lx == 0 and lz == 0:
 				_trees_in_lot(bx, bz, lot)
 				continue
-			if rng.randf() < 0.08 and _loft(bx, bz, lot):
+			if rng.randf() < 0.05 and _loft(bx, bz, lot):
 				continue
 			if rng.randf() < 0.05:
 				_mosque(bx, bz, lot)
@@ -592,7 +601,7 @@ func _block(bi: int, bj: int) -> void:
 				_static_box(Vector3(1.6, 1.2, 1.0), bp + Vector3(0, 0.6, 0), ry)
 			if t % 2 == 0:
 				_lamp(pos, ry)
-			elif rng.randf() < 0.6:
+			elif rng.randf() < 0.45:
 				_tree(pos + Vector3(0, 0, 0))
 
 func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int) -> void:
@@ -681,20 +690,20 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 	# roof clutter: water tanks + solar heaters (very Amman)
 	for i in rng.randi_range(2, 6):
 		var p := base + Vector3(rng.randf_range(-w * 0.35, w * 0.35), h + 0.35, rng.randf_range(-d * 0.35, d * 0.35))
-		var cm := CylinderMesh.new(); cm.top_radius = 0.55; cm.bottom_radius = 0.55; cm.height = 1.2
+		var cm := CylinderMesh.new(); cm.top_radius = 0.55; cm.bottom_radius = 0.55; cm.height = 1.2; cm.radial_segments = 8; cm.rings = 1
 		_mi(cm, mat("tankblack" if rng.randf() < 0.6 else "tankwhite"), p + Vector3(0, 0.6, 0))
 	for i in rng.randi_range(1, 4):
 		var p := base + Vector3(rng.randf_range(-w * 0.4, w * 0.4), h + 0.35, rng.randf_range(-d * 0.4, d * 0.4))
 		var dm := SphereMesh.new(); dm.radius = 0.45; dm.height = 0.22; dm.is_hemisphere = true; dm.radial_segments = 14; dm.rings = 3
 		var dish := _mi(dm, mat("dish"), p + Vector3(0, 0.75, 0))
 		dish.rotation = Vector3(-1.1, rng.randf() * TAU, 0)
-		var pc := CylinderMesh.new(); pc.top_radius = 0.03; pc.bottom_radius = 0.03; pc.height = 0.75
+		var pc := CylinderMesh.new(); pc.top_radius = 0.03; pc.bottom_radius = 0.03; pc.height = 0.75; pc.radial_segments = 8; pc.rings = 1
 		_mi(pc, mat("pole"), p + Vector3(0, 0.37, 0))
 	if rng.randf() < 0.7:
 		var p := base + Vector3(rng.randf_range(-w * 0.3, w * 0.3), h + 0.35, rng.randf_range(-d * 0.3, d * 0.3))
 		var panel := _mi(_box_mesh(Vector3(2.0, 0.06, 1.1)), mat("solar"), p + Vector3(0, 0.7, 0))
 		panel.rotation.x = -0.6
-		var tank := CylinderMesh.new(); tank.top_radius = 0.25; tank.bottom_radius = 0.25; tank.height = 1.8
+		var tank := CylinderMesh.new(); tank.top_radius = 0.25; tank.bottom_radius = 0.25; tank.height = 1.8; tank.radial_segments = 8; tank.rings = 1
 		var tm := _mi(tank, mat("metal"), p + Vector3(0, 1.3, -0.5))
 		tm.rotation.z = PI / 2
 
@@ -728,7 +737,7 @@ func _pole_body(pos: Vector3, radius: float, height: float, kind: String) -> voi
 	add_child(sb)
 
 func _lamp(pos: Vector3, ry: float) -> void:
-	var cm := CylinderMesh.new(); cm.top_radius = 0.06; cm.bottom_radius = 0.1; cm.height = 6.0
+	var cm := CylinderMesh.new(); cm.top_radius = 0.06; cm.bottom_radius = 0.1; cm.height = 6.0; cm.radial_segments = 8; cm.rings = 1
 	_mi(cm, mat("pole"), pos + Vector3(0, 3.0, 0))
 	_pole_body(pos, 0.14, 6.0, "pole")
 	var arm := _mi(_box_mesh(Vector3(0.08, 0.08, 1.6)), mat("pole"), pos + Vector3(0, 5.9, 0))
@@ -745,7 +754,7 @@ func _curbs(cx: float, cz: float) -> void:
 	_mi(_box_mesh(Vector3(0.25, 0.2, half * 2 + 0.25)), mat("curb"), Vector3(cx + half, 0.1, cz), false)
 
 func _traffic_light(pos: Vector3) -> void:
-	var cm := CylinderMesh.new(); cm.top_radius = 0.07; cm.bottom_radius = 0.08; cm.height = 3.2
+	var cm := CylinderMesh.new(); cm.top_radius = 0.07; cm.bottom_radius = 0.08; cm.height = 3.2; cm.radial_segments = 8; cm.rings = 1
 	_mi(cm, mat("pole"), pos + Vector3(0, 1.6, 0))
 	_pole_body(pos, 0.12, 3.2, "pole")
 	for k in 2:
@@ -763,7 +772,9 @@ func _traffic_light(pos: Vector3) -> void:
 		lmp69.rotation.y = ry
 
 func _loft(cx: float, cz: float, lot: float) -> bool:
-	var b := CustomModels.prop("building_loft")
+	var b := CustomModels.prop("building_loft_lod")   # vertex-coloured, 1 draw call (the HQ uses the full model)
+	if not b:
+		b = CustomModels.prop("building_loft")
 	if not b:
 		return false
 	var sz: Vector3 = b.get_meta("size")
@@ -776,26 +787,70 @@ func _loft(cx: float, cz: float, lot: float) -> bool:
 	_static_box(Vector3(sz.x * k, sz.y * k, sz.z * k), Vector3(cx, 0.16 + sz.y * k * 0.5, cz), b.rotation.y)
 	return true
 
+var tree_list: Array = []        # [position, yaw, height] of every real-model tree (drawn as MultiMeshes)
+
 func _tree(pos: Vector3) -> void:
-	var real := CustomModels.prop("tree", rng.randf_range(5.5, 7.5))
-	if real:
-		real.position = pos
-		real.rotation.y = rng.randf() * TAU
-		real.set_meta("no_merge", true)
-		for gi in real.find_children("*", "GeometryInstance3D", true, false):
-			gi.visibility_range_end = 120.0
-			gi.visibility_range_end_margin = 10.0
-			gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
-		add_child(real)
+	if CustomModels.scene("res://assets/props/tree.glb"):
+		tree_list.append([pos, rng.randf() * TAU, rng.randf_range(5.5, 7.5)])
 		_pole_body(pos, 0.25, 3.0, "tree")
 		return
-	var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.17; cm.height = 3.0
+	var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.17; cm.height = 3.0; cm.radial_segments = 8; cm.rings = 1
 	_mi(cm, mat("trunk"), pos + Vector3(0, 1.5, 0))
 	_pole_body(pos, 0.22, 3.0, "tree")
 	for i in 3:
 		var sm := SphereMesh.new(); var r := rng.randf_range(1.0, 1.5)
 		sm.radius = r; sm.height = r * 1.6; sm.radial_segments = 10; sm.rings = 6
 		_mi(sm, mat("leaf"), pos + Vector3(rng.randf_range(-0.6, 0.6), 3.3 + rng.randf_range(0, 0.6), rng.randf_range(-0.6, 0.6)))
+
+## All trees of a block share three MultiMeshes (trunk, branches, leaves): 3 draw calls per block
+## instead of 3 per tree.
+func _build_trees() -> void:
+	if tree_list.is_empty():
+		return
+	var tpl := CustomModels.prop("tree", 1.0)
+	if not tpl:
+		return
+	var parts := []     # [mesh, transform relative to the tree root]
+	var stack := [[tpl as Node3D, Transform3D.IDENTITY]]
+	while stack.size():
+		var it: Array = stack.pop_back()
+		for ch in (it[0] as Node3D).get_children():
+			if ch is Node3D:
+				var cxf: Transform3D = (it[1] as Transform3D) * ch.transform
+				if ch is MeshInstance3D and ch.mesh:
+					parts.append([ch.mesh, cxf])
+				stack.append([ch, cxf])
+	var chunks := {}
+	for t in tree_list:
+		var p: Vector3 = t[0]
+		var key := Vector2i(floori(p.x / P), floori(p.z / P))
+		if not chunks.has(key):
+			chunks[key] = []
+		chunks[key].append(t)
+	for key in chunks:
+		var list: Array = chunks[key]
+		var center := Vector3.ZERO
+		for t in list:
+			center += t[0]
+		center /= list.size()
+		for part in parts:
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.mesh = part[0]
+			mm.instance_count = list.size()
+			for i in list.size():
+				var t: Array = list[i]
+				var root := Transform3D(Basis(Vector3.UP, float(t[1])).scaled(Vector3.ONE * float(t[2])), (t[0] as Vector3) - center)
+				mm.set_instance_transform(i, root * (part[1] as Transform3D))
+			var mmi := MultiMeshInstance3D.new()
+			mmi.multimesh = mm
+			mmi.position = center
+			mmi.set_meta("no_merge", true)
+			mmi.visibility_range_end = [110.0, 150.0, 200.0][Settings.quality]
+			if Settings.quality < 2:
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mmi)
+	tpl.free()
 
 func _trees_in_lot(cx: float, cz: float, lot: float) -> void:
 	for i in 6:
@@ -805,12 +860,12 @@ func _mosque(cx: float, cz: float, lot: float) -> void:
 	var w := lot - 3.0
 	_mi(_box_mesh(Vector3(w, 7.0, w)), mat("tankwhite"), Vector3(cx, 3.66, cz))
 	_static_box(Vector3(w, 7.0, w), Vector3(cx, 3.66, cz))
-	var dome := SphereMesh.new(); dome.radius = w * 0.3; dome.height = w * 0.6; dome.is_hemisphere = true
+	var dome := SphereMesh.new(); dome.radius = w * 0.3; dome.height = w * 0.6; dome.is_hemisphere = true; dome.radial_segments = 16; dome.rings = 6
 	var dm := StandardMaterial3D.new(); dm.albedo_color = Color(0.25, 0.45, 0.42); dm.metallic = 0.4; dm.roughness = 0.35
 	_mi(dome, dm, Vector3(cx, 7.16, cz))
-	var mn := CylinderMesh.new(); mn.top_radius = 0.9; mn.bottom_radius = 1.1; mn.height = 26.0
+	var mn := CylinderMesh.new(); mn.top_radius = 0.9; mn.bottom_radius = 1.1; mn.height = 26.0; mn.radial_segments = 8; mn.rings = 1
 	_mi(mn, mat("tankwhite"), Vector3(cx + w * 0.42, 13.16, cz + w * 0.42))
-	var cap := CylinderMesh.new(); cap.top_radius = 0.0; cap.bottom_radius = 1.0; cap.height = 3.0
+	var cap := CylinderMesh.new(); cap.top_radius = 0.0; cap.bottom_radius = 1.0; cap.height = 3.0; cap.radial_segments = 8; cap.rings = 1
 	_mi(cap, dm, Vector3(cx + w * 0.42, 27.6, cz + w * 0.42))
 	_static_box(Vector3(2.2, 26, 2.2), Vector3(cx + w * 0.42, 13.16, cz + w * 0.42))
 
@@ -859,6 +914,7 @@ func _hills() -> void:
 # ---------------------------------------------------------------- parked cars
 func bake(node: Node3D) -> ArrayMesh:
 	var groups := {}
+	var paint = node.get_meta("paint") if node.has_meta("paint") else null
 	var stack := [[node, Transform3D.IDENTITY]]
 	while stack.size():
 		var it: Array = stack.pop_back()
@@ -877,30 +933,49 @@ func bake(node: Node3D) -> ArrayMesh:
 						if not groups.has(m):
 							var s := SurfaceTool.new(); s.begin(Mesh.PRIMITIVE_TRIANGLES)
 							groups[m] = s
-						groups[m].append_from(ch.mesh, si, cxf)
+						var src: Mesh = ch.mesh
+						var ssi: int = si
+						if paint != null:
+							# vertices flagged as body paint (alpha 0.5) take this car's colour
+							var arr: Array = ch.mesh.surface_get_arrays(si)
+							var cols = arr[Mesh.ARRAY_COLOR]
+							if cols is PackedColorArray and cols.size() > 0:
+								var pc: Color = (paint as Color).srgb_to_linear()
+								for k in cols.size():
+									if cols[k].a < 0.75:
+										cols[k] = Color(pc.r, pc.g, pc.b, 1.0)
+								arr[Mesh.ARRAY_COLOR] = cols
+								var tmp := ArrayMesh.new()
+								tmp.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+								src = tmp
+								ssi = 0
+						groups[m].append_from(src, ssi, cxf)
 				stack.append([ch, cxf])
-	var am := ArrayMesh.new()
+	# ImporterMesh builds automatic LODs, so far-away cars cost a fraction of the triangles
+	var im := ImporterMesh.new()
 	for m in groups:
-		groups[m].commit(am)
-		am.surface_set_material(am.get_surface_count() - 1, m)
-	node.free()
-	return am
+		var one := ArrayMesh.new()
+		groups[m].commit(one)
+		if one.get_surface_count() > 0:
+			im.add_surface(Mesh.PRIMITIVE_TRIANGLES, one.surface_get_arrays(0), [], {}, m)
+	im.generate_lods(25.0, 60.0, [])
+	return im.get_mesh()
 
 func baked_car(kind: String, color: Color) -> ArrayMesh:
-	var key := kind + color.to_html()
+	var key := kind + color.to_html() + str(rng.randi() % 2)
 	if not baked.has(key):
 		baked[key] = bake(CarMesh.build(kind, color))
 	return baked[key]
 
-const CAR_COLORS := [Color(0.92, 0.92, 0.92), Color(0.6, 0.62, 0.65), Color(0.12, 0.13, 0.15), Color(0.45, 0.08, 0.08), Color(0.15, 0.25, 0.42), Color(0.75, 0.72, 0.65)]
+const CAR_COLORS := [Color(0.92, 0.92, 0.92), Color(0.6, 0.62, 0.65), Color(0.12, 0.13, 0.15), Color(0.45, 0.08, 0.08), Color(0.15, 0.25, 0.42), Color(0.75, 0.72, 0.65), Color(0.85, 0.85, 0.87), Color(0.3, 0.32, 0.34), Color(0.1, 0.28, 0.2), Color(0.55, 0.42, 0.25)]
 
 func random_car_mesh() -> ArrayMesh:
-	if rng.randf() < 0.35:
+	if rng.randf() < 0.18:
 		return baked_car("taxi", Color.YELLOW)
 	return baked_car("sedan", CAR_COLORS[rng.randi() % CAR_COLORS.size()])
 
 func _parked_cars() -> void:
-	var n := 14 if CustomModels.files_for("res://assets/cars", "sedan").size() > 0 else 26
+	var n := 26
 	for i in n:
 		var k := rng.randi_range(0, N)
 		var bk := rng.randi_range(0, N - 1)
@@ -916,6 +991,8 @@ func _parked_cars() -> void:
 			ry += PI
 		var mi := _mi(random_car_mesh(), null, pos)
 		mi.rotation.y = ry
+		mi.set_meta("no_merge", true)
+		mi.visibility_range_end = 140.0
 		_static_box(Vector3(1.8, 1.4, 4.5), pos + Vector3(0, 0.7, 0), ry)
 
 # ---------------------------------------------------------------- bank compound (mission target)
@@ -1008,6 +1085,34 @@ func _bank_block(bi: int, bj: int) -> void:
 					var lintel := _mi(_box_mesh(Vector3(CELL, wh - 3.2, CELL)), mat("plaster"), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
 					lintel.material_override = mat("plaster")
 					_static_box(Vector3(CELL, wh - 3.2, CELL), p + Vector3(0, 3.2 + (wh - 3.2) * 0.5, 0))
+	# ground-floor windows on the outside of the mission building (frames, glass, security bars)
+	if style in ["bank", "apartment"]:
+		for r in rows:
+			for c in cols:
+				if imap[r][c] != "#":
+					continue
+				var corner := (r == 0 or r == rows - 1) and (c == 0 or c == cols - 1)
+				if corner or (style == "bank" and r == rows - 1):
+					continue
+				var nrm := Vector3.ZERO
+				if r == 0: nrm = Vector3(0, 0, -1)
+				elif r == rows - 1: nrm = Vector3(0, 0, 1)
+				elif c == 0: nrm = Vector3(-1, 0, 0)
+				elif c == cols - 1: nrm = Vector3(1, 0, 0)
+				if nrm == Vector3.ZERO or (c + r) % 2 == 1:
+					continue
+				var wp := Vector3(ox + c * CELL + CELL * 0.5, 0.16 + 2.0, oz + r * CELL + CELL * 0.5) + nrm * (CELL * 0.5 + 0.03)
+				var wry := atan2(nrm.x, nrm.z)
+				var fr := _mi(_box_mesh(Vector3(1.9, 1.6, 0.08)), mat("white"), wp, false)
+				fr.rotation.y = wry
+				var gl := _mi(_box_mesh(Vector3(1.66, 1.36, 0.1)), mat("darkglass" if mission.get("sky", "") != "night" else "litwindow"), wp + nrm * 0.02, false)
+				gl.rotation.y = wry
+				var sill := _mi(_box_mesh(Vector3(2.1, 0.1, 0.3)), mat("white"), wp + Vector3(0, -0.85, 0) + nrm * 0.1, false)
+				sill.rotation.y = wry
+				if style == "apartment":
+					for bk in 5:
+						var bar := _mi(_box_mesh(Vector3(0.03, 1.36, 0.03)), mat("black"), wp + nrm * 0.12 + Basis(Vector3.UP, wry) * Vector3(-0.66 + bk * 0.33, 0, 0), false)
+						bar.rotation.y = wry
 	var in_mat: String = {"bank": "interior", "apartment": "plaster", "mall": "white", "yard": "sidewalk"}[style]
 	var out_mat: String = {"bank": "granite", "apartment": "stone%d" % (bi % 5), "mall": "darkglass", "yard": "plaster"}[style]
 	var floor_mat: String = {"bank": "marble", "apartment": "tile", "mall": "marble", "yard": "asphalt"}[style]
@@ -1019,7 +1124,7 @@ func _bank_block(bi: int, bj: int) -> void:
 		_static_box(Vector3(cols * CELL, 0.05, rows * CELL), bank_origin + Vector3(cols * CELL * 0.5, 0.03, rows * CELL * 0.5))
 		for k in 2:
 			var lp := bank_origin + Vector3(cols * CELL * (0.25 + k * 0.5), 0, CELL * 1.2)
-			var pole := CylinderMesh.new(); pole.top_radius = 0.07; pole.bottom_radius = 0.09; pole.height = 7.0
+			var pole := CylinderMesh.new(); pole.top_radius = 0.07; pole.bottom_radius = 0.09; pole.height = 7.0; pole.radial_segments = 8; pole.rings = 1
 			_mi(pole, mat("pole"), lp + Vector3(0, 3.5, 0))
 			_mi(_box_mesh(Vector3(0.7, 0.3, 0.4)), mat("lamp"), lp + Vector3(0, 7.0, 0.2), false)
 		cordon_point = door_pos + Vector3(0, 0, 14.0)
@@ -1099,7 +1204,7 @@ func _desk(p: Vector3) -> void:
 	# office chair
 	_mi(_box_mesh(Vector3(0.5, 0.08, 0.5)), mat("black"), p + Vector3(0, 0.5, 0.75))
 	_mi(_box_mesh(Vector3(0.5, 0.55, 0.07)), mat("black"), p + Vector3(0, 0.8, 1.0))
-	var cm := CylinderMesh.new(); cm.top_radius = 0.03; cm.bottom_radius = 0.03; cm.height = 0.45
+	var cm := CylinderMesh.new(); cm.top_radius = 0.03; cm.bottom_radius = 0.03; cm.height = 0.45; cm.radial_segments = 8; cm.rings = 1
 	_mi(cm, mat("metal"), p + Vector3(0, 0.25, 0.75))
 	_static_box(Vector3(1.6, 0.8, 0.8), p + Vector3(0, 0.4, 0))
 
@@ -1137,7 +1242,7 @@ func _kiosk(p: Vector3) -> void:
 	_static_box(Vector3(2.6, 1.0, 1.2), p + Vector3(0, 0.5, 0))
 
 func _plant(p: Vector3) -> void:
-	var pot := CylinderMesh.new(); pot.top_radius = 0.3; pot.bottom_radius = 0.22; pot.height = 0.6
+	var pot := CylinderMesh.new(); pot.top_radius = 0.3; pot.bottom_radius = 0.22; pot.height = 0.6; pot.radial_segments = 8; pot.rings = 1
 	_mi(pot, mat("pot"), p + Vector3(0, 0.3, 0))
 	for i in 3:
 		var sm := SphereMesh.new(); sm.radius = 0.4; sm.height = 0.9; sm.radial_segments = 8; sm.rings = 5
@@ -1157,20 +1262,107 @@ func _crate_mat() -> StandardMaterial3D:
 	_mats["crate"] = m
 	return m
 
+var crowd_spots: Array = []       # [position, yaw] for onlookers behind the police tape
+var press_spots: Array = []       # [position, yaw, role] reporter / camera operator
+var hq_pos := Vector3.INF         # police HQ ("غرفة العمليات") next to the start point
+var hq_scale := 1.0
+
 func build_cordon() -> void:
 	var cp := cordon_point
-	for spec in [["police", Vector3(-7, 0, 0), PI / 2], ["police", Vector3(7, 0, 0), -PI / 2], ["ambulance", Vector3(13, 0, 1), -PI / 2]]:
-		var car := CarMesh.build(spec[0])
-		car.position = cp + spec[1]
-		car.rotation.y = spec[2]
+	var zc := cp.z - 4.9            # centre line of the street in front of the target
+	# --- the street is sealed on both sides: patrol car + tape + cones, crowd and press behind
+	for sd in [-1.0, 1.0]:
+		var bx: float = cp.x + sd * 27.0
+		var car := CarMesh.build("police")
+		# west side leaves the south lane open so the SWAT truck can roll in
+		car.position = Vector3(bx, 0, zc - 3.0 if sd < 0 else zc)
+		car.rotation.y = 0.25 * sd
+		car.set_meta("no_merge", true)
+		for gi in car.find_children("*", "GeometryInstance3D", true, false):
+			gi.visibility_range_end = 120.0
 		add_child(car)
 		flashers.append(car.get_meta("flashers"))
-		_static_box(Vector3(2.0, 1.6, 5.0), car.position + Vector3(0, 0.8, 0), spec[2])
-	var tape := _mi(_box_mesh(Vector3(22, 0.08, 0.01)), mat("tape"), cp + Vector3(0, 1.0, 4.5), false)
-	_label("شرطة · ممنوع الاقتراب   شرطة · ممنوع الاقتراب", cp + Vector3(0, 1.0, 4.52), 0.0, 32, Color(0.05, 0.05, 0.05), 0.006).outline_size = 0
-	for x in [-11.0, 11.0]:
-		var cm := CylinderMesh.new(); cm.top_radius = 0.04; cm.bottom_radius = 0.05; cm.height = 1.1
-		_mi(cm, mat("tape"), cp + Vector3(x, 0.55, 4.5))
+		_static_box(Vector3(2.0, 1.6, 5.0), car.position + Vector3(0, 0.8, 0), car.rotation.y)
+		var tx: float = bx + sd * 3.2
+		var z_from: float = zc - 6.6
+		var z_to: float = zc + (0.6 if sd < 0 else 6.6)
+		_mi(_box_mesh(Vector3(0.01, 0.08, z_to - z_from)), mat("tape"), Vector3(tx, 1.0, (z_from + z_to) * 0.5), false)
+		for pz in [z_from, z_to]:
+			var cm := CylinderMesh.new(); cm.top_radius = 0.04; cm.bottom_radius = 0.05; cm.height = 1.1; cm.radial_segments = 8; cm.rings = 1
+			_mi(cm, mat("tape"), Vector3(tx, 0.55, pz))
+		if sd < 0:
+			for k in 3:
+				var cone := CylinderMesh.new(); cone.top_radius = 0.03; cone.bottom_radius = 0.16; cone.height = 0.5; cone.radial_segments = 8; cone.rings = 1
+				_mi(cone, mat("cone"), Vector3(tx, 0.25, zc + 1.4 + k * 2.4))
+		# onlookers stand behind the tape, looking toward the target
+		for k in 9:
+			var px: float = tx + sd * rng.randf_range(1.0, 4.2)
+			var pz: float = zc + rng.randf_range(-6.2, 0.0 if sd < 0 else 6.2)
+			crowd_spots.append([Vector3(px, 0.0, pz), atan2(-sd, rng.randf_range(-0.4, 0.4))])
+	# --- press: reporter + camera on a tripod just behind the east tape, news car parked behind them
+	var ex: float = cp.x + 27.0 + 3.2
+	press_spots = [[Vector3(ex + 1.6, 0, zc + 4.6), PI * 0.5, "reporter"], [Vector3(ex + 4.4, 0, zc + 4.9), -PI * 0.5, "camera"]]
+	var tri := Vector3(ex + 3.9, 0, zc + 4.9)
+	for a3 in 3:
+		var leg := _mi(_box_mesh(Vector3(0.03, 1.35, 0.03)), mat("black"), tri + Vector3(cos(a3 * TAU / 3.0) * 0.22, 0.66, sin(a3 * TAU / 3.0) * 0.22))
+		leg.rotation = Vector3(sin(a3 * TAU / 3.0) * 0.3, 0, -cos(a3 * TAU / 3.0) * 0.3)
+	_mi(_box_mesh(Vector3(0.42, 0.24, 0.2)), mat("black"), tri + Vector3(-0.08, 1.45, 0))
+	var lens := CylinderMesh.new(); lens.top_radius = 0.06; lens.bottom_radius = 0.07; lens.height = 0.16; lens.radial_segments = 8; lens.rings = 1
+	var lm := _mi(lens, mat("black"), tri + Vector3(-0.36, 1.45, 0))
+	lm.rotation.z = PI / 2
+	var van := MeshInstance3D.new()
+	van.mesh = baked_car("sedan", Color(0.9, 0.9, 0.92))
+	van.position = Vector3(ex + 9.0, 0, zc + 4.8)
+	van.rotation.y = PI / 2
+	van.set_meta("no_merge", true)
+	add_child(van)
+	_static_box(Vector3(1.9, 1.4, 4.6), van.position + Vector3(0, 0.7, 0), PI / 2)
+	var dishm := SphereMesh.new(); dishm.radius = 0.5; dishm.height = 0.25; dishm.is_hemisphere = true; dishm.radial_segments = 12; dishm.rings = 3
+	var dish := _mi(dishm, mat("dish"), van.position + Vector3(0, 1.75, 0))
+	dish.rotation = Vector3(-0.9, 0.6, 0)
+	_label("قناة الإخبارية · بث مباشر", van.position + Vector3(0, 1.0, -0.98), PI, 34, Color(0.85, 0.1, 0.1), 0.006)
+	# --- command post beside the colonel: unmarked black car + folding table with the building plans
+	var cmd := MeshInstance3D.new()
+	cmd.mesh = baked_car("sedan", Color(0.05, 0.05, 0.06))
+	cmd.position = cp + Vector3(9.5, 0, 2.6)
+	cmd.rotation.y = -PI / 2
+	cmd.set_meta("no_merge", true)
+	add_child(cmd)
+	_static_box(Vector3(1.9, 1.4, 4.6), cmd.position + Vector3(0, 0.7, 0), PI / 2)
+	_mi(_box_mesh(Vector3(1.6, 0.05, 0.8)), mat("wood"), cp + Vector3(5.2, 0.85, 3.3))
+	for lx in [-0.7, 0.7]:
+		_mi(_box_mesh(Vector3(0.05, 0.85, 0.7)), mat("black"), cp + Vector3(5.2 + lx, 0.42, 3.3))
+	_mi(_box_mesh(Vector3(0.9, 0.01, 0.6)), mat("white"), cp + Vector3(5.2, 0.885, 3.3), false)
+	_static_box(Vector3(1.6, 0.9, 0.8), cp + Vector3(5.2, 0.45, 3.3))
+	_mi(_box_mesh(Vector3(26, 0.08, 0.01)), mat("tape"), cp + Vector3(0, 1.0, 5.6), false)
+	_label("شرطة · ممنوع الاقتراب   شرطة · ممنوع الاقتراب", cp + Vector3(0, 1.0, 5.62), 0.0, 32, Color(0.05, 0.05, 0.05), 0.006).outline_size = 0
+
+## Police HQ next to the start: the office building model, with a sign. The intro plays inside it.
+func build_hq() -> void:
+	var b := CustomModels.prop("building_loft")
+	if not b:
+		return
+	var sz: Vector3 = b.get_meta("size")
+	hq_scale = 1.0
+	hq_pos = Vector3(spawn_point.origin.x + 1.0, 0.0, size_total + 3.5 + sz.z * 0.5)
+	b.position = hq_pos
+	b.set_meta("no_merge", true)
+	add_child(b)
+	_static_box(Vector3(sz.x, sz.y, sz.z), hq_pos + Vector3(0, sz.y * 0.5, 0))
+	_mi(_box_mesh(Vector3(sz.x + 8.0, 0.12, 6.0)), mat("sidewalk"), hq_pos + Vector3(0, 0.06, -sz.z * 0.5 - 1.6), false)
+	# monument sign on the forecourt, facing the street
+	var sp := hq_pos + Vector3(-9.5, 1.1, -sz.z * 0.5 - 2.6)
+	var board := _mi(_box_mesh(Vector3(7.0, 1.6, 0.3)), mat("bankboard"), sp, false)
+	board.material_override = _hq_mat()
+	board.set_meta("no_merge", true)
+	_mi(_box_mesh(Vector3(7.4, 0.3, 0.6)), mat("granite"), sp + Vector3(0, -0.95, 0), false)
+	_label("مديرية الأمن العام\nوحدة الصقر", sp + Vector3(0, 0, -0.17), PI, 110, Color(0.96, 0.9, 0.72), 0.005)
+	_static_box(Vector3(7.0, 1.8, 0.4), sp + Vector3(0, -0.2, 0))
+
+func _hq_mat() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.05, 0.12, 0.08)
+	return m
 
 func open_door() -> void:
 	if door_body:
@@ -1206,8 +1398,23 @@ func merge_static() -> void:
 			if ch is MeshInstance3D and ch.mesh and ch.visible:
 				var c := cxf.origin
 				var ck := Vector2i(floori(c.x / CHUNK), floori(c.z / CHUNK))
+				# below the top quality level only big things (walls, roofs) cast shadows: halves the shadow pass
+				if Settings.quality < 2 and ch.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+					var asz: Vector3 = ch.mesh.get_aabb().size * cxf.basis.get_scale()
+					if maxf(asz.x, maxf(asz.y, asz.z)) < 6.0:
+						ch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				for si in ch.mesh.get_surface_count():
 					var m: Material = ch.material_override if ch.material_override else ch.mesh.surface_get_material(si)
+					if _is_plain(m):
+						# flat-coloured props all share one vertex-colour material: one draw call per chunk
+						# instead of one per colour (poles, tanks, rails, signs, bins…)
+						var vkey := "%d_%d_%d_%d_%d" % [ck.x, ck.y, _vc_mat().get_instance_id(), 99, ch.cast_shadow]
+						if not groups.has(vkey):
+							var vst := SurfaceTool.new(); vst.begin(Mesh.PRIMITIVE_TRIANGLES)
+							groups[vkey] = vst
+							mats[vkey] = [_vc_mat(), ch.cast_shadow]
+						groups[vkey].append_from(_coloured(ch.mesh, si, (m as StandardMaterial3D).albedo_color), 0, cxf)
+						continue
 					var fmt := _fmt(ch.mesh, si)
 					var key := "%d_%d_%d_%d_%d" % [ck.x, ck.y, m.get_instance_id() if m else 0, fmt, ch.cast_shadow]
 					if not groups.has(key):
@@ -1218,22 +1425,35 @@ func merge_static() -> void:
 				victims.append(ch)
 			elif ch is MultiMeshInstance3D and ch.multimesh and not ch.multimesh.use_colors and ch.multimesh.instance_count < 400:
 				var mm: MultiMesh = ch.multimesh
+				if Settings.quality < 2:
+					ch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				for i in mm.instance_count:
 					var ixf: Transform3D = cxf * mm.get_instance_transform(i)
 					var c := ixf.origin
 					var ck := Vector2i(floori(c.x / CHUNK), floori(c.z / CHUNK))
 					for si in mm.mesh.get_surface_count():
 						var m: Material = ch.material_override if ch.material_override else mm.mesh.surface_get_material(si)
-						var fmt := _fmt(mm.mesh, si)
+						var src: Mesh = mm.mesh
+						var ssi: int = si
+						var fmt := 99
+						if _is_plain(m):
+							var ckey := "%d_%d_%d" % [mm.mesh.get_instance_id(), si, m.get_instance_id()]
+							if not _col_cache.has(ckey):
+								_col_cache[ckey] = _coloured(mm.mesh, si, (m as StandardMaterial3D).albedo_color)
+							src = _col_cache[ckey]
+							ssi = 0
+							m = _vc_mat()
+						else:
+							fmt = _fmt(mm.mesh, si)
 						var key := "%d_%d_%d_%d_%d" % [ck.x, ck.y, m.get_instance_id() if m else 0, fmt, ch.cast_shadow]
 						if not groups.has(key):
 							var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
 							groups[key] = st
 							mats[key] = [m, ch.cast_shadow]
-						groups[key].append_from(mm.mesh, si, ixf)
+						groups[key].append_from(src, ssi, ixf)
 				victims.append(ch)
 			elif ch is Label3D:
-				ch.visibility_range_end = 140.0
+				ch.visibility_range_end = minf(ch.visibility_range_end if ch.visibility_range_end > 0.0 else 140.0, 140.0)
 			stack.append([ch, cxf])
 	# one MeshInstance per chunk+shadow mode, with one surface per material
 	var per_chunk := {}
@@ -1258,6 +1478,46 @@ func merge_static() -> void:
 		add_child(mi)
 
 var _fmt_cache := {}
+var _vc: StandardMaterial3D
+var _plain_cache := {}
+var _col_cache := {}
+
+func _vc_mat() -> StandardMaterial3D:
+	if not _vc:
+		_vc = StandardMaterial3D.new()
+		_vc.vertex_color_use_as_albedo = true
+		_vc.vertex_color_is_srgb = true
+		_vc.roughness = 0.75
+	return _vc
+
+## A plain material = just a colour: no textures, no glow, not see-through, default culling.
+func _is_plain(m: Material) -> bool:
+	if not (m is StandardMaterial3D):
+		return false
+	var id := m.get_instance_id()
+	if not _plain_cache.has(id):
+		var sm := m as StandardMaterial3D
+		_plain_cache[id] = sm.albedo_texture == null and not sm.normal_enabled and not sm.emission_enabled \
+			and sm.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED and sm.cull_mode == BaseMaterial3D.CULL_BACK \
+			and not sm.uv1_triplanar and not sm.vertex_color_use_as_albedo and sm.metallic < 0.7
+	return _plain_cache[id]
+
+## Copy of one surface with every vertex painted `col` (positions + normals + colours only).
+func _coloured(mesh: Mesh, si: int, col: Color) -> ArrayMesh:
+	var a := mesh.surface_get_arrays(si)
+	var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var cols := PackedColorArray()
+	cols.resize(verts.size())
+	cols.fill(col)
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = verts
+	out[Mesh.ARRAY_NORMAL] = a[Mesh.ARRAY_NORMAL]
+	out[Mesh.ARRAY_COLOR] = cols
+	out[Mesh.ARRAY_INDEX] = a[Mesh.ARRAY_INDEX]
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)
+	return am
 func _fmt(mesh: Mesh, si: int) -> int:
 	var k := "%d_%d" % [mesh.get_instance_id(), si]
 	if _fmt_cache.has(k):

@@ -8,7 +8,7 @@ const Fx = preload("res://scripts/fx.gd")
 var main: Node
 var city: Node
 var peds: Array = []
-const COUNT := 16
+const Settings = preload("res://scripts/settings.gd")
 
 class Ped:
 	var node: Node3D
@@ -23,7 +23,7 @@ class Ped:
 func setup(_main: Node) -> void:
 	main = _main
 	city = main.city
-	for i in COUNT:
+	for i in Settings.ped_count():
 		var p := Ped.new()
 		p.node = Person.new("civilian", 1000 + i)
 		add_child(p.node)

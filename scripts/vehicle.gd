@@ -29,6 +29,14 @@ var misfire_t := 0.0
 var cut_t := 0.0
 var pull := 0.0              # bent steering after heavy hits
 var fire_light: OmniLight3D
+var reversing := false
+var rev_beep := 0.0
+var rev_k := 0.0
+var auto_drive := false        # a teammate is driving: follow `route`
+var route: Array = []
+var route_i := 0
+var stuck_t := 0.0
+var unstick_t := 0.0
 
 const MAX_FORCE := 5200.0
 const MAX_BRAKE := 60.0
@@ -120,9 +128,11 @@ func _cam_target() -> Transform3D:
 		fwd = Vector3.FORWARD
 	var base_yaw := atan2(fwd.x, fwd.z)
 	var yaw := base_yaw + cam_yaw + PI
-	var dist := 7.5 + clampf(speed_kmh / 120.0, 0.0, 1.0) * 1.5
-	var dir := Vector3(sin(yaw) * cos(cam_pitch), -sin(cam_pitch), cos(yaw) * cos(cam_pitch))
-	var target := global_position + Vector3(0, 1.7, 0)
+	# reversing: the camera rises and pulls back so you can see what is behind the truck
+	var dist := 7.5 + clampf(speed_kmh / 120.0, 0.0, 1.0) * 1.5 + rev_k * 4.0
+	var cp := cam_pitch - rev_k * 0.38
+	var dir := Vector3(sin(yaw) * cos(cp), -sin(cp), cos(yaw) * cos(cp))
+	var target := global_position + Vector3(0, 1.7, 0) - fwd.normalized() * rev_k * 3.5
 	var pos := target + dir * dist
 	# keep camera out of walls
 	var q := PhysicsRayQueryParameters3D.create(target, pos, 1)
@@ -172,8 +182,10 @@ func _physics_process(dt: float) -> void:
 	# --- tyre screech when sliding sideways or braking hard at speed
 	var slip := absf(v.dot(global_transform.basis.x))
 	var screech := clampf((slip - 3.0) / 5.0, 0.0, 1.0)
-	if brake > 30.0 and speed_kmh > 35.0:
-		screech = maxf(screech, 0.7)
+	# brakes squeal whenever you brake with some speed on, louder the faster you go
+	if brake > 14.0 and speed_kmh > 10.0:
+		screech = maxf(screech, clampf(0.35 + speed_kmh / 70.0, 0.35, 1.0))
+	screech_snd.pitch_scale = lerpf(0.75, 1.1, clampf(speed_kmh / 80.0, 0.0, 1.0))
 	screech_snd.volume_db = lerpf(screech_snd.volume_db, lerpf(-60.0, -4.0, screech), 1.0 - exp(-dt * 10.0))
 	# --- engine: pitch follows speed, louder under throttle
 	var eng_load := absf(engine_force) / MAX_FORCE if driving else 0.0
@@ -192,8 +204,25 @@ func _physics_process(dt: float) -> void:
 	if Controls.just("siren") and (not main or main.input_guard <= 0.0):
 		siren_on = not siren_on
 	var mv := Controls.move_vector()
+	if auto_drive:
+		if Controls.just("jump") or absf(mv.y) > 0.6:
+			auto_drive = false       # the player grabs the wheel
+			if main:
+				main.on_take_wheel()
+		else:
+			mv = _auto_input()
 	var throttle := mv.y
+	# touch stick: a little downward drift while steering must not slam the brakes / engage reverse
+	if Controls.is_touch and throttle < 0.0:
+		throttle = minf(0.0, (throttle + 0.3) / 0.7)
 	var steer_in := -mv.x + pull
+	reversing = fwd_speed < -0.8 and throttle < -0.05
+	if reversing:
+		steer_in *= 0.75
+		rev_beep -= dt
+		if rev_beep <= 0.0:
+			rev_beep = 0.7
+			Sfx.play_3d("beep", global_position, -10.0, 0.75)
 	# a wounded engine coughs and loses power for a moment
 	if health < 40.0 and not broken:
 		misfire_t -= dt
@@ -221,7 +250,7 @@ func _physics_process(dt: float) -> void:
 			brake = MAX_BRAKE * -throttle
 			engine_force = 0.0
 		else:
-			engine_force = MAX_FORCE * 0.6 * throttle * clampf(1.0 + fwd_speed / 9.0, 0.0, 1.0)
+			engine_force = MAX_FORCE * 0.75 * throttle * clampf(1.0 + fwd_speed / 11.0, 0.0, 1.0)
 	else:
 		engine_force = 0.0
 		brake = 2.5
@@ -263,9 +292,57 @@ func _process(dt: float) -> void:
 		if look_t <= 0.0:
 			cam_yaw = lerp_angle(cam_yaw, 0.0, 1.0 - exp(-dt * 2.5))
 			cam_pitch = lerpf(cam_pitch, -0.22, 1.0 - exp(-dt * 2.0))
+	rev_k = move_toward(rev_k, 1.0 if reversing else 0.0, dt * 1.6)
 	var t := _cam_target()
 	cam.global_transform = cam.global_transform.interpolate_with(t, 1.0 - exp(-dt * 9.0))
 	cam.fov = lerpf(cam.fov, 68.0 + clampf(speed_kmh / 110.0, 0.0, 1.0) * 14.0, 1.0 - exp(-dt * 3.0))
+
+## Teammate at the wheel: steer along the route, keep ~45 km/h, slow for corners and anything in the way.
+func _auto_input() -> Vector2:
+	if route_i >= route.size():
+		return Vector2(0, -1.0 if speed_kmh > 4.0 else 0.0)
+	var wp: Vector3 = route[route_i]
+	var to := wp - global_position
+	to.y = 0
+	var dtp := get_physics_process_delta_time()
+	# wedged against something: back out with the wheel turned, then carry on
+	if unstick_t > 0.0:
+		unstick_t -= dtp
+		return Vector2(0.6, -1.0)
+	if speed_kmh < 2.0 and to.length() > 8.0:
+		stuck_t += dtp
+		if stuck_t > 2.5:
+			stuck_t = 0.0
+			unstick_t = 1.6
+	else:
+		stuck_t = 0.0
+	var last := route_i == route.size() - 1
+	if to.length() < (5.0 if last else 4.5):
+		route_i += 1
+		return Vector2.ZERO
+	var fwd := global_transform.basis.z
+	var right := global_transform.basis.x
+	var ang := atan2(to.normalized().dot(right), to.normalized().dot(fwd))
+	var steer := clampf(-ang * 1.6, -1.0, 1.0)
+	var want := 12.5
+	if absf(ang) > 0.35:
+		want = 4.5
+	elif not last and to.length() < 24.0:
+		want = 5.5       # corner coming up
+	if last:
+		want = minf(want, maxf(to.length() * 0.45, 2.5))
+	# something ahead (traffic, a pedestrian)? ease off
+	var p := global_position + Vector3(0, 0.9, 0)
+	var q := PhysicsRayQueryParameters3D.create(p + fwd * 3.2, p + fwd * 15.0, 4 | 8 | 16)
+	q.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit:
+		want = minf(want, maxf(((hit.position as Vector3) - p).length() - 6.0, 0.0))
+	var spd := linear_velocity.dot(fwd)
+	var th := clampf((want - spd) * 0.5, -1.0, 0.8)
+	if Controls.is_touch and th < 0.0:
+		th = th * 0.7 - 0.3
+	return Vector2(steer, th)
 
 func _on_body_entered(b: Node) -> void:
 	# hitting a moving civilian car (kinematic) or a lamp post: judge by our own speed

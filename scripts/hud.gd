@@ -1,5 +1,6 @@
 extends CanvasLayer
 const Voice = preload("res://scripts/voice.gd")
+const Settings = preload("res://scripts/settings.gd")
 ## All 2D UI: briefing, mission HUD, radio subtitles, waypoint, minimap, results, touch controls.
 
 var main: Node
@@ -69,9 +70,11 @@ func _label(text: String, size: int, col := Color.WHITE, align := HORIZONTAL_ALI
 	l.add_theme_font_override("font", font)
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
-	l.add_theme_constant_override("shadow_offset_x", 2)
-	l.add_theme_constant_override("shadow_offset_y", 2)
+	if size >= 30:
+		# drop shadows double the glyph draw calls: only the big free-floating titles get one
+		l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+		l.add_theme_constant_override("shadow_offset_x", 2)
+		l.add_theme_constant_override("shadow_offset_y", 2)
 	l.horizontal_alignment = align
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
@@ -294,6 +297,8 @@ func radio(who: String, text: String, dur := 4.0) -> void:
 func clear_radio() -> void:
 	radio_queue.clear()
 	radio_t = 0.0
+	if radio_box:
+		radio_box.visible = false
 	Voice.stop()
 
 func show_banner(text: String, sub := "", dur := 3.0) -> void:
@@ -366,6 +371,8 @@ func _process(dt: float) -> void:
 		radio_t = m[2]
 		radio_box.visible = true
 		Sfx.play("radio", -8.0)
+		if main and main.has_method("on_radio_line"):
+			main.on_radio_line(m[0], m[1])
 		if Voice.available():
 			Voice.say(m[0], m[1])
 			radio_t = maxf(m[2], Voice.estimate(m[1], m[0]))
@@ -452,7 +459,7 @@ func _process(dt: float) -> void:
 						b.get_child(0).text = "وقوف" if pl.crouch else "انحناء"
 				"orders":
 					b.visible = not in_car and main.team.any(func(t): return not t.dead and t.visible)
-					b.get_child(0).text = "اتبعوني" if main.team_order == "hold" else "اثبتوا"
+					b.get_child(0).text = "اقتحموا" if main.phase == "staging" else {"follow": "اثبتوا", "hold": "تقدّموا", "assault": "اتبعوني"}[main.team_order]
 				"yell":
 					b.visible = not in_car and main.phase == "assault"
 				"interact":
@@ -540,7 +547,27 @@ func _clip_line(a: Vector2, b: Vector2, c: Vector2, r: float, col: Color, w: flo
 	minimap.draw_line(a + d * t0, a + d * t1, col, w)
 
 # ------------------------------------------------------------------ briefing / results
+## One row of exclusive choice buttons (right-to-left). `opts` = [[label, value], …].
+func _choice_row(parent: Control, title: String, opts: Array, current, on_pick: Callable, w := 110.0, fs := 22) -> void:
+	parent.add_child(_label(title, 19, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
+	var row := HBoxContainer.new(); row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 6)
+	parent.add_child(row)
+	var btns := []
+	for i in opts.size():
+		var val = opts[i][1]
+		var b := _button(str(opts[i][0]), func():
+			for ob in btns:
+				ob.modulate = Color(1, 1, 1, 0.5)
+			btns[i].modulate = Color.WHITE
+			on_pick.call(val), fs)
+		b.custom_minimum_size = Vector2(w, 46)
+		b.modulate = Color.WHITE if val == current else Color(1, 1, 1, 0.5)
+		row.add_child(b)
+		btns.append(b)
+
 func show_briefing(on_start: Callable) -> void:
+	Settings.load_all()
 	briefing = Control.new()
 	briefing.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(briefing)
@@ -548,24 +575,34 @@ func show_briefing(on_start: Callable) -> void:
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	briefing.add_child(shade)
+	# full-height panel on the right: title on top, scrolling options in the middle, START always visible
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.04, 0.07, 0.86), GOLD))
-	panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.position.x = -40
-	panel.custom_minimum_size = Vector2(560, 0)
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.04, 0.07, 0.88), GOLD))
+	panel.anchor_left = 1.0; panel.anchor_right = 1.0; panel.anchor_top = 0.0; panel.anchor_bottom = 1.0
+	panel.offset_left = -640; panel.offset_right = -24; panel.offset_top = 14; panel.offset_bottom = -14
 	briefing.add_child(panel)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 8)
+	panel.add_child(outer)
+	outer.add_child(_label("وحدة الصقر", 40, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.scroll_deadzone = 12
+	outer.add_child(scroll)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
-	panel.add_child(vb)
-	vb.add_child(_label("وحدة الصقر", 44, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
-	# mission cards (locked ones greyed out)
-	var mrow := HBoxContainer.new(); mrow.alignment = BoxContainer.ALIGNMENT_END
-	mrow.add_theme_constant_override("separation", 8)
-	vb.add_child(mrow)
+	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vb.add_theme_constant_override("separation", 9)
+	scroll.add_child(vb)
+	# mission cards (locked ones greyed out), two per row so they stay big enough to tap
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.layout_direction = Control.LAYOUT_DIRECTION_RTL
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	vb.add_child(grid)
 	var unlocked := Missions.unlocked()
-	for i in range(Missions.LIST.size() - 1, -1, -1):
+	for i in Missions.LIST.size():
 		var md: Dictionary = Missions.LIST[i]
 		var locked := i >= unlocked
 		var stars := Missions.rating_of(i)
@@ -573,66 +610,49 @@ func show_briefing(on_start: Callable) -> void:
 		if locked:
 			txt += " (مقفلة)"
 		elif stars != "":
-			txt += "\n" + stars.get_slice(" ", 1)
+			txt += "  " + stars.get_slice(" ", stars.get_slice_count(" ") - 1)
 		var mb := _button(txt, func():
 			if i == Missions.current:
 				return
 			Missions.current = i
 			Missions.team_size = main.team_size
 			Missions.difficulty = main.difficulty
-			get_tree().reload_current_scene(), 19)
-		mb.custom_minimum_size = Vector2(minf(172.0, 600.0 / Missions.LIST.size() - 8.0), 64)
+			get_tree().reload_current_scene(), 20)
+		mb.custom_minimum_size = Vector2(286, 54)
 		mb.disabled = locked
 		mb.modulate = Color.WHITE if i == Missions.current else (Color(1, 1, 1, 0.3) if locked else Color(1, 1, 1, 0.6))
-		mrow.add_child(mb)
+		grid.add_child(mb)
 	var md2: Dictionary = main.M
-	vb.add_child(_label("%s — %s" % [md2.title, md2.subtitle], 24, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
-	var story := _label(md2.story, 19, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+	vb.add_child(_label("%s — %s" % [md2.title, md2.subtitle], 23, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
+	var story := _label(md2.story, 18, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	story.custom_minimum_size.x = 540
 	vb.add_child(story)
-	vb.add_child(_label("عدد أفراد الفريق معك", 19, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
-	var team_row := HBoxContainer.new(); team_row.alignment = BoxContainer.ALIGNMENT_END
-	vb.add_child(team_row)
-	var team_btns := []
-	for n in [4, 3, 2, 1, 0]:
-		var b := _button(str(n), func():
-			main.team_size = n
-			for tb in team_btns:
-				tb.modulate = Color(1, 1, 1, 0.55)
-			team_btns[4 - n].modulate = Color.WHITE, 28)
-		b.custom_minimum_size = Vector2(66, 48)
-		b.modulate = Color.WHITE if n == main.team_size else Color(1, 1, 1, 0.55)
-		team_row.add_child(b)
-		team_btns.append(b)
-	vb.add_child(_label("الصعوبة", 19, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
-	var diff_row := HBoxContainer.new(); diff_row.alignment = BoxContainer.ALIGNMENT_END
-	vb.add_child(diff_row)
-	var diff_btns := []
-	var diffs := [["واقعي", 2], ["متوسط", 1], ["سهل", 0]]
-	for i in diffs.size():
-		var dname: String = diffs[i][0]
-		var dv: int = diffs[i][1]
-		var b := _button(dname, func():
-			main.difficulty = dv
-			for db in diff_btns:
-				db.modulate = Color(1, 1, 1, 0.55)
-			diff_btns[i].modulate = Color.WHITE, 24)
-		b.custom_minimum_size = Vector2(110, 46)
-		b.modulate = Color.WHITE if dv == main.difficulty else Color(1, 1, 1, 0.55)
-		diff_row.add_child(b)
-		diff_btns.append(b)
-	var start := _button("ابدأ المهمة  ◀", func():
-		briefing.queue_free()
-		briefing = null
-		on_start.call(), 34)
-	start.custom_minimum_size = Vector2(0, 60)
-	vb.add_child(start)
-	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · H صفارة" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر"
+	_choice_row(vb, "عدد أفراد الفريق معك", [["4", 4], ["3", 3], ["2", 2], ["1", 1], ["0", 0]], main.team_size, func(v): main.team_size = v, 66, 26)
+	_choice_row(vb, "الصعوبة", [["واقعي", 2], ["متوسط", 1], ["سهل", 0]], main.difficulty, func(v): main.difficulty = v)
+	if main.M.get("type", "") != "sniper":
+		_choice_row(vb, "مين بسوق للموقع؟", [["واحد من الفريق", 1], ["أنا بسوق", 0]], Settings.driver, func(v):
+			Settings.driver = v
+			Settings.save(), 180)
+	_choice_row(vb, "جودة الرسم (خفيفة = أسرع على الأجهزة الضعيفة)", [["عالية", 2], ["متوسطة", 1], ["خفيفة", 0]], Settings.quality, func(v):
+		Settings.quality = v
+		Settings.save()
+		main.apply_quality())
+	_choice_row(vb, "الكلام الصوتي", [["إيقاف", false], ["تشغيل", true]], Settings.voice, func(v):
+		Settings.voice = v
+		Voice.enabled = v
+		Settings.save())
+	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · C انحناء · T أوامر · X سلاح" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر · اسحب هالقائمة لفوق وتحت"
 	var hl := _label(hint, 14, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_RIGHT)
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hl.custom_minimum_size.x = 520
 	vb.add_child(hl)
+	var start := _button("ابدأ المهمة  ◀", func():
+		briefing.queue_free()
+		briefing = null
+		on_start.call(), 34)
+	start.custom_minimum_size = Vector2(0, 64)
+	outer.add_child(start)
 
 func toggle_pause() -> void:
 	if pause_menu:
@@ -703,10 +723,11 @@ func show_result(win: bool, title: String, lines: Array, rating: String) -> void
 	for l in lines:
 		vb.add_child(_label(l, 24, Color(1, 1, 1, 0.9), HORIZONTAL_ALIGNMENT_RIGHT))
 	vb.add_child(HSeparator.new())
-	if win and Missions.current + 1 < Missions.LIST.size():
+	if Missions.current + 1 < Missions.LIST.size() and (win or Missions.current + 1 < Missions.unlocked()):
 		var nxt := _button("المهمة التالية: %s  ◀" % Missions.LIST[Missions.current + 1].title, func():
 			Engine.time_scale = 1.0
 			Missions.current += 1
+			Missions.autostart = true      # straight into the next mission, no menu in between
 			get_tree().reload_current_scene(), 28)
 		nxt.custom_minimum_size = Vector2(0, 60)
 		vb.add_child(nxt)

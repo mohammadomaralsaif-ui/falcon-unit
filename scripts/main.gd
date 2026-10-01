@@ -15,6 +15,7 @@ const Pedestrians = preload("res://scripts/pedestrians.gd")
 const Missions = preload("res://scripts/missions.gd")
 const CustomModels = preload("res://scripts/custom_models.gd")
 const Voice = preload("res://scripts/voice.gd")
+const Settings = preload("res://scripts/settings.gd")
 
 var city: Node3D
 var traffic: Node3D
@@ -85,6 +86,14 @@ var cut_i := 0
 var cut_k := 0.0
 var repair_hold := 0.0
 var sniper_mission := false
+var crowd: Array = []             # onlookers + press behind the tape (Person nodes)
+var crowd_t := 0.0
+var hq_set: Array = []            # nodes of the ops-room intro (freed when the mission starts)
+var drive_started := false
+var gestures := {}                # dialogue line -> colonel gesture
+var colonel_talk_t := 0.0
+var breacher: Node = null         # teammate sent to plant the charge
+var team_tick := 0.0
 
 const TEAM_NAMES := ["الصقر ٢", "الصقر ٣", "الصقر ٤", "الصقر ٥"]
 const TEAM_OFFSETS := [Vector3(-1.4, 0, 2.0), Vector3(1.4, 0, 2.2), Vector3(-1.6, 0, 4.2), Vector3(1.6, 0, 4.4)]
@@ -125,7 +134,7 @@ func _ready() -> void:
 	traffic.set_script(Traffic)
 	add_child(traffic)
 	traffic.main = self
-	traffic.setup(city, 14 if CustomModels.files_for("res://assets/cars", "sedan").size() > 0 else 22)
+	traffic.setup(city, Settings.traffic_count())
 	vehicle = VehicleBody3D.new()
 	vehicle.set_script(Vehicle)
 	vehicle.main = self
@@ -168,6 +177,8 @@ func _ready() -> void:
 	add_child(peds)
 	peds.setup(self)
 	_spawn_objectives()
+	if not sniper_mission:
+		_spawn_crowd()
 	cine_cam = Camera3D.new()
 	cine_cam.fov = 55; cine_cam.far = 1500
 	add_child(cine_cam)
@@ -338,6 +349,16 @@ func _environment() -> void:
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.shadow_bias = 0.04
 	add_child(sun)
+	_env = env
+	_sun = sun
+	Settings.apply(get_viewport(), env, sun)
+	Voice.enabled = Settings.voice
+
+var _env: Environment
+var _sun: DirectionalLight3D
+
+func apply_quality() -> void:
+	Settings.apply(get_viewport(), _env, _sun)
 
 # ------------------------------------------------------------------ mission flow
 func _start_mission() -> void:
@@ -384,8 +405,73 @@ func _start_intro() -> void:
 	if sniper_mission and city.sniper_nests.size() > 0:
 		var np: Vector3 = city.sniper_nests[0][0]
 		intro_shots[2] = [np + Vector3(-4, 1.5, 4), np + Vector3(1, 1.2, 2.5), c + Vector3(0, 0, -12), 6.0]
+	# opening shot: the operations room at HQ — the call comes in, the team gets up
+	if city.hq_pos != Vector3.INF:
+		_build_ops_room()
+		var hp: Vector3 = city.hq_pos
+		intro_shots.push_front([hp + Vector3(2.4, 2.1, 1.3), hp + Vector3(0.4, 1.8, 0.4), hp + Vector3(-2.7, 1.25, -2.4), 7.0])
+	else:
+		intro_shots.push_front(intro_shots[0])
 	intro_i = -1
 	_next_shot()
+
+## People and props for the HQ scene (inside the office model): wall screen, duty officer, the team on stand-by.
+func _build_ops_room() -> void:
+	var hp: Vector3 = city.hq_pos
+	var fl := 0.3
+	var screen := MeshInstance3D.new()
+	var qm := BoxMesh.new(); qm.size = Vector3(3.6, 1.9, 0.08)
+	screen.mesh = qm
+	var sm := StandardMaterial3D.new()
+	sm.albedo_color = Color(0.02, 0.05, 0.1)
+	sm.emission_enabled = true; sm.emission = Color(0.15, 0.5, 0.9); sm.emission_energy_multiplier = 1.4
+	screen.material_override = sm
+	add_child(screen)
+	screen.global_position = hp + Vector3(-2.7, fl + 1.9, -5.0)
+	hq_set.append(screen)
+	var lbl := Label3D.new()
+	lbl.text = "غرفة العمليات · %s\n%s" % [M.area, M.title]
+	lbl.font = load("res://assets/fonts/Tajawal-Bold.ttf")
+	lbl.font_size = 64; lbl.pixel_size = 0.004; lbl.outline_size = 0
+	lbl.modulate = Color(0.75, 0.92, 1.0)
+	add_child(lbl)
+	lbl.global_position = screen.global_position + Vector3(0, 0, 0.06)
+	hq_set.append(lbl)
+	var desk := MeshInstance3D.new()
+	var dm := BoxMesh.new(); dm.size = Vector3(2.4, 0.8, 0.9)
+	desk.mesh = dm
+	var dmat := StandardMaterial3D.new(); dmat.albedo_color = Color(0.12, 0.12, 0.14)
+	desk.material_override = dmat
+	add_child(desk)
+	desk.global_position = hp + Vector3(-2.7, fl - 2.0, -4.2)
+	hq_set.append(desk)
+	var lamp := OmniLight3D.new()
+	lamp.light_color = Color(1.0, 0.25, 0.2); lamp.light_energy = 2.5; lamp.omni_range = 9.0
+	add_child(lamp)
+	lamp.global_position = hp + Vector3(-2.7, fl + 2.6, -1.5)
+	lamp.set_meta("alarm", true)
+	hq_set.append(lamp)
+	var fill := OmniLight3D.new()
+	fill.light_color = Color(0.8, 0.9, 1.0); fill.light_energy = 1.8; fill.omni_range = 12.0
+	add_child(fill)
+	fill.global_position = hp + Vector3(0.5, fl + 2.6, 0.5)
+	hq_set.append(fill)
+	var cast := [["officer", Vector3(-2.7, fl, -3.4), PI, "point"], ["swat", Vector3(-4.6, fl, -1.6), -PI / 2, "rifle"], ["swat", Vector3(-0.9, fl, -1.2), PI / 2, "rifle"], ["swat", Vector3(-2.2, fl, 0.5), 0.2, "rifle"]]
+	for i in cast.size():
+		var c: Array = cast[i]
+		var p := Person.new(c[0], 300 + i)
+		add_child(p)
+		p.global_position = hp + (c[1] as Vector3)
+		p.rotation.y = float(c[2])
+		p.pose.point_at = screen.global_position
+		p.set_mode(c[3])
+		hq_set.append(p)
+
+func _clear_ops_room() -> void:
+	for n in hq_set:
+		if is_instance_valid(n):
+			n.queue_free()
+	hq_set.clear()
 
 func _next_shot() -> void:
 	intro_i += 1
@@ -393,11 +479,18 @@ func _next_shot() -> void:
 	hud.clear_radio()
 	match intro_i:
 		0:
+			if city.hq_pos != Vector3.INF:
+				Sfx.play("ring", 2.0)
+				hud.show_banner("غرفة العمليات", "مديرية الأمن العام · وحدة الصقر", 4.0)
+				hud.radio("غرفة العمليات", "نداء عاجل لوحدة الصقر: %s. تحرّكوا فوراً!" % M.news, 6.5)
+			else:
+				intro_t = 99.0
+		1:
 			hud.show_banner("عاجل", M.news, 5.5)
 			hud.radio("نشرة الأخبار", M.news_line, 5.8)
-		1:
-			hud.radio(NEGOTIATOR if M.id != "raid" else "فريق المراقبة", M.negotiator_line, 6.3)
 		2:
+			hud.radio(NEGOTIATOR if M.id != "raid" else "فريق المراقبة", M.negotiator_line, 6.3)
+		3:
 			hud.radio(COLONEL, M.commander_line, 5.8)
 		_:
 			_begin_drive()
@@ -408,15 +501,67 @@ func _begin_drive() -> void:
 		return
 	phase = "drive"
 	intro_i = 99
+	_clear_ops_room()
 	hud.set_letterbox(false)
 	hud.set_prompt("")
-	vehicle.set_driving(true)
 	_capture_mouse(true)
 	hud.clear_radio()
-	hud.radio("غرفة العمليات", "إلى الصقر ١: الطريق إلى %s مفتوح، الدوريات سكّرت الشوارع الفرعية." % M.area, 4.5)
-	hud.radio("الصقر ٢", "الفريق جاهز بالخلف يا سيدي. عبوة الاقتحام معنا." if team_size > 0 else "الوحدة المساندة عالقة بالأزمة. أنت لوحدك يا الصقر ١.", 4.0)
 	hud.show_banner(M.title, "%s · %s" % [M.area, M.clock], 3.5)
+	if city.hq_pos == Vector3.INF:
+		in_vehicle = true
+		vehicle.set_driving(true)
+		_on_drive_start()
+		return
+	# out of the HQ door on foot: run to the truck parked across the street
+	in_vehicle = false
+	vehicle.set_driving(false)
+	var hp: Vector3 = city.hq_pos
+	var out := Vector3(hp.x, 0.2, city.size_total + 1.6)
+	player.global_position = out
+	player.yaw = 0.0
+	player.rotation.y = 0.0
+	player.pitch = -0.08
+	player.set_active(true)
+	_place_team(out, Basis.IDENTITY)
+	hud.radio("الصقر ١", "يلّا يا شباب عالسيارة! تحرّكوا!", 2.5)
+	if team_size > 0:
+		hud.radio("الصقر ٢", "العدّة جاهزة وعبوة الاقتحام معنا. وراك!", 3.0)
+	hud.set_waypoint(vehicle.global_position + Vector3(0, 2.2, 0))
+	hud.set_objectives(["◆ اركب سيارة الوحدة [F]"])
+
+## Called when the truck first rolls: route, radio chatter, and the teammate driver if chosen.
+func _on_drive_start() -> void:
+	drive_started = true
+	hud.clear_radio()
+	hud.radio("غرفة العمليات", "إلى الصقر ١: الطريق إلى %s مفتوح، الدوريات سكّرت الشوارع الفرعية." % M.area, 4.5)
 	hud.set_waypoint(city.cordon_point + Vector3(0, 1, 0))
+	hud.set_objectives(["◆ قُد السيارة إلى الطوق الأمني – %s" % M.title, "◇ [H] صفارة · [E] زامور · [F] نزول/ركوب"])
+	if team_size > 0:
+		if Settings.driver == 1:
+			_start_auto_drive()
+		for l in M.get("banter", []):
+			if TEAM_NAMES.find(l[0]) < team_size or l[0] == "الصقر ١":
+				hud.radio(l[0], l[1], 4.0)
+	else:
+		hud.radio("غرفة العمليات", "الوحدة المساندة عالقة بالأزمة. إنت لحالك يا الصقر ١.", 4.0)
+
+## "واحد من الفريق بسوق": the truck drives itself to the cordon while the team talks on the way.
+func _start_auto_drive() -> void:
+	var cp: Vector3 = city.cordon_point
+	var sp: Vector3 = vehicle.global_position
+	var zs: float = city.road_center(city.bank_block.y + 1)
+	var east := cp.x > sp.x
+	var lane := 2.3 if east else -2.3
+	var sx := 1.0 if east else -1.0
+	# swing a little wide before the corner, then settle into the right-hand lane
+	vehicle.route = [Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 21.0, 0, zs + lane)]
+	vehicle.route_i = 0
+	vehicle.auto_drive = true
+	hud.set_objectives(["◆ الصقر ٢ بيسوق للموقع – %s" % M.title, "◇ اضغط [فرامل/قفز] أو حرّك العصا لتاخذ القيادة"])
+	hud.radio("الصقر ٢", "خلّيها عليّ يا سيدي، أنا بسوق. ركّز إنت بالخطة.", 3.5)
+
+func on_take_wheel() -> void:
+	hud.radio("الصقر ١", "وقّف، أنا بكمّل السواقة.", 2.0)
 	hud.set_objectives(["◆ قُد السيارة إلى الطوق الأمني – %s" % M.title, "◇ [H] صفارة · [E] زامور · [F] نزول/ركوب"])
 
 # ---- sniper mission: start on the rooftop across from the target, scoped rifle in hand
@@ -455,7 +600,7 @@ func sniper_text() -> void:
 func _arrive() -> void:
 	phase = "arrive"
 	hud.clear_radio()
-	hud.radio(COLONEL, "الصقر ١، أنا عند الطوق. انزل وتعال لعندي.", 4.0)
+	hud.radio(COLONEL, "الصقر ١، شايفك. صفّ عندك وتعال لعندي، أنا عند طاولة القيادة.", 4.0)
 	hud.set_waypoint(colonel.global_position + Vector3(0, 2.2, 0))
 	hud.set_objectives(["◆ انزل من السيارة [F]", "◆ تحدّث مع %s [E]" % COLONEL])
 
@@ -465,28 +610,90 @@ func _talk_colonel() -> void:
 	talked = true
 	phase = "staging"
 	hud.clear_radio()
-	var n := enemies.size()
-	var situation := "الوضع: %d مسلّحين على الأقل" % n
-	if hostages.size() > 0:
-		situation += "، و%d رهائن جوّا" % hostages.size()
-	if evidence.size() > 0:
-		situation += "، و%d أدلة لازم نحصّلها" % evidence.size()
-	hud.radio(COLONEL, situation + ".", 4.5)
-	for line in M.brief:
-		hud.radio(COLONEL, line, 5.0)
-	hud.radio(COLONEL, "معك %d قنابل صوتية [G] — ارمِها بالغرف قبل ما تدخل." % flashbangs, 4.0)
-	if M.finale == "van":
-		hud.radio(NEGOTIATOR, "انتبه… %s ذكي. ما بستبعد يكون عامل طريق هروب." % LEADER, 4.0)
+	gestures.clear()
+	var vals := {"n": str(enemies.size()), "h": str(hostages.size()), "e": str(evidence.size()), "leader": LEADER}
+	var names := {"C": COLONEL, "P": "الصقر ١", "N": NEGOTIATOR, "T": "الصقر ٢"}
+	if M.has("dialogue"):
+		# a real back-and-forth: the colonel briefs, the team leader answers
+		for d in M.dialogue:
+			var text: String = (d[1] as String).format(vals)
+			var who: String = names[d[0]]
+			hud.radio(who, text, maxf(2.2, text.length() * 0.075))
+			if d[2] != "":
+				gestures[text] = d[2]
+	else:
+		hud.radio(COLONEL, "الوضع: %d مسلّحين على الأقل." % enemies.size(), 4.5)
+		for line in M.brief:
+			hud.radio(COLONEL, line, 5.0)
+	hud.radio(COLONEL, "ومعك %d قنابل صوتية [G]. استعملها." % flashbangs, 3.0)
 	hud.set_waypoint(city.door_pos + Vector3(0, 1.6, 1.6))
-	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي – الفريق رح يصطف معك على الجنبين", "◆ ازرع عبوة الاقتحام [E]", "◇ [C] انحناء · [T] أوامر للفريق"])
+	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي – الفريق رح يصطف معك على الجنبين", "◆ ازرع عبوة الاقتحام [E] — أو [T] ليزرعها واحد من الفريق ويقتحموا", "◇ [C] انحناء"])
 	_start_dialogue_cam()
+
+func _update_colonel(dt: float) -> void:
+	if not colonel:
+		return
+	if colonel_talk_t > 0.0 and cutscene_t <= 0.0:
+		colonel_talk_t -= dt
+		if colonel_talk_t <= 0.0:
+			colonel.set_mode("none")
+	# before the briefing he watches you come in and turns to face you
+	if phase == "arrive" and not talked:
+		var to: Vector3 = player.global_position - colonel.global_position
+		if in_vehicle:
+			to = vehicle.global_position - colonel.global_position
+		if to.length() < 22.0:
+			colonel.rotation.y = lerp_angle(colonel.rotation.y, atan2(to.x, to.z), 1.0 - exp(-dt * 4.0))
+			if to.length() < 9.0 and not in_vehicle and colonel.pose.mode != "salute":
+				colonel.set_mode("salute")
+
+## Onlookers and the TV crew behind the tape: animated only when you are close, hidden when far.
+func _spawn_crowd() -> void:
+	var spots: Array = city.crowd_spots.duplicate()
+	spots.shuffle()
+	for i in mini(Settings.crowd_count(), spots.size()):
+		var p := Person.new("civilian", 2000 + i)
+		add_child(p)
+		p.global_position = spots[i][0] + Vector3(0, 0.16 if false else 0.0, 0)
+		p.rotation.y = float(spots[i][1])
+		crowd.append(p)
+	for ps in city.press_spots:
+		var role: String = "hostage" if ps[2] == "reporter" else "civilian"
+		var p := Person.new(role, 2100 + crowd.size())
+		add_child(p)
+		p.global_position = ps[0]
+		p.rotation.y = float(ps[1])
+		p.set_mode("mic" if ps[2] == "reporter" else "camera")
+		crowd.append(p)
+
+func _update_crowd(dt: float) -> void:
+	crowd_t -= dt
+	if crowd_t > 0.0:
+		return
+	crowd_t = 0.5
+	var ref: Vector3 = listener_pos()
+	for p in crowd:
+		var d: float = p.global_position.distance_to(ref)
+		p.visible = d < 95.0
+		p.anim.speed_scale = 1.0 if d < 30.0 else 0.0
+
+## The HUD calls this whenever a radio / dialogue line starts: cut the camera to whoever speaks
+## and let the colonel act it out (salute, explain with his hands, point at the door, radio in hand).
+func on_radio_line(who: String, text: String) -> void:
+	if who == COLONEL:
+		var g: String = gestures.get(text, "talk" if cutscene_t > 0.0 else "radio")
+		colonel.pose.point_at = city.door_pos + Vector3(0, 1.5, 0)
+		colonel.set_mode(g)
+		colonel_talk_t = maxf(2.0, text.length() * 0.08)
+	elif cutscene_t > 0.0:
+		colonel.set_mode("none")
+	if cutscene_t > 0.0:
+		cut_i = 0 if who == COLONEL else (1 if who == "الصقر ١" else 2)
+		cut_k = 0.0
 
 ## Cinematic dialogue: shot / reverse-shot between the colonel and the team leader, letterboxed.
 func _start_dialogue_cam() -> void:
-	var total := 0.0
-	for m in hud.radio_queue:
-		total += maxf(float(m[2]), Voice.estimate(m[1], m[0]) if Voice.available() else 0.0)
-	cutscene_t = clampf(total + 0.5, 4.0, 26.0)
+	cutscene_t = 1.0      # stays > 0 until the last line has been said
 	var cp: Vector3 = colonel.global_position
 	var pp: Vector3 = player.global_position
 	var d := (cp - pp); d.y = 0
@@ -509,11 +716,9 @@ func _start_dialogue_cam() -> void:
 	cine_cam.current = true
 
 func _update_dialogue_cam(dt: float) -> void:
-	cutscene_t -= dt
-	cut_k += dt / 4.5
-	if cut_k >= 1.0:
-		cut_k = 0.0
-		cut_i = (cut_i + 1) % cut_shots.size()
+	cut_k = minf(cut_k + dt / 5.0, 1.0)
+	if hud.radio_queue.is_empty() and hud.radio_t <= 0.0:
+		cutscene_t = 0.0
 	var sh: Array = cut_shots[cut_i]
 	var k := cut_k * cut_k * (3.0 - 2.0 * cut_k)
 	cine_cam.global_position = (sh[0] as Vector3).lerp(sh[1], k)
@@ -525,6 +730,9 @@ func _update_dialogue_cam(dt: float) -> void:
 
 func _end_dialogue_cam() -> void:
 	cutscene_t = 0.0
+	colonel.set_mode("none")
+	var to_bank: Vector3 = city.door_pos - colonel.global_position
+	colonel.rotation.y = atan2(to_bank.x, to_bank.z)
 	hud.set_letterbox(false)
 	hud.set_prompt("")
 	cine_cam.fov = 55.0
@@ -532,11 +740,13 @@ func _end_dialogue_cam() -> void:
 	input_guard = 0.4
 	Controls.block_fire()
 
-func _plant_charge() -> void:
+func _plant_charge(who := "الصقر ١") -> void:
+	if phase != "staging":
+		return
 	phase = "breach"
 	hud.set_prompt("")
 	hud.clear_radio()
-	hud.radio("الصقر ١", "العبوة مزروعة! ابتعدوا عن الباب!", 2.5)
+	hud.radio(who, "العبوة مزروعة! ابتعدوا عن الباب!", 2.5)
 	for i in 3:
 		hud.show_countdown(str(3 - i))
 		Sfx.play("beep", 0.0, 1.0 + i * 0.15)
@@ -716,6 +926,8 @@ func _process(dt: float) -> void:
 		return
 	if cutscene_t > 0.0:
 		_update_dialogue_cam(dt)
+	_update_colonel(dt)
+	_update_crowd(dt)
 	mission_time += dt
 	if shake > 0.0:
 		shake = maxf(shake - dt * 1.5, 0.0)
@@ -784,6 +996,7 @@ func _process(dt: float) -> void:
 		hud.set_waypoint(leader.global_position + Vector3(0, 2.2, 0))
 	if cutscene_t <= 0.0:
 		_interactions()
+	_team_work(dt)
 	if Controls.just("orders") and not in_vehicle and player.alive and input_guard <= 0.0 and cutscene_t <= 0.0:
 		_give_order()
 	if phase == "assault" and Controls.just("yell") and not in_vehicle and input_guard <= 0.0:
@@ -1076,6 +1289,10 @@ func _exit_vehicle() -> void:
 	player.yaw = atan2(f.x, f.z) + PI
 	player.rotation.y = player.yaw
 	player.set_active(true)
+	_place_team(out, b)
+
+func _place_team(out: Vector3, b: Basis) -> void:
+	var used: Array = [out]
 	if team_size > 0:
 		if not team_spawned:
 			team_spawned = true
@@ -1100,27 +1317,84 @@ func _exit_vehicle() -> void:
 				cands.append(out + b.z * (-1.6 - k * 1.1) + b.x * (0.0 if k % 2 == 0 else -0.9))
 				cands.append(out + b.z * (1.6 + k * 1.1))
 			cands.append(out + Vector3(0, 0, 0))
-			t.global_position = _free_spot(cands, [vehicle.get_rid(), player.get_rid()])
+			# physics hasn't seen the teammates placed this frame yet: keep them apart by hand
+			var free_c := cands.filter(func(c): return not used.any(func(u): return (u as Vector3).distance_to(c) < 1.0))
+			t.global_position = _free_spot(free_c if free_c.size() > 0 else cands, [vehicle.get_rid(), player.get_rid()])
+			used.append(t.global_position)
 			t.rotation.y = player.yaw
 
-## [T] team orders: follow me <-> hold this position. The team answers on the radio.
+## [T] team orders. Before the breach: send a teammate to blow the door. During the assault:
+## follow me -> hold here -> push in and clear on your own.
 func _give_order() -> void:
 	var alive_team := team.filter(func(t): return not t.dead and t.visible)
 	if alive_team.is_empty():
 		hud.radio("الصقر ١", "ما في حدا معي… أنا لحالي.", 2.0)
 		return
-	if team_order == "follow":
-		team_order = "hold"
-		for t in alive_team:
-			t.hold_pos = t.global_position
-		hud.radio("الصقر ١", ["اثبتوا مكانكم وغطّوا!", "خليكم هون، أمّنوا المكان!"].pick_random(), 2.0)
-		hud.radio(alive_team[0].display_name, ["تمام، ثابتين ومغطّينك.", "علم، ماسكين المكان."].pick_random(), 2.0)
-		hud.show_banner("", "أمر للفريق: اثبتوا مكانكم", 1.5)
-	else:
+	if phase == "staging" and cutscene_t <= 0.0:
+		if breacher == null:
+			breacher = alive_team[0]
+			breacher.task_goal = city.door_pos + Vector3(0, 0, 1.5)
+			team_order = "assault"
+			hud.radio("الصقر ١", "%s، افتح الباب! الباقي جاهزين للدخول." % breacher.display_name, 2.5)
+			hud.radio(breacher.display_name, "علم! رايح أزرع العبوة.", 2.0)
+			hud.show_banner("", "أمر للفريق: نفّذوا الاقتحام", 1.8)
+		return
+	var nxt := {"follow": "hold", "hold": "assault", "assault": "follow"}
+	team_order = nxt[team_order]
+	if team_order == "assault" and phase != "assault":
 		team_order = "follow"
-		hud.radio("الصقر ١", ["اتبعوني! تحرّك!", "معي يا شباب، يلّا!"].pick_random(), 2.0)
-		hud.radio(alive_team[0].display_name, ["وراك!", "متحرّكين معك."].pick_random(), 1.6)
-		hud.show_banner("", "أمر للفريق: اتبعوني", 1.5)
+	match team_order:
+		"hold":
+			for t in alive_team:
+				t.hold_pos = t.global_position
+			hud.radio("الصقر ١", ["اثبتوا مكانكم وغطّوا!", "خليكم هون، أمّنوا المكان!"].pick_random(), 2.0)
+			hud.radio(alive_team[0].display_name, ["تمام، ثابتين ومغطّينك.", "علم، ماسكين المكان."].pick_random(), 2.0)
+			hud.show_banner("", "أمر للفريق: اثبتوا مكانكم", 1.5)
+		"assault":
+			hud.radio("الصقر ١", ["تقدّموا ونظّفوا الغرف!", "ادخلوا! غرفة غرفة!"].pick_random(), 2.0)
+			hud.radio(alive_team[0].display_name, ["داخلين! غطّونا!", "متقدّمين، الغرفة الجاي إلنا."].pick_random(), 2.0)
+			hud.show_banner("", "أمر للفريق: تقدّموا ونظّفوا", 1.5)
+		_:
+			hud.radio("الصقر ١", ["اتبعوني! تحرّك!", "معي يا شباب، يلّا!"].pick_random(), 2.0)
+			hud.radio(alive_team[0].display_name, ["وراك!", "متحرّكين معك."].pick_random(), 1.6)
+			hud.show_banner("", "أمر للفريق: اتبعوني", 1.5)
+
+## Teammates sent in on their own cuff suspects and free hostages they reach, and the breacher blows the door.
+func _team_work(dt: float) -> void:
+	if breacher != null:
+		if breacher.dead or phase != "staging":
+			breacher.task_goal = Vector3.INF
+			breacher = null
+		elif breacher.global_position.distance_to(city.door_pos + Vector3(0, 0, 1.5)) < 1.6:
+			var who: String = breacher.display_name
+			breacher.task_goal = Vector3.INF
+			breacher = null
+			_plant_charge(who)
+	team_tick -= dt
+	if team_tick > 0.0 or phase != "assault" or team_order != "assault":
+		return
+	team_tick = 0.6
+	for t in team:
+		if t.dead or not t.visible or t.escort_h:
+			continue
+		for e in enemies:
+			if e.surrendered and not e.cuffed and not e.dead and t.global_position.distance_to(e.global_position) < 2.4:
+				e.cuffed = true
+				arrests += 1
+				Sfx.play_3d("cuff", e.global_position)
+				e.model.set_mode("kneel_back")
+				hud.radio(t.display_name, "المشتبه مكبّل!", 1.8)
+				mission_assault_text()
+				_check_win()
+				return
+		for h in hostages:
+			if not h.dead and not h.freed and not h.rescued and t.global_position.distance_to(h.global_position) < 2.4:
+				h.free_hostage(trail.size())
+				t.escort_h = h
+				h.escort = t
+				hud.radio(t.display_name, "لقيت رهينة! بطلّعها لبرّا.", 2.2)
+				mission_assault_text()
+				return
 
 func on_vehicle_broken() -> void:
 	hud.show_banner("السيارة تعطّلت!", "انزل [F] واضغط [E] مطوّل جنبها لتصليحها", 3.5)
@@ -1148,6 +1422,8 @@ func _reset_shake() -> void:
 
 func _enter_vehicle() -> void:
 	in_vehicle = true
+	if phase == "drive" and not drive_started:
+		_on_drive_start.call_deferred()
 	_reset_shake()
 	trail.clear()
 	player.set_active(false)
@@ -1336,7 +1612,7 @@ func _notification(what: int) -> void:
 			hud.toggle_pause()
 
 func _unhandled_input(e: InputEvent) -> void:
-	if cutscene_t > 0.0 and cutscene_t < 999.0 and ((e is InputEventKey and e.pressed and not e.echo) or (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed)):
+	if cutscene_t > 0.0 and ((e is InputEventKey and e.pressed and not e.echo) or (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed)):
 		get_viewport().set_input_as_handled()
 		hud.clear_radio()
 		_end_dialogue_cam()

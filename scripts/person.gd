@@ -5,6 +5,7 @@ extends Node3D
 
 const Retarget = preload("res://scripts/retarget.gd")
 const PoseMod = preload("res://scripts/pose_mod.gd")
+const Settings = preload("res://scripts/settings.gd")
 const Humanoid = preload("res://scripts/humanoid.gd")
 const CustomModels = preload("res://scripts/custom_models.gd")
 const CarMesh = preload("res://scripts/car_mesh.gd")
@@ -95,7 +96,11 @@ func _init(_role := "swat", seed_val := 0) -> void:
 	for c in _all(model):
 		if c is GeometryInstance3D:
 			var skinned: bool = c is MeshInstance3D and c.get_parent() == skel
-			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if skinned else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			# background people (civilians, crowd) only cast shadows on the highest quality level
+			var shadow: bool = skinned and (Settings.quality == 2 or role in ["swat", "robber", "officer", "hostage"])
+			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if role == "civilian":
+				c.visibility_range_end = [55.0, 75.0, 110.0][Settings.quality]
 
 func _ready() -> void:
 	play("Idle")
@@ -156,7 +161,7 @@ func set_mode(m: String) -> void:
 	pose.mode = m
 	if gun:
 		gun.visible = m == "rifle"
-	if m.begins_with("kneel") or m == "hands_up":
+	if m.begins_with("kneel") or m in ["hands_up", "talk", "point", "salute", "radio", "mic", "camera"]:
 		play("Idle")
 
 func set_aim(p: float) -> void:

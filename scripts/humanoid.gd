@@ -92,12 +92,12 @@ static func sniper() -> Node3D:
 		var body := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.05, 0.09, 1.1); bm.material = m
 		body.mesh = bm; body.position = Vector3(0, 0.02, -0.2); g.add_child(body)
 	var sc := MeshInstance3D.new()
-	var cm := CylinderMesh.new(); cm.top_radius = 0.034; cm.bottom_radius = 0.034; cm.height = 0.36; cm.material = m
+	var cm := CylinderMesh.new(); cm.top_radius = 0.034; cm.bottom_radius = 0.034; cm.height = 0.36; cm.radial_segments = 10; cm.rings = 1; cm.material = m
 	sc.mesh = cm; sc.rotation.x = PI / 2; sc.position = Vector3(0, 0.125, -0.1)
 	g.add_child(sc)
 	for z in [-0.3, 0.06]:
 		var lens := MeshInstance3D.new()
-		var lm := CylinderMesh.new(); lm.top_radius = 0.037; lm.bottom_radius = 0.037; lm.height = 0.06; lm.material = m
+		var lm := CylinderMesh.new(); lm.top_radius = 0.037; lm.bottom_radius = 0.037; lm.height = 0.06; lm.radial_segments = 10; lm.rings = 1; lm.material = m
 		lens.mesh = lm; lens.rotation.x = PI / 2; lens.position = Vector3(0, 0.125, z)
 		g.add_child(lens)
 	for mi in g.find_children("*", "GeometryInstance3D", true, false):

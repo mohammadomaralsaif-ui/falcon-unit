@@ -26,6 +26,7 @@ func _ready() -> void:
 	streams["flesh"] = _flesh()
 	streams["reload"] = _reload()
 	streams["radio"] = _radio()
+	streams["ring"] = _ring()
 	streams["sniper"] = _shot(0.9, 1.0, 95.0)
 	streams["bolt"] = _bolt()
 	streams["sputter"] = _sputter()
@@ -280,6 +281,19 @@ func _ambience(night := false) -> AudioStreamWAV:
 				v += sin(TAU * (520.0 - dd * 900.0) * dd) * 0.07 * exp(-dd * 14.0) + band * 0.05 * exp(-dd * 20.0)
 		s[i] = clampf(v * 1.6, -1.0, 1.0)
 	return _wav(s, true)
+
+func _ring() -> AudioStreamWAV:
+	## desk phone: two bursts of a warbling bell
+	var n := int(1.6 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var on := (t < 0.5) or (t > 0.8 and t < 1.3)
+		if on:
+			var f := 950.0 if fmod(t * 22.0, 1.0) < 0.5 else 1250.0
+			s[i] = sin(TAU * f * t) * 0.35
+	return _wav(s)
 
 func _radio() -> AudioStreamWAV:
 	## push-to-talk: click + short band-limited static
