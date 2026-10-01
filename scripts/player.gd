@@ -20,6 +20,15 @@ var hp := 100.0
 var alive := true
 var ammo := 30
 var reserve := 150
+## weapons: rifle (auto) and Glock sidearm (semi-auto, quick to reload)
+const WEAPONS := {
+	"rifle": {"name": "RM-277", "mag": 30, "cd": 0.08, "dmg": 34.0, "spread": 0.02, "reload": 2.0, "sound": "rifle", "kick": 0.012},
+	"pistol": {"name": "Glock 17", "mag": 17, "cd": 0.2, "dmg": 30.0, "spread": 0.014, "reload": 1.3, "sound": "pistol", "kick": 0.02},
+}
+var weapon := "rifle"
+var bag := {"rifle": [30, 150], "pistol": [17, 68]}
+var switch_t := 0.0
+var _semi_ready := true
 var fire_cd := 0.0
 var reload_t := 0.0
 var aim := 0.0
@@ -111,26 +120,52 @@ func _physics_process(dt: float) -> void:
 		reload_t -= dt
 		gun.rotation.z = sin(reload_t * 4.0) * 0.5
 		if reload_t <= 0.0:
-			var take: int = mini(30 - ammo, reserve)
+			var take: int = mini(int(WEAPONS[weapon].mag) - ammo, reserve)
 			ammo += take; reserve -= take
 			gun.rotation.z = 0.0
-	elif Controls.just("reload") and ammo < 30 and reserve > 0:
-		reload_t = 2.0
-		Sfx.play("reload", -6.0)
-	elif Controls.held("fire") and fire_cd <= 0.0 and not sprint:
+	if not Controls.held("fire"):
+		_semi_ready = true
+	if switch_t > 0.0:
+		switch_t -= dt
+	elif Controls.just("switch") and reload_t <= 0.0:
+		switch_weapon()
+	elif reload_t > 0.0:
+		pass
+	elif Controls.just("reload") and ammo < int(WEAPONS[weapon].mag) and reserve > 0:
+		_reload()
+	elif Controls.held("fire") and fire_cd <= 0.0 and not sprint and (weapon == "rifle" or _semi_ready):
 		if ammo > 0:
+			_semi_ready = false
 			_shoot()
 		elif reserve > 0:
-			reload_t = 2.0
-			Sfx.play("reload", -6.0)
+			_reload()
+		elif bag["pistol" if weapon == "rifle" else "rifle"][0] > 0:
+			switch_weapon()
 	if Time.get_ticks_msec() / 1000.0 - last_hit > 5.0 and hp < 100.0:
 		hp = minf(100.0, hp + 12.0 * dt)
 
+func _reload() -> void:
+	reload_t = float(WEAPONS[weapon].reload)
+	Sfx.play("reload", -6.0, 1.2 if weapon == "pistol" else 1.0)
+
+## Rifle <-> Glock. Each weapon keeps its own magazine and reserve.
+func switch_weapon() -> void:
+	bag[weapon] = [ammo, reserve]
+	weapon = "pistol" if weapon == "rifle" else "rifle"
+	ammo = bag[weapon][0]; reserve = bag[weapon][1]
+	switch_t = 0.45
+	fire_cd = maxf(fire_cd, 0.45)
+	model.set_weapon(weapon)
+	gun = model.gun
+	muzzle = model.muzzle
+	Sfx.play("cuff", -10.0, 0.8)
+
 func _shoot() -> void:
-	fire_cd = 0.08
+	var w: Dictionary = WEAPONS[weapon]
+	fire_cd = float(w.cd)
 	ammo -= 1
 	stats.shots += 1
-	var spread := lerpf(0.02, 0.004, aim)
+	var spread := lerpf(float(w.spread), 0.004, aim)
 	var from := cam.global_position
 	var fwd := -cam.global_basis.z
 	fwd = (fwd + cam.global_basis.x * randf_range(-spread, spread) + cam.global_basis.y * randf_range(-spread, spread)).normalized()
@@ -144,7 +179,7 @@ func _shoot() -> void:
 		var col: Object = hit.collider
 		if col and col.has_method("take_hit"):
 			var head: bool = hit.position.y - col.global_position.y > 1.48
-			var killed: bool = col.take_hit(34.0 * (3.2 if head else 1.0), head, self)
+			var killed: bool = col.take_hit(float(w.dmg) * (3.2 if head else 1.0), head, self)
 			stats.hits += 1
 			if main:
 				main.on_player_hit(killed, head)
@@ -162,8 +197,8 @@ func _shoot() -> void:
 	Fx.tracer(main, mpos, end)
 	Fx.flash(main, mpos, 3.0)
 	Fx.muzzle(main, muzzle)
-	Sfx.play("rifle", -4.0, randf_range(0.95, 1.05))
-	pitch += 0.012
+	Sfx.play(str(w.sound), -4.0, randf_range(0.95, 1.05))
+	pitch += float(w.kick)
 	yaw += randf_range(-0.006, 0.006)
 	shot_fired.emit(global_position)
 

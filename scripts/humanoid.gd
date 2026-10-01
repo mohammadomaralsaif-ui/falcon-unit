@@ -62,6 +62,23 @@ static func bone_named(sk: Skeleton3D, part: String) -> int:
 			return i
 	return -1
 
+## Sidearm (Glock): origin at the grip, barrel along -Z.
+static func pistol() -> Node3D:
+	var real := CustomModels.weapon("pistol", 0.19, 0.035)
+	if real:
+		var t := Marker3D.new(); t.name = "Muzzle"; t.position = Vector3(0, 0.025, -0.16)
+		real.add_child(t)
+		return real
+	var g := Node3D.new()
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(0.06, 0.06, 0.07); m.roughness = 0.5
+	for b in [[Vector3(0.03, 0.035, 0.19), Vector3(0, 0.02, -0.06)], [Vector3(0.028, 0.1, 0.045), Vector3(0, -0.04, 0.0)]]:
+		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = b[0]; bm.material = m
+		mi.mesh = bm; mi.position = b[1]; mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(mi)
+	var t2 := Marker3D.new(); t2.name = "Muzzle"; t2.position = Vector3(0, 0.025, -0.16)
+	g.add_child(t2)
+	return g
+
 static func rifle(kind := "m4") -> Node3D:
 	## Built facing -Z, origin at the pistol grip. Geometry is built once per kind and shared.
 	# real weapon models dropped into assets/weapons/ win

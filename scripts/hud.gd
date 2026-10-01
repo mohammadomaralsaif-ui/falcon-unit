@@ -245,7 +245,7 @@ func _build_hud() -> void:
 	waypoint.add_child(wp_lbl)
 
 # ------------------------------------------------------------------ public API
-const TOUCH_HINTS := {"[E]": "(زر تفاعل)", "[F]": "(زر سيارة)", "[H]": "(زر صفارة)", "[Q]": "(زر استسلم!)", "[R]": "(زر تعبئة)"}
+const TOUCH_HINTS := {"[E]": "(زر تفاعل)", "[F]": "(زر سيارة)", "[H]": "(زر صفارة)", "[Q]": "(زر استسلم!)", "[R]": "(زر تعبئة)", "[X]": "(زر سلاح)", "[G]": "(زر فلاش)"}
 
 ## On phones, replace keyboard key hints with the on-screen button names.
 func _touchify(t: String) -> String:
@@ -360,7 +360,7 @@ func _process(dt: float) -> void:
 	hp_bar.get_parent().visible = playing and not in_car
 	hp_bar.value = pl.hp
 	ammo_lbl.visible = playing and not in_car
-	ammo_lbl.text = ("إعادة تعبئة…" if pl.reload_t > 0.0 else "%d  ⁄  %d" % [pl.ammo, pl.reserve])
+	ammo_lbl.text = pl.WEAPONS[pl.weapon].name + "   " + ("إعادة تعبئة…" if pl.reload_t > 0.0 else "%d  ⁄  %d" % [pl.ammo, pl.reserve])
 	speed_lbl.visible = playing and in_car
 	if in_car:
 		speed_lbl.text = "%d كم/س" % int(main.vehicle.speed_kmh)
@@ -407,7 +407,7 @@ func _process(dt: float) -> void:
 			match k:
 				"siren":
 					b.visible = in_car
-				"fire", "aim", "reload":
+				"fire", "aim", "reload", "switch":
 					b.visible = not in_car
 				"yell":
 					b.visible = not in_car and main.phase == "assault"
@@ -696,7 +696,7 @@ func _build_touch() -> void:
 	var specs := {
 		"fire": ["نار", 70], "aim": ["تصويب", 46], "reload": ["تعبئة", 38], "jump": ["قفز", 40],
 		"interact": ["تفاعل", 44], "vehicle": ["سيارة", 40], "yell": ["استسلم!", 42], "siren": ["صفارة", 38],
-		"pause": ["II", 26], "flash": ["فلاش", 36],
+		"pause": ["II", 26], "flash": ["فلاش", 36], "switch": ["سلاح", 34],
 	}
 	for k in specs:
 		var r: int = specs[k][1]
@@ -733,6 +733,7 @@ func _layout_touch() -> void:
 		"interact": Vector2(vs.x - 380, vs.y - 110), "vehicle": Vector2(vs.x - 380, vs.y - 230),
 		"yell": Vector2(vs.x - 250, vs.y - 370), "siren": Vector2(vs.x - 120, vs.y - 150),
 		"pause": Vector2(vs.x * 0.5 + 200, 34), "flash": Vector2(vs.x - 120, vs.y - 420),
+		"switch": Vector2(vs.x - 240, vs.y - 475),
 	}
 	for k in touch_buttons:
 		var b: TouchScreenButton = touch_buttons[k]

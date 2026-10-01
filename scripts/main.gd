@@ -481,7 +481,7 @@ func mission_assault_text() -> void:
 		lines.append("◆ حرّر الرهائن [E] وأخرجهم لبرّا (%d / %d)" % [hostages_saved, hostages.size()])
 	if evidence.size() > 0:
 		lines.append("◆ اجمع الأدلة [E] (%d / %d)" % [evidence_got, evidence.size() - evidence_lost])
-	lines.append("◇ [Q] استسلام · [G] قنبلة صوتية (%d)" % flashbangs)
+	lines.append("◇ [Q] استسلام · [G] قنبلة صوتية (%d) · [X] رشاش/مسدس" % flashbangs)
 	if evidence_lost > 0:
 		lines.append("✖ أدلة اتلفت: %d" % evidence_lost)
 	if hostages_lost > 0:

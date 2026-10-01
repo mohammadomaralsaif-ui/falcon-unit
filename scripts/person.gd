@@ -88,6 +88,7 @@ func _init(_role := "swat", seed_val := 0) -> void:
 		pose.grip = g1
 		pose.guard = g2
 		pose.mode = "rifle"
+		_rifle = [gun, g1, g2]
 	else:
 		pose.mode = "none"
 	# only the skinned body casts shadows; gear, labels and the rifle don't (big draw-call saving)
@@ -105,6 +106,35 @@ func play(n: String, speed := 1.0) -> void:
 		anim.play(n, 0.25)
 		cur = n
 	anim.speed_scale = speed
+
+var _rifle := []
+var _pistol := []
+var weapon := "rifle"
+const PISTOL_REST := Vector3(0.04, 1.4, -0.56)
+const RIFLE_REST := Vector3(0.17, 1.3, -0.3)
+
+## Swap between the rifle and the sidearm (SWAT only). Hands follow the new weapon.
+func set_weapon(kind: String) -> void:
+	if _rifle.is_empty() or kind == weapon:
+		return
+	if kind == "pistol" and _pistol.is_empty():
+		var p := Humanoid.pistol()
+		add_child(p)
+		var a := Node3D.new(); a.position = Vector3(0.0, -0.045, 0.05); p.add_child(a)
+		var b := Node3D.new(); b.position = Vector3(-0.025, -0.07, 0.03); p.add_child(b)
+		_pistol = [p, a, b]
+	weapon = kind
+	var on: Array = _pistol if kind == "pistol" else _rifle
+	var off: Array = _rifle if kind == "pistol" else _pistol
+	if not off.is_empty():
+		off[0].visible = false
+	gun = on[0]
+	muzzle = gun.get_node("Muzzle")
+	pose.grip = on[1]
+	pose.guard = on[2]
+	gun_rest = PISTOL_REST if kind == "pistol" else RIFLE_REST
+	gun.visible = pose.mode == "rifle"
+	set_aim(aim_pitch)
 
 func set_mode(m: String) -> void:
 	pose.mode = m
