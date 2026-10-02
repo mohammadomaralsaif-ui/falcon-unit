@@ -92,9 +92,19 @@ var hq_set: Array = []            # nodes of the ops-room intro (freed when the 
 var drive_started := false
 var gestures := {}                # dialogue line -> colonel gesture
 var colonel_talk_t := 0.0
+var shout_cd := 0.0
+var talk_cd := 0.0
+var duck_t := 0.0
 var breacher: Node = null         # teammate sent to plant the charge
 var team_tick := 0.0
 
+const ENEMY_ALERT := ["الشرطة! الشرطة دخلت!", "ارجع لورا! ما حدا يقرّب!", "شباب، دخلوا علينا!", "خلّيك مكانك وإلا بطخّ!"]
+const ENEMY_SURRENDER := ["لا تطخ! لا تطخ! مستسلم!", "خلص، خلص! رميت السلاح!", "إيديّ فوق… لا تطخ!"]
+const HOSTAGE_THANKS := ["الله يخليك! طلّعني من هون!", "شكراً… الحمد لله إنكم جيتوا!", "كنت متأكد إنكم رح تيجوا."]
+const CROWD_LINES := ["شو صاير جوّا يا حضرة الضابط؟", "الله يحميكم يا شباب.", "أخوي موظف جوّا… طمّنوني عليه!", "من ساعتين وإحنا واقفين هون.", "ديروا بالكم على حالكم."]
+const PED_LINES := ["يعطيكم العافية يا شباب.", "في إشي صاير؟ ليش كل هالشرطة؟", "الله يقوّيكم.", "خير إن شاء الله؟"]
+const PLAYER_REPLIES := ["كله تحت السيطرة. ارجعوا لورا لو سمحتوا.", "إن شاء الله خير. خلّيكم بعيد عن الطوق.", "الله يسلّمك."]
+const REPORTER_LINES := ["حضرة الضابط! كلمة لقناة الإخبارية؟ متى الاقتحام؟", "قناة الإخبارية… في إصابات بين الرهائن؟"]
 const TEAM_NAMES := ["الصقر ٢", "الصقر ٣", "الصقر ٤", "الصقر ٥"]
 const TEAM_OFFSETS := [Vector3(-1.4, 0, 2.0), Vector3(1.4, 0, 2.2), Vector3(-1.6, 0, 4.2), Vector3(1.6, 0, 4.4)]
 
@@ -554,7 +564,7 @@ func _start_auto_drive() -> void:
 	var lane := 2.3 if east else -2.3
 	var sx := 1.0 if east else -1.0
 	# swing a little wide before the corner, then settle into the right-hand lane
-	vehicle.route = [Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 21.0, 0, zs + lane)]
+	vehicle.route = [Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 12.0, 0, zs + lane)]
 	vehicle.route_i = 0
 	vehicle.auto_drive = true
 	hud.set_objectives(["◆ الصقر ٢ بيسوق للموقع – %s" % M.title, "◇ اضغط [فرامل/قفز] أو حرّك العصا لتاخذ القيادة"])
@@ -670,12 +680,16 @@ func _update_crowd(dt: float) -> void:
 	crowd_t -= dt
 	if crowd_t > 0.0:
 		return
-	crowd_t = 0.5
+	crowd_t = 0.25
+	duck_t -= 0.25
+	shout_cd -= 0.25
+	talk_cd -= 0.25
 	var ref: Vector3 = listener_pos()
 	for p in crowd:
 		var d: float = p.global_position.distance_to(ref)
 		p.visible = d < 95.0
 		p.anim.speed_scale = 1.0 if d < 30.0 else 0.0
+		p.set_crouch(move_toward(p.crouch, 1.0 if duck_t > 0.0 else 0.0, 0.35))
 
 ## The HUD calls this whenever a radio / dialogue line starts: cut the camera to whoever speaks
 ## and let the colonel act it out (salute, explain with his hands, point at the door, radio in hand).
@@ -1098,6 +1112,11 @@ func _interactions() -> void:
 	elif phase == "arrest" and leader and not leader_cuffed and pp.distance_to(leader.global_position) < 2.6:
 		text = "[E] اعتقال %s" % LEADER
 		action = _arrest_leader
+	if text == "" and talk_cd <= 0.0 and phase in ["drive", "arrive", "staging"]:
+		var civ = _near_civilian(pp)
+		if civ != null:
+			text = "[E] تحدّث"
+			action = func(): _talk_civilian(civ[0], civ[1])
 	if text == "" and vehicle.broken and pp.distance_to(vehicle.global_position) < 4.5:
 		if Controls.held("interact"):
 			repair_hold += get_process_delta_time()
@@ -1223,6 +1242,7 @@ func _cuff(e) -> void:
 func _free(h) -> void:
 	h.free_hostage(trail.size())
 	Sfx.play("cuff", -4.0, 0.8)
+	hud.radio("رهينة", HOSTAGE_THANKS.pick_random(), 2.5)
 	# hand the hostage to the nearest free teammate, who walks them out while you keep clearing
 	var best = null
 	var bd := 30.0
@@ -1530,7 +1550,61 @@ func listener_pos() -> Vector3:
 	var cam := get_viewport().get_camera_3d()
 	return cam.global_position if cam else Vector3.ZERO
 
+## Gunmen shout when they spot the police or give up (rate-limited so they don't talk over each other).
+func enemy_shout(e, kind: String) -> void:
+	if phase != "assault" or sniper_mission:
+		return
+	if kind == "alert" and (shout_cd > 0.0 or e.global_position.distance_to(player.global_position) > 30.0):
+		return
+	shout_cd = 7.0
+	hud.radio("مسلّح", (ENEMY_ALERT if kind == "alert" else ENEMY_SURRENDER).pick_random(), 2.2)
+
+## Talk to a bystander / the TV reporter: they turn to you, say their piece, you answer.
+func _talk_civilian(p: Node3D, kind: String) -> void:
+	talk_cd = 6.0
+	var to: Vector3 = player.global_position - p.global_position
+	p.rotation.y = atan2(-to.x, -to.z)
+	var prev: String = p.pose.mode
+	if peds:
+		for pd in peds.peds:
+			if pd.node == p:
+				pd.talk = 5.0
+	p.set_mode("talk")
+	get_tree().create_timer(4.0).timeout.connect(func():
+		if is_instance_valid(p) and p.pose.mode == "talk":
+			p.set_mode(prev))
+	if kind == "reporter":
+		hud.radio("المراسلة", REPORTER_LINES.pick_random(), 3.5)
+		hud.radio("الصقر ١", "ما في تصريح هلأ. ارجعوا ورا الشريط.", 2.5)
+	else:
+		hud.radio("مواطن", (CROWD_LINES if kind == "crowd" else PED_LINES).pick_random(), 3.0)
+		hud.radio("الصقر ١", PLAYER_REPLIES.pick_random(), 2.5)
+
+## Nearest person you can talk to: [node, kind] or null.
+func _near_civilian(pp: Vector3):
+	var best = null
+	var bd := 2.8
+	for i in crowd.size():
+		var p: Node3D = crowd[i]
+		var d := pp.distance_to(p.global_position)
+		if d < bd:
+			bd = d
+			best = [p, "reporter" if p.pose.mode in ["mic", "camera"] else "crowd"]
+	if peds:
+		for pd in peds.peds:
+			if pd.down > 0.0 or pd.flee > 0.0:
+				continue
+			var d2 := pp.distance_to(pd.node.global_position)
+			if d2 < bd:
+				bd = d2
+				best = [pd.node, "ped"]
+	return best
+
 func on_gunfire(from: Vector3) -> void:
+	# the crowd behind the tape ducks when shots ring out
+	if duck_t <= 0.0 and crowd.size() > 0 and from.distance_to(city.cordon_point) < 90.0:
+		hud.radio("مواطن", "يا ساتر! طخّ! انزلوا عالأرض!", 2.0)
+	duck_t = 5.0
 	if peds:
 		peds.panic(from)
 	for e in enemies:

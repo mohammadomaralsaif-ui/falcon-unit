@@ -347,6 +347,8 @@ func alert(where: Vector3) -> void:
 		return
 	if state == "idle":
 		state = "alert"
+		if side == "enemy":
+			main.enemy_shout(self, "alert")
 		react = main.diff_react * randf_range(0.8, 1.4)
 		for o in main.enemies:
 			if o != self and not o.dead and o.state == "idle" and o.global_position.distance_to(global_position) < 11.0:
@@ -377,6 +379,7 @@ func take_hit(dmg: float, head := false, from: Node3D = null) -> bool:
 func surrender() -> void:
 	surrendered = true
 	target = null
+	main.enemy_shout(self, "surrender")
 	model.set_mode("hands_up")
 
 func die(head := false, from: Node3D = null) -> void:

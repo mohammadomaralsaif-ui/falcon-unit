@@ -146,20 +146,17 @@ func _physics_process(dt: float) -> void:
 				var dist: float = (hit.position - p).length()
 				c.want = clampf((dist - 4.5) * 1.4, 0.0, c.max_speed)
 		var want: float = c.want
-		# siren behind / beside: drivers pull up and let the SWAT truck through
-		if main and main.in_vehicle and main.vehicle.siren_on and c.tick % 3 == 0:
-			var vp: Vector3 = main.vehicle.global_position
-			var rel: Vector3 = c.body.global_position - vp
-			c.yield_k = 0.0
-			if rel.length() < 30.0:
+		# siren behind them: drivers in the truck's lane speed up and clear the road (nobody ever
+		# stops dead for the siren — that only jams the junctions)
+		c.yield_k = 0.0
+		if main and main.in_vehicle and main.vehicle.siren_on:
+			var rel: Vector3 = c.body.global_position - main.vehicle.global_position
+			if rel.length() < 34.0:
 				var vf: Vector3 = main.vehicle.global_transform.basis.z
-				# anything in the truck's path keeps moving (and hurries) to clear it; the rest stop and wait
-				var ahead: bool = vf.dot(rel.normalized()) > 0.45
-				c.yield_k = -1.0 if ahead else 1.0
-		if c.yield_k > 0.0:
-			want = 0.0
-		elif c.yield_k < 0.0:
-			want = c.max_speed * 1.4
+				if vf.dot(rel.normalized()) > 0.6 and vf.dot(d) > 0.5:
+					c.yield_k = -1.0
+		if c.yield_k < 0.0:
+			want = maxf(want, minf(c.max_speed * 1.7, 19.0)) if c.want > 2.0 else want
 		if c.hit_t > 0.0:
 			# just got rammed: the driver stops, hazards on, leans on the horn
 			c.hit_t -= dt

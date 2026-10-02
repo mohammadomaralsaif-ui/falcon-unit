@@ -55,6 +55,7 @@ func _ready() -> void:
 	layer = 5
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	font = load("res://assets/fonts/Tajawal-Bold.ttf")
+	Voice.setup(self)
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -373,9 +374,11 @@ func _process(dt: float) -> void:
 		Sfx.play("radio", -8.0)
 		if main and main.has_method("on_radio_line"):
 			main.on_radio_line(m[0], m[1])
-		if Voice.available():
-			Voice.say(m[0], m[1])
-			radio_t = maxf(m[2], Voice.estimate(m[1], m[0]))
+		# people next to you are heard directly; everyone else comes over the radio
+		var near: bool = main and (main.cutscene_t > 0.0 or m[0] in ["الصقر ١", "مواطن", "رهينة", "المراسلة", "مسلّح", main.LEADER])
+		var vdur := Voice.say(m[0], m[1], near)
+		if vdur > 0.0:
+			radio_t = maxf(m[2], vdur + 0.3)
 	# banner
 	if banner_t > 0.0:
 		banner_t -= udt

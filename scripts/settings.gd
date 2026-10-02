@@ -33,7 +33,7 @@ static func save() -> void:
 
 static func traffic_count() -> int:
 	load_all()
-	return [12, 16, 22][quality]
+	return [14, 20, 26][quality]
 
 static func ped_count() -> int:
 	load_all()

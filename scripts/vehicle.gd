@@ -37,6 +37,7 @@ var route: Array = []
 var route_i := 0
 var stuck_t := 0.0
 var unstick_t := 0.0
+var dodge_t := 0.0             # after backing out: swing around the obstacle on the left for a few seconds
 
 const MAX_FORCE := 5200.0
 const MAX_BRAKE := 60.0
@@ -308,12 +309,14 @@ func _auto_input() -> Vector2:
 	# wedged against something: back out with the wheel turned, then carry on
 	if unstick_t > 0.0:
 		unstick_t -= dtp
-		return Vector2(0.6, -1.0)
+		return Vector2(0.0, -1.0)
 	if speed_kmh < 2.0 and to.length() > 8.0:
 		stuck_t += dtp
 		if stuck_t > 2.5:
 			stuck_t = 0.0
-			unstick_t = 1.6
+			unstick_t = 1.4
+			dodge_t = 7.0
+			Sfx.play_3d("horn", global_position, 2.0)
 	else:
 		stuck_t = 0.0
 	var last := route_i == route.size() - 1
@@ -322,6 +325,11 @@ func _auto_input() -> Vector2:
 		return Vector2.ZERO
 	var fwd := global_transform.basis.z
 	var right := global_transform.basis.x
+	if dodge_t > 0.0:
+		# aim at a point ahead and one lane to the left of the route to get around whatever blocked us
+		dodge_t -= dtp
+		var along := to.normalized()
+		to = along * 9.0 + Vector3.UP.cross(along) * 3.4
 	var ang := atan2(to.normalized().dot(right), to.normalized().dot(fwd))
 	var steer := clampf(-ang * 1.6, -1.0, 1.0)
 	var want := 12.5
@@ -337,7 +345,9 @@ func _auto_input() -> Vector2:
 	q.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if hit:
-		want = minf(want, maxf(((hit.position as Vector3) - p).length() - 6.0, 0.0))
+		want = minf(want, maxf(((hit.position as Vector3) - p).length() - (6.0 if dodge_t <= 0.0 else 4.0), 0.0))
+	if dodge_t > 0.0:
+		want = minf(want, 5.0)
 	var spd := linear_velocity.dot(fwd)
 	var th := clampf((want - spd) * 0.5, -1.0, 0.8)
 	if Controls.is_touch and th < 0.0:

@@ -49,6 +49,11 @@ var assist_pitch := 0.0
 var cur_anim := ""
 var active := true
 var step_t := 0.0
+var face := 0.0          # model yaw relative to the camera heading
+var lean := 0.0
+var stride := 0.0
+var air_t := 0.0
+var land_dip := 0.0
 var stats := {"shots": 0, "hits": 0, "kills": 0, "heads": 0}
 var _cap: CapsuleShape3D
 
@@ -147,47 +152,82 @@ func _physics_process(dt: float) -> void:
 	cam.fov = lerpf(68.0, float(w.fov), aim)
 	model.visible = not scoped
 	var mv := Controls.move_vector()
+	var mag := mv.length()
 	var sprint := Controls.held("sprint") and mv.y > 0.3 and aim < 0.3 and not Controls.held("fire")
 	if sprint and crouch:
 		crouch = not _can_stand()
-	var spd := 7.2 if sprint else 4.2
+	# three real gaits: a walk on a light stick push, a jog on a full push, a sprint on top
+	var spd := 6.6 if sprint else (2.0 if mag < 0.62 else 4.0)
+	if mv.y < -0.3 and not sprint:
+		spd = minf(spd, 2.6)          # nobody jogs backwards
 	if crouch_k > 0.5:
-		spd = 2.2
+		spd = 1.9
 	if aim > 0.5:
-		spd = minf(spd, 2.4 if weapon != "sniper" else 1.4)
+		spd = minf(spd, 2.0 if weapon != "sniper" else 1.2)
 	var dir := (-transform.basis.z * mv.y + transform.basis.x * mv.x)
+	if mag > 0.05:
+		dir = dir.normalized()
+	else:
+		dir = Vector3.ZERO
 	var target := dir * spd
-	velocity.x = lerpf(velocity.x, target.x, 1.0 - exp(-dt * 10.0))
-	velocity.z = lerpf(velocity.z, target.z, 1.0 - exp(-dt * 10.0))
+	# weight: it takes a moment to get going and a moment to stop; less grip in the air
+	var hv := Vector3(velocity.x, 0, velocity.z)
+	var rate := (11.0 if target.length() > hv.length() else 16.0) if is_on_floor() else 3.0
+	hv = hv.move_toward(target, rate * dt)
+	velocity.x = hv.x
+	velocity.z = hv.z
 	if is_on_floor():
+		if air_t > 0.25:
+			land_dip = minf(0.12, air_t * 0.2)      # knees absorb the landing
+			Sfx.play("step", -8.0, 0.8)
+		air_t = 0.0
 		if Controls.just("jump"):
 			if crouch:
 				crouch = not _can_stand()
 			else:
 				velocity.y = 4.8
 	else:
+		air_t += dt
 		velocity.y -= 9.8 * dt
 	var pre := global_position
 	move_and_slide()
 	_step_up(dir, pre, dt)
 	var hs := Vector2(velocity.x, velocity.z).length()
-	# footsteps
+	# the body turns into the direction of travel (like a real person running), and squares up
+	# with the camera again as soon as the weapon comes up
+	var armed := aim > 0.15 or fire_cd > -0.7 or reload_t > 0.0
+	var face_target := 0.0
+	if hs > 0.5 and mag > 0.1 and not armed:
+		face_target = atan2(-mv.x, mv.y)
+	face = lerp_angle(face, face_target, 1.0 - exp(-dt * (16.0 if armed else 9.0)))
+	model.rotation.y = face
+	# lean into the run a little
+	lean = lerpf(lean, clampf(hs / 6.6, 0.0, 1.0) * (0.12 if not armed else 0.03), 1.0 - exp(-dt * 6.0))
+	model.rotation.x = -lean
+	# footsteps + head bob follow the stride
 	if is_on_floor() and hs > 0.6:
-		step_t -= dt
-		if step_t <= 0.0:
-			step_t = 0.3 if hs > 5.0 else 0.48
-			Sfx.play("step", (-16.0 if hs < 5.0 else -11.0) - crouch_k * 6.0, randf_range(0.85, 1.15))
+		stride += dt * (hs / (1.45 if hs < 2.8 else 2.3))
+		if stride >= 1.0:
+			stride -= 1.0
+			Sfx.play("step", (-17.0 if hs < 2.8 else (-13.0 if hs < 5.0 else -10.0)) - crouch_k * 6.0, randf_range(0.85, 1.15))
+	else:
+		stride = 0.0
+	var bob := sin(stride * TAU) * clampf(hs / 6.6, 0.0, 1.0) * 0.045 * (1.0 - aim * 0.7)
+	land_dip = move_toward(land_dip, 0.0, dt * 0.5)
+	pivot.position.y += bob - land_dip
+	if sprint:
+		cam.fov += 5.0 * clampf((hs - 4.0) / 2.6, 0.0, 1.0)
 	var want := "Idle"
-	if hs > 4.6:
+	if hs > 2.9:
 		want = "Run"
-	elif hs > 0.4:
+	elif hs > 0.35:
 		want = "Walk"
-	model.play(want, clampf(hs / (5.5 if want == "Run" else 1.6), 0.7, 1.6) if want != "Idle" else 1.0)
+	model.play(want, clampf(hs / (5.4 if want == "Run" else 1.7), 0.72, 1.35) if want != "Idle" else 1.0)
 	# spread bloom: moving and firing open the crosshair, standing still / crouching closes it
 	var bloom_rest := clampf(hs / 6.0, 0.0, 1.0) * 0.6 * (1.0 - crouch_k * 0.5)
 	bloom = lerpf(bloom, bloom_rest, 1.0 - exp(-dt * 5.0))
 	# weapon
-	model.set_aim(lerpf(model.aim_pitch, pitch * 0.8 if aim > 0.2 or fire_cd > -0.8 else -0.35, 1.0 - exp(-dt * 12.0)))
+	model.set_aim(lerpf(model.aim_pitch, pitch * 0.8 if (aim > 0.2 or fire_cd > -0.8) and absf(face) < 0.5 else -0.35, 1.0 - exp(-dt * 12.0)))
 	if reload_t > 0.0:
 		reload_t -= dt
 		gun.rotation.z = sin(reload_t * 4.0) * 0.5

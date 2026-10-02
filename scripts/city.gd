@@ -975,7 +975,7 @@ func random_car_mesh() -> ArrayMesh:
 	return baked_car("sedan", CAR_COLORS[rng.randi() % CAR_COLORS.size()])
 
 func _parked_cars() -> void:
-	var n := 26
+	var n := 16      # few parked cars: most of what you see on the street should be moving
 	for i in n:
 		var k := rng.randi_range(0, N)
 		var bk := rng.randi_range(0, N - 1)
@@ -1271,8 +1271,10 @@ func build_cordon() -> void:
 	var cp := cordon_point
 	var zc := cp.z - 4.9            # centre line of the street in front of the target
 	# --- the street is sealed on both sides: patrol car + tape + cones, crowd and press behind
+	var blk_x0: float = bank_block.x * P + R
 	for sd in [-1.0, 1.0]:
-		var bx: float = cp.x + sd * 27.0
+		# just inside each end of the street, clear of the junctions so cross traffic keeps flowing
+		var bx: float = (blk_x0 + 7.2) if sd < 0 else (blk_x0 + B - 7.2)
 		var car := CarMesh.build("police")
 		# west side leaves the south lane open so the SWAT truck can roll in
 		car.position = Vector3(bx, 0, zc - 3.0 if sd < 0 else zc)
@@ -1291,18 +1293,19 @@ func build_cordon() -> void:
 			var cm := CylinderMesh.new(); cm.top_radius = 0.04; cm.bottom_radius = 0.05; cm.height = 1.1; cm.radial_segments = 8; cm.rings = 1
 			_mi(cm, mat("tape"), Vector3(tx, 0.55, pz))
 		if sd < 0:
-			for k in 3:
+			for cz in [zc + 0.7, zc + 4.4, zc + 5.2, zc + 6.0]:
 				var cone := CylinderMesh.new(); cone.top_radius = 0.03; cone.bottom_radius = 0.16; cone.height = 0.5; cone.radial_segments = 8; cone.rings = 1
-				_mi(cone, mat("cone"), Vector3(tx, 0.25, zc + 1.4 + k * 2.4))
+				_mi(cone, mat("cone"), Vector3(tx, 0.25, cz))
 		# onlookers stand behind the tape, looking toward the target
 		for k in 9:
-			var px: float = tx + sd * rng.randf_range(1.0, 4.2)
+			var px: float = tx + sd * rng.randf_range(0.8, 3.0)
 			var pz: float = zc + rng.randf_range(-6.2, 0.0 if sd < 0 else 6.2)
 			crowd_spots.append([Vector3(px, 0.0, pz), atan2(-sd, rng.randf_range(-0.4, 0.4))])
 	# --- press: reporter + camera on a tripod just behind the east tape, news car parked behind them
-	var ex: float = cp.x + 27.0 + 3.2
-	press_spots = [[Vector3(ex + 1.6, 0, zc + 4.6), PI * 0.5, "reporter"], [Vector3(ex + 4.4, 0, zc + 4.9), -PI * 0.5, "camera"]]
-	var tri := Vector3(ex + 3.9, 0, zc + 4.9)
+	# press pen inside the cordon on the south pavement, by the east barrier
+	var ex: float = blk_x0 + B - 7.2 - 9.5
+	press_spots = [[Vector3(ex + 1.6, 0.16, zc + 5.8), PI * 0.5, "reporter"], [Vector3(ex + 4.4, 0.16, zc + 6.0), -PI * 0.5, "camera"]]
+	var tri := Vector3(ex + 3.9, 0.16, zc + 6.0)
 	for a3 in 3:
 		var leg := _mi(_box_mesh(Vector3(0.03, 1.35, 0.03)), mat("black"), tri + Vector3(cos(a3 * TAU / 3.0) * 0.22, 0.66, sin(a3 * TAU / 3.0) * 0.22))
 		leg.rotation = Vector3(sin(a3 * TAU / 3.0) * 0.3, 0, -cos(a3 * TAU / 3.0) * 0.3)
@@ -1312,7 +1315,7 @@ func build_cordon() -> void:
 	lm.rotation.z = PI / 2
 	var van := MeshInstance3D.new()
 	van.mesh = baked_car("sedan", Color(0.9, 0.9, 0.92))
-	van.position = Vector3(ex + 9.0, 0, zc + 4.8)
+	van.position = Vector3(ex - 4.0, 0, zc + 3.7)
 	van.rotation.y = PI / 2
 	van.set_meta("no_merge", true)
 	add_child(van)

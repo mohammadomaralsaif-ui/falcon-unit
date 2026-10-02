@@ -18,6 +18,7 @@ class Ped:
 	var speed := 1.3
 	var flee := 0.0
 	var dodge := 0.0      # extra inward offset when a car comes
+	var talk := 0.0       # >0: stopped to talk with the player
 	var down := 0.0       # >0: knocked down by a car, seconds until recycled
 
 func setup(_main: Node) -> void:
@@ -115,6 +116,13 @@ func _physics_process(dt: float) -> void:
 			if absf(lp.x) < 1.15 and absf(lp.z) < 2.75 and lp.y > -0.5 and lp.y < 2.5:
 				_knock(p, car.linear_velocity)
 				continue
+		if p.talk > 0.0:
+			p.talk -= dt
+			p.node.play("Idle")
+			if p.talk <= 0.0:
+				p.node.set_mode("none")
+				_apply(p, dt)
+			continue
 		# far-away walkers: stop skinning/animation work, hide beyond the fog
 		p.node.anim.active = dref < 75.0
 		p.node.visible = dref < 150.0

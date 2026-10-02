@@ -1,8 +1,10 @@
 extends RefCounted
-## Spoken dialogue: radio lines, orders and shouts are read out by the phone's text-to-speech
-## engine (Android: Google TTS "العربية"). Each speaker gets their own pitch / pace so the
-## colonel, the negotiator and the team sound like different people.
-## If the phone has no Arabic voice installed the game silently falls back to subtitles only.
+## Spoken dialogue. Every line in the game is pre-recorded (tools/build_voices.py) with its own
+## voice per character — the colonel, the team leader, each teammate, the negotiator, gunmen,
+## bystanders… — and stored as assets/voice/<md5 of "speaker|text">.ogg.
+## Radio traffic is played through a "Radio" bus (band-limited + a little grit); people standing
+## next to you are played clean. Lines without a recording fall back to the phone's own
+## text-to-speech (different device voice / pitch per character), or to subtitles only.
 
 static var enabled := true
 static var _voice := ""
@@ -20,12 +22,62 @@ const SPEAKERS := {
 	"medic": {"pitch": 1.15, "rate": 1.05},
 }
 
+static var _player: AudioStreamPlayer
+static var _buses := false
+
+## Call once with a node that lives in the scene tree (the HUD).
+static func setup(host: Node) -> void:
+	if not _buses:
+		_buses = true
+		var i := AudioServer.bus_count
+		AudioServer.add_bus(i)
+		AudioServer.set_bus_name(i, "Radio")
+		AudioServer.set_bus_send(i, "Master")
+		var hp := AudioEffectHighPassFilter.new(); hp.cutoff_hz = 420.0
+		var lp := AudioEffectLowPassFilter.new(); lp.cutoff_hz = 3300.0
+		var ds := AudioEffectDistortion.new(); ds.mode = AudioEffectDistortion.MODE_OVERDRIVE; ds.drive = 0.22; ds.post_gain = -2.0
+		AudioServer.add_bus_effect(i, hp); AudioServer.add_bus_effect(i, lp); AudioServer.add_bus_effect(i, ds)
+		AudioServer.set_bus_volume_db(i, 4.0)
+		AudioServer.add_bus(i + 1)
+		AudioServer.set_bus_name(i + 1, "Voice")
+		AudioServer.set_bus_send(i + 1, "Master")
+		AudioServer.set_bus_volume_db(i + 1, 5.0)
+	_player = AudioStreamPlayer.new()
+	_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	host.add_child(_player)
+
+static func clip_path(who: String, text: String) -> String:
+	return "res://assets/voice/%s.ogg" % (who + "|" + text).md5_text()
+
+## Speak a line. Returns its length in seconds (0 when there is no recording and no device voice).
+static func say(who: String, text: String, in_person := false) -> float:
+	if not enabled:
+		return 0.0
+	var path := clip_path(who, text)
+	if _player and is_instance_valid(_player) and ResourceLoader.exists(path):
+		var st: AudioStream = load(path)
+		_player.stream = st
+		_player.bus = "Voice" if in_person else "Radio"
+		_player.play()
+		return st.get_length()
+	if available():
+		var sp: Dictionary = SPEAKERS[kind_of(who)]
+		var v := _voice
+		if _voices.size() > 1:
+			v = _voices[absi(who.hash()) % _voices.size()]      # a different device voice per character
+		DisplayServer.tts_speak(clean(text), v, 100, float(sp.pitch), float(sp.rate), 0, false)
+		return estimate(text, who)
+	return 0.0
+
+static var _voices: PackedStringArray = []
+
 static func available() -> bool:
 	if not _checked:
 		_checked = true
 		if not ProjectSettings.get_setting("audio/general/text_to_speech", false):
 			return false
 		var vs := DisplayServer.tts_get_voices_for_language("ar")
+		_voices = vs
 		if vs.size() > 0:
 			_voice = vs[0]
 	return enabled and _voice != ""
@@ -61,12 +113,8 @@ static func estimate(text: String, who := "") -> float:
 	var r: float = SPEAKERS[kind_of(who)].rate if who != "" else 1.0
 	return clean(text).length() / (13.0 * r) + 0.5
 
-static func say(who: String, text: String, interrupt := false) -> void:
-	if not available():
-		return
-	var sp: Dictionary = SPEAKERS[kind_of(who)]
-	DisplayServer.tts_speak(clean(text), _voice, 100, float(sp.pitch), float(sp.rate), 0, interrupt)
-
 static func stop() -> void:
+	if _player and is_instance_valid(_player):
+		_player.stop()
 	if _voice != "":
 		DisplayServer.tts_stop()
