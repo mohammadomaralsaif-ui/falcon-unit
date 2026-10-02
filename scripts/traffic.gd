@@ -102,7 +102,7 @@ func on_hit(body: Node, rel_speed: float, dir := Vector3.ZERO) -> void:
 			c.push = d * clampf(rel_speed * 0.75, 2.5, 13.0)
 			c.spin = randf_range(-1.0, 1.0) * clampf(rel_speed * 0.18, 0.4, 2.4)
 			var own: float = maxf(main.vehicle.linear_velocity.length(), main.vehicle.prev_vel.length())
-			if rel_speed > 8.0 and own > 7.5:
+			if rel_speed > 9.5 and own > 8.5:
 				c.wrecked = 40.0
 				c.snd.stop()
 			Fx.particles(main, c.body.global_position + Vector3(0, 0.9, 0), Vector3.UP, "dust", 6)
