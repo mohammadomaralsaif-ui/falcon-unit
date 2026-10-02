@@ -25,6 +25,7 @@ const ACTIONS := {
 	"flash": [KEY_G],
 	"switch": [KEY_X, KEY_TAB],
 	"orders": [KEY_T],
+	"gadget": [KEY_V],
 }
 
 func _ready() -> void:
@@ -82,7 +83,7 @@ func reset() -> void:
 	_touch_pressed.clear()
 	_touch_just.clear()
 	aim_toggle = false
-	for a in ["fire", "aim", "jump", "interact", "vehicle", "reload", "yell", "siren", "sprint", "flash", "switch", "crouch", "orders"]:
+	for a in ["fire", "aim", "jump", "interact", "vehicle", "reload", "yell", "siren", "sprint", "flash", "switch", "crouch", "orders", "gadget"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
 

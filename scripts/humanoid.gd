@@ -79,6 +79,45 @@ static func pistol() -> Node3D:
 	g.add_child(t2)
 	return g
 
+## Pump-action shotgun. Origin at the grip, barrel toward -Z.
+static func shotgun() -> Node3D:
+	var real := CustomModels.weapon("shotgun", 0.95, 0.3)
+	if real:
+		var t := Marker3D.new(); t.name = "Muzzle"; t.position = Vector3(0, 0.035, -0.66)
+		real.add_child(t)
+		return real
+	var g := Node3D.new()
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(0.07, 0.07, 0.08); m.metallic = 0.6; m.roughness = 0.4
+	for b in [[Vector3(0.05, 0.07, 0.5), Vector3(0, 0.02, -0.05)], [Vector3(0.03, 0.03, 0.55), Vector3(0, 0.04, -0.4)], [Vector3(0.045, 0.045, 0.2), Vector3(0, 0.0, -0.36)]]:
+		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = b[0]; bm.material = m
+		mi.mesh = bm; mi.position = b[1]; mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(mi)
+	var t2 := Marker3D.new(); t2.name = "Muzzle"; t2.position = Vector3(0, 0.04, -0.68)
+	g.add_child(t2)
+	return g
+
+## Ballistic shield carried on the left arm: dark slab with a viewing slit and a "شرطة" plate.
+static func shield() -> Node3D:
+	var g := Node3D.new()
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(0.05, 0.06, 0.08); m.roughness = 0.55; m.metallic = 0.3
+	var glass := StandardMaterial3D.new(); glass.albedo_color = Color(0.25, 0.4, 0.5, 0.45); glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; glass.roughness = 0.1
+	var plate := StandardMaterial3D.new(); plate.albedo_color = Color(0.9, 0.9, 0.92)
+	var parts := [
+		[Vector3(0.6, 0.62, 0.035), Vector3(0, -0.2, 0), m],
+		[Vector3(0.6, 0.12, 0.035), Vector3(0, 0.42, 0), m],
+		[Vector3(0.13, 0.25, 0.035), Vector3(-0.235, 0.235, 0), m],
+		[Vector3(0.13, 0.25, 0.035), Vector3(0.235, 0.235, 0), m],
+		[Vector3(0.34, 0.25, 0.02), Vector3(0, 0.235, 0), glass],
+		[Vector3(0.36, 0.09, 0.01), Vector3(0, -0.12, -0.022), plate],
+	]
+	for pt in parts:
+		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = pt[0]; bm.material = pt[2]
+		mi.mesh = bm; mi.position = pt[1]; mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(mi)
+	var h := Node3D.new(); h.name = "Handle"; h.position = Vector3(0.05, 0.0, 0.07)
+	g.add_child(h)
+	return g
+
 ## Bolt-action sniper rifle: the long rifle body with a big scope on top. Origin at the grip.
 static func sniper() -> Node3D:
 	var g := Node3D.new()

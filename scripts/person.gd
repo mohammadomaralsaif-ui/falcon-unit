@@ -106,17 +106,59 @@ func _ready() -> void:
 	play("Idle")
 	anim.seek(randf() * 1.5)
 
+var _lock := 0.0          # a one-shot clip (hit, throw, death) is playing: locomotion waits
+var crouch_anim := false  # crouched = the real crouch clips (not just bent legs)
+
+func _process(dt: float) -> void:
+	if _lock > 0.0:
+		_lock -= dt
+
 func play(n: String, speed := 1.0) -> void:
+	if _lock > 0.0:
+		return
+	if crouch_anim and crouch > 0.5:
+		n = "CrouchIdle" if n == "Idle" else "CrouchWalk"
+		speed = clampf(absf(speed), 0.6, 1.2) * signf(speed) if n == "CrouchWalk" else 1.0
 	if n != cur:
 		anim.play(n, 0.22)
 		cur = n
-	anim.speed_scale = speed       # negative = the stride plays backwards (walking backwards)
+	anim.speed_scale = speed       # negative = the stride plays backwards
+
+## Play a clip once over the top of whatever the legs were doing (hit reaction, throw…).
+func oneshot(n: String, hold := -1.0, blend := 0.08) -> void:
+	if not anim.has_animation(n) or _lock > 100.0:
+		return
+	anim.play(n, blend)
+	anim.speed_scale = 1.0
+	cur = n
+	_lock = hold if hold > 0.0 else anim.get_animation(n).length
+
+func hit_react(head := false) -> void:
+	oneshot("HitHead" if head else "HitChest", 0.38)
+
+## Grenade throw: the weapon hangs on its sling for a moment while the arm goes over.
+func throw_anim() -> void:
+	if not anim.has_animation("Throw"):
+		return
+	var armed: bool = pose.mode == "rifle"
+	if armed:
+		pose.mode = "none"
+		if gun:
+			gun.visible = false
+	oneshot("Throw", 0.95, 0.1)
+	if armed:
+		get_tree().create_timer(0.95).timeout.connect(func():
+			if pose.mode == "none" and _lock < 100.0:
+				pose.mode = "rifle"
+				if gun:
+					gun.visible = true)
 
 var _rifle := []
 var _guns := {}
 var weapon := "rifle"
 var crouch := 0.0
-const RESTS := {"rifle": Vector3(0.17, 1.3, -0.3), "pistol": Vector3(0.04, 1.4, -0.56), "sniper": Vector3(0.17, 1.32, -0.28)}
+const RESTS := {"rifle": Vector3(0.17, 1.3, -0.3), "pistol": Vector3(0.04, 1.4, -0.56), "sniper": Vector3(0.17, 1.32, -0.28), "shotgun": Vector3(0.17, 1.3, -0.3)}
+var shield: Node3D
 
 ## Swap the weapon in hand (SWAT only): rifle, pistol (Glock) or sniper. Hands follow the new weapon.
 func set_weapon(kind: String) -> void:
@@ -132,6 +174,10 @@ func set_weapon(kind: String) -> void:
 			g = Humanoid.pistol()
 			a.position = Vector3(0.0, -0.045, 0.05)
 			b.position = Vector3(-0.025, -0.07, 0.03)
+		elif kind == "shotgun":
+			g = Humanoid.shotgun()
+			a.position = Vector3(0.0, -0.03, 0.05)
+			b.position = Vector3(-0.02, -0.01, -0.36)
 		else:
 			g = Humanoid.sniper()
 			a.position = Vector3(0.0, -0.03, 0.06)
@@ -147,9 +193,23 @@ func set_weapon(kind: String) -> void:
 	muzzle = gun.get_node("Muzzle")
 	pose.grip = on[1]
 	pose.guard = on[2]
+	if shield:
+		pose.guard = shield.get_node("Handle")       # the left arm is busy with the shield
 	gun_rest = RESTS[kind]
+	if shield and kind == "pistol":
+		gun_rest = Vector3(0.21, 1.42, -0.5)       # one-handed, clear of the shield's edge
 	gun.visible = pose.mode == "rifle"
 	set_aim(aim_pitch)
+
+## Strap a ballistic shield onto the left arm (the weapon becomes one-handed).
+func give_shield() -> void:
+	if shield:
+		return
+	shield = Humanoid.shield()
+	shield.position = Vector3(-0.2, 1.12, -0.5)
+	shield.rotation.y = 0.12
+	add_child(shield)
+	pose.guard = shield.get_node("Handle")
 
 ## 0 = standing, 1 = seated (the caller puts the person where the seat is).
 func set_sit(k: float) -> void:
@@ -158,7 +218,8 @@ func set_sit(k: float) -> void:
 ## 0 = standing, 1 = crouched (legs bent by IK, weapon lowered with the body).
 func set_crouch(k: float) -> void:
 	crouch = k
-	pose.crouch = k
+	crouch_anim = anim.has_animation("CrouchIdle") and pose.mode in ["rifle", "none"]
+	pose.crouch = 0.0 if crouch_anim else k
 	set_aim(aim_pitch)
 
 ## Turn the hips and legs by `a` (radians) while the chest keeps facing forward: a strafing stride.
@@ -170,29 +231,36 @@ func set_leg_yaw(a: float) -> void:
 
 ## Where the torso ends up on the ground once the body has fallen (for the blood pool).
 func fallen_center() -> Vector3:
-	var along := global_transform.basis.y
-	along.y = 0
-	return global_position + along * 0.85
+	var hb: int = pose._bone("Hips")
+	if skel and hb >= 0:
+		var p: Vector3 = skel.global_transform * skel.get_bone_global_pose(hb).origin
+		return Vector3(p.x, global_position.y, p.z)
+	return global_position
 
 ## Shot dead: the knees give way first, then the body goes over and settles — not a falling plank.
 func collapse(side := 0.0) -> void:
-	anim.play("Idle", 0.0)      # legs together, not frozen mid-stride
-	cur = "Idle"
-	anim.pause()
 	set_mode("none")
 	set_leg_yaw(0.0)
+	crouch = 0.0
+	pose.crouch = 0.0
+	var opts: Array = ["DeathB", "DeathD"].filter(func(n): return anim.has_animation(n))
+	if opts.size() > 0:
+		# motion-captured fall: buckle, drop, settle
+		var n: String = opts[randi() % opts.size()]
+		_lock = 0.0
+		anim.play(n, 0.12)
+		anim.speed_scale = 1.15
+		cur = n
+		_lock = 1.0e6
+		return
+	anim.play("Idle", 0.0)
+	cur = "Idle"
+	anim.pause()
 	if side == 0.0:
 		side = 1.0 if randf() < 0.6 else -1.0
-	var roll := randf_range(-0.4, 0.4)
 	var tw := create_tween()
-	tw.tween_method(set_crouch, crouch, 1.0, 0.2)
-	tw.parallel().tween_property(self, "rotation:x", -0.3 * side, 0.2)
-	tw.tween_property(self, "rotation:x", -PI / 2 * side, 0.36).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(self, "position:y", 0.15, 0.36)
-	tw.parallel().tween_property(self, "rotation:z", roll, 0.36)
-	tw.parallel().tween_method(set_crouch, 1.0, 0.1, 0.36)
-	tw.tween_property(self, "rotation:x", -PI / 2 * side * 0.96, 0.07)
-	tw.tween_property(self, "rotation:x", -PI / 2 * side, 0.1)
+	tw.tween_property(self, "rotation:x", -PI / 2 * side, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(self, "position:y", 0.15, 0.5)
 
 func set_mode(m: String) -> void:
 	pose.mode = m

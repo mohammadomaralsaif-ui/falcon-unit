@@ -1246,6 +1246,10 @@ func _bank_block(bi: int, bj: int) -> void:
 					_mi(_box_mesh(Vector3(CELL - 0.1, 0.9, 0.03)), mat("glass"), p + Vector3(0, 1.6, 0.0), false)
 					_mi(_box_mesh(Vector3(0.5, 0.32, 0.03)), mat("screen"), p + Vector3(0.6, 1.32, -0.2), false)
 					_static_box(Vector3(CELL, 1.1, 0.8), p + Vector3(0, 0.55, 0))
+				"U":
+					_bus(p)
+					cover_points.append(p + Vector3(-6.4, 0, 0))
+					cover_points.append(p + Vector3(6.4, 0, 0))
 				"C":
 					var crate := _mi(_box_mesh(Vector3(2.2, 1.3, 2.2)), mat("door"), p + Vector3(0, 0.65, 0))
 					crate.material_override = _crate_mat()
@@ -1276,7 +1280,7 @@ func _bank_block(bi: int, bj: int) -> void:
 				if imap[r][c] != "#":
 					continue
 				var corner := (r == 0 or r == rows - 1) and (c == 0 or c == cols - 1)
-				if corner or (style == "bank" and r == rows - 1):
+				if corner or (style == "bank" and r == rows - 1 and mission.get("bank_front", true)):
 					continue
 				var nrm := Vector3.ZERO
 				if r == 0: nrm = Vector3(0, 0, -1)
@@ -1293,13 +1297,17 @@ func _bank_block(bi: int, bj: int) -> void:
 				gl.rotation.y = wry
 				var sill := _mi(_box_mesh(Vector3(2.1, 0.1, 0.3)), mat("white"), wp + Vector3(0, -0.85, 0) + nrm * 0.1, false)
 				sill.rotation.y = wry
-				if style == "apartment":
+				if style == "apartment" and mission.get("bars", true):
 					for bk in 5:
 						var bar := _mi(_box_mesh(Vector3(0.03, 1.36, 0.03)), mat("black"), wp + nrm * 0.12 + Basis(Vector3.UP, wry) * Vector3(-0.66 + bk * 0.33, 0, 0), false)
 						bar.rotation.y = wry
 	var in_mat: String = {"bank": "interior", "apartment": "plaster", "mall": "white", "yard": "sidewalk"}[style]
 	var out_mat: String = {"bank": "granite", "apartment": "stone%d" % (bi % 5), "mall": "darkglass", "yard": "plaster"}[style]
 	var floor_mat: String = {"bank": "marble", "apartment": "tile", "mall": "marble", "yard": "asphalt"}[style]
+	var skin: Dictionary = mission.get("mats", {})
+	in_mat = skin.get("in", in_mat)
+	out_mat = skin.get("out", out_mat)
+	floor_mat = skin.get("floor", floor_mat)
 	var walls := _mi(wall_st.commit(), mat(in_mat))
 	_mi(out_st.commit(), mat(out_mat))
 	if yard:
@@ -1335,7 +1343,7 @@ func _bank_block(bi: int, bj: int) -> void:
 		var sign_pos := door_pos + Vector3(0, wh - 0.3 if floors_up > 0 else wh + 1.2, CELL * 0.5 + 0.2)
 		var board := _mi(_box_mesh(Vector3(12, 1.5, 0.25)), mat("bankboard"), sign_pos, false)
 		var bm := StandardMaterial3D.new()
-		bm.albedo_color = Color(0.06, 0.16, 0.29) if style == "bank" else Color(0.45, 0.08, 0.32)
+		bm.albedo_color = mission.get("sign_color", Color(0.06, 0.16, 0.29) if style == "bank" else Color(0.45, 0.08, 0.32))
 		board.material_override = bm
 		_label(sign_text, sign_pos + Vector3(0, 0, 0.14), 0.0, 120, Color(0.96, 0.9, 0.72), 0.01)
 	# interior lights: ceiling panels + a few real lights + reflection probe (no sky reflections indoors)
@@ -1362,7 +1370,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	rp.update_mode = ReflectionProbe.UPDATE_ONCE
 	add_child(rp)
 	cordon_point = door_pos + Vector3(0, 0, 14.0)
-	if style != "bank":
+	if style != "bank" or not mission.get("bank_front", true):
 		return
 	# street facade: tinted glass bays between granite columns, steps, ATM
 	var fz := oz + rows * CELL + 0.02
@@ -1378,6 +1386,26 @@ func _bank_block(bi: int, bj: int) -> void:
 	_mi(_box_mesh(Vector3(0.5, 0.35, 0.02)), mat("screen"), atm + Vector3(0, 1.25, 0.26), false)
 	_label("صراف آلي ATM", atm + Vector3(0, 1.62, 0.26), 0.0, 40, Color(1, 1, 1), 0.006)
 	cordon_point = door_pos + Vector3(0, 0, 14.0)
+
+## City bus (10.5 m) lying along X: white body with a blue band, dark windows, wheels. Solid cover.
+func _bus(p: Vector3) -> void:
+	var L := 10.5
+	var body := StandardMaterial3D.new(); body.albedo_color = Color(0.9, 0.9, 0.88); body.roughness = 0.5
+	var band := StandardMaterial3D.new(); band.albedo_color = Color(0.1, 0.3, 0.62); band.roughness = 0.5
+	_mi(_box_mesh(Vector3(L, 2.35, 2.5)), body, p + Vector3(0, 1.65, 0))
+	_mi(_box_mesh(Vector3(L + 0.02, 0.5, 2.52)), band, p + Vector3(0, 1.05, 0), false)
+	_mi(_box_mesh(Vector3(L - 0.4, 0.12, 2.3)), mat("roof"), p + Vector3(0, 2.88, 0), false)
+	for side in [-1.0, 1.0]:
+		_mi(_box_mesh(Vector3(L - 1.6, 0.85, 0.04)), mat("darkglass"), p + Vector3(-0.3, 2.1, side * 1.26), false)
+		for wx in [-3.4, 3.2]:
+			var wm := CylinderMesh.new(); wm.top_radius = 0.48; wm.bottom_radius = 0.48; wm.height = 0.3; wm.radial_segments = 12; wm.rings = 1
+			var wh := _mi(wm, mat("black"), p + Vector3(wx, 0.48, side * 1.12), false)
+			wh.rotation.x = PI / 2
+	_mi(_box_mesh(Vector3(0.04, 1.2, 2.2)), mat("darkglass"), p + Vector3(L * 0.5 + 0.01, 1.95, 0), false)       # windscreen
+	_mi(_box_mesh(Vector3(0.04, 0.9, 2.0)), mat("darkglass"), p + Vector3(-L * 0.5 - 0.01, 2.1, 0), false)
+	_mi(_box_mesh(Vector3(0.05, 1.9, 0.9)), mat("black"), p + Vector3(2.2, 1.45, 1.27), false)                   # door
+	_label("النقل العام · خط ٢٦", p + Vector3(-1.0, 1.05, 1.28), 0.0, 40, Color(1, 1, 1), 0.007)
+	_static_box(Vector3(L, 2.9, 2.5), p + Vector3(0, 1.45, 0))
 
 func _desk(p: Vector3) -> void:
 	_mi(_box_mesh(Vector3(1.6, 0.05, 0.8)), mat("wood"), p + Vector3(0, 0.76, 0))

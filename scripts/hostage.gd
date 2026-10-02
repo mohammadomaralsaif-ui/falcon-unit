@@ -32,12 +32,10 @@ func take_hit(_dmg: float, _head := false, from: Node3D = null) -> bool:
 	freed = false
 	model.set_mode("none")
 	model.anim.pause()
-	var tw := create_tween()
-	tw.tween_property(model, "rotation:x", -PI / 2, 0.5)
-	tw.parallel().tween_property(model, "position:y", 0.15, 0.5)
+	model.collapse()
 	if main:
 		main.on_hostage_dead(self, from)
-		get_tree().create_timer(0.6).timeout.connect(func(): Fx.blood_pool(main, global_position))
+		get_tree().create_timer(1.7).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))
 	return true
 
 func free_hostage(trail_size: int) -> void:

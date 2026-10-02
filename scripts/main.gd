@@ -76,6 +76,8 @@ var bomb_t := 0.0
 var bomb_defused := false
 var defuse_hold := 0.0
 var flashbangs := 3
+var smokes := 0
+var smoke_clouds: Array = []     # [centre, radius, seconds left]: gunmen can't see through these
 var night := false
 var executioners: Array = []
 var enemy_sight := 48.0
@@ -491,6 +493,16 @@ func apply_quality() -> void:
 # ------------------------------------------------------------------ mission flow
 func _start_mission() -> void:
 	diff_react = [0.95, 0.6, 0.38][difficulty]
+	# loadout picked in the briefing
+	if not sniper_mission:
+		player.give_primary(Settings.primary)
+		match Settings.gear:
+			"smoke":
+				flashbangs = 0
+				smokes = 3
+			"shield":
+				flashbangs = 1
+				player.give_shield()
 	Missions.team_size = team_size
 	Missions.difficulty = difficulty
 	var n_enemies: int = M.enemies[difficulty]
@@ -793,9 +805,14 @@ func _talk_colonel() -> void:
 		hud.radio(COLONEL, "الوضع: %d مسلّحين على الأقل." % enemies.size(), 4.5)
 		for line in M.brief:
 			hud.radio(COLONEL, line, 5.0)
-	hud.radio(COLONEL, "ومعك %d قنابل صوتية [G]. استعملها." % flashbangs, 3.0)
+	if smokes > 0:
+		hud.radio(COLONEL, "ومعك %d قنابل دخان [G]. الدخان بيعميهم عنك." % smokes, 3.0)
+	elif player.shield:
+		hud.radio(COLONEL, "ومعك الدرع الواقي. خلّيه دايماً بينك وبينهم.", 3.0)
+	else:
+		hud.radio(COLONEL, "ومعك %d قنابل صوتية [G]. استعملها." % flashbangs, 3.0)
 	hud.set_waypoint(city.door_pos + Vector3(0, 1.6, 1.6))
-	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي – الفريق رح يصطف معك على الجنبين", "◆ ازرع عبوة الاقتحام [E] — أو [T] ليزرعها واحد من الفريق ويقتحموا", "◇ [C] انحناء"])
+	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي – الفريق رح يصطف معك على الجنبين", "◆ ازرع عبوة الاقتحام [E] — أو [T] ليزرعها واحد من الفريق ويقتحموا", "◇ [V] كاميرا تحت الباب قبل ما تفجّره · [C] انحناء"])
 	_start_dialogue_cam()
 
 func _update_colonel(dt: float) -> void:
@@ -968,7 +985,7 @@ func mission_assault_text() -> void:
 		lines.append("◆ حرّر الرهائن [E] وأخرجهم لبرّا (%d / %d)" % [hostages_saved, hostages.size()])
 	if evidence.size() > 0:
 		lines.append("◆ اجمع الأدلة [E] (%d / %d)" % [evidence_got, evidence.size() - evidence_lost])
-	lines.append("◇ [Q] استسلام · [G] قنبلة صوتية (%d) · [X] رشاش/مسدس" % flashbangs)
+	lines.append("◇ [Q] استسلام · [G] %s · [X] تبديل السلاح" % (grenade_label() if grenade_label() != "" else "ما في قنابل"))
 	if evidence_lost > 0:
 		lines.append("✖ أدلة اتلفت: %d" % evidence_lost)
 	if hostages_lost > 0:
@@ -1138,8 +1155,21 @@ func _process(dt: float) -> void:
 			Sfx.play_3d("beep", bomb.global_position, -6.0, 1.3)
 		if bomb_t <= 0.0:
 			_bomb_explodes()
-	if Controls.just("flash") and not in_vehicle and player.alive and phase in ["staging", "breach", "assault"] and input_guard <= 0.0:
-		_throw_flashbang()
+	if Controls.just("flash") and not in_vehicle and player.alive and phase in ["staging", "breach", "assault"] and input_guard <= 0.0 and doorcam_t <= 0.0:
+		_throw_flashbang("smoke" if (smokes > 0 and flashbangs <= 0) else "flash")
+	for sc in smoke_clouds:
+		sc[2] -= dt
+	if smoke_clouds.size() > 0 and smoke_clouds[0][2] <= 0.0:
+		smoke_clouds.pop_front()
+	if doorcam_t > 0.0:
+		_update_doorcam(dt)
+	elif Controls.just("gadget") and _doorcam_ready():
+		_start_doorcam()
+	if mark_t > 0.0 and phase == "assault":
+		mark_t -= dt          # the picture goes stale once the shooting starts and people move
+		if mark_t <= 30.0:
+			marked.clear()
+			mark_t = 0.0
 	# breadcrumb trail for hostages following the player
 	if not in_vehicle and player.alive:
 		var pp := player.global_position
@@ -1237,6 +1267,9 @@ func _interactions() -> void:
 	if in_vehicle or not player.alive:
 		hud.set_prompt("")
 		return
+	if doorcam_t > 0.0:
+		hud.set_prompt("اسحب لتحرّك الكاميرا   ·   [V] إغلاق   ·   %d ث" % int(ceil(doorcam_t)))
+		return
 	var pp := player.global_position
 	var text := ""
 	var action := Callable()
@@ -1245,7 +1278,7 @@ func _interactions() -> void:
 		action = _talk_colonel
 	elif phase == "staging":
 		if pp.distance_to(city.door_pos + Vector3(0, 0, 1.6)) < 2.6:
-			text = "[E] ازرع عبوة الاقتحام"
+			text = "[E] ازرع عبوة الاقتحام   ·   [V] كاميرا تحت الباب"
 			action = _plant_charge
 	elif phase == "assault" and bomb and not bomb_defused and pp.distance_to(bomb.global_position) < 2.2:
 		if Controls.held("interact"):
@@ -1347,11 +1380,31 @@ func _bomb_explodes() -> void:
 	_end(false, "انفجرت العبوة قبل ما تتعطّل.")
 
 ## G / flash button: throw a stun grenade where the camera points (bounces off walls, max 14 m).
-func _throw_flashbang() -> void:
-	if flashbangs <= 0:
-		hud.show_banner("", "خلصت القنابل الصوتية", 1.2)
+## True if a smoke cloud lies between the two points.
+func smoke_blocks(a: Vector3, b: Vector3) -> bool:
+	for sc in smoke_clouds:
+		var c: Vector3 = sc[0]
+		var ab := b - a
+		var t := clampf((c - a).dot(ab) / maxf(ab.length_squared(), 0.001), 0.0, 1.0)
+		if (a + ab * t).distance_to(c) < float(sc[1]) * 0.85:
+			return true
+	return false
+
+func grenade_label() -> String:
+	if flashbangs > 0:
+		return "فلاش %d" % flashbangs
+	if smokes > 0:
+		return "دخان %d" % smokes
+	return ""
+
+func _throw_flashbang(kind := "flash") -> void:
+	if kind == "smoke":
+		smokes -= 1
+	elif flashbangs <= 0:
+		hud.show_banner("", "خلصت القنابل", 1.2)
 		return
-	flashbangs -= 1
+	else:
+		flashbangs -= 1
 	var cam: Camera3D = player.cam
 	var from := player.global_position + Vector3(0, 1.5, 0)
 	var dir := -cam.global_basis.z
@@ -1372,9 +1425,21 @@ func _throw_flashbang() -> void:
 	var start := from + dir * 0.5
 	tw.tween_method(func(t: float): g.global_position = start.bezier_interpolate(mid, mid, land, t), 0.0, 1.0, 0.6)
 	Sfx.play("click", -4.0, 0.8)
-	hud.radio("الصقر ١", "قنبلة صوتية!", 1.5)
+	player.model.throw_anim()
+	hud.radio("الصقر ١", "قنبلة صوتية!" if kind == "flash" else "دخان!", 1.5)
 	mission_assault_text()
-	get_tree().create_timer(1.3).timeout.connect(func(): _flashbang_bang(g))
+	if kind == "smoke":
+		get_tree().create_timer(1.0).timeout.connect(func(): _smoke_pop(g))
+	else:
+		get_tree().create_timer(1.3).timeout.connect(func(): _flashbang_bang(g))
+
+## Smoke grenade: a thick cloud for a quarter of a minute. Gunmen lose sight of whatever is behind it.
+func _smoke_pop(g: Node3D) -> void:
+	var p := g.global_position + Vector3(0, 1.1, 0)
+	g.queue_free()
+	Sfx.play_3d("sputter", p, 2.0, 0.6)
+	Fx.smoke_cloud(self, p, 4.6, 15.0)
+	smoke_clouds.append([p, 4.6, 15.0])
 
 func _flashbang_bang(g: Node3D) -> void:
 	var p := g.global_position + Vector3(0, 0.5, 0)
@@ -1516,6 +1581,73 @@ func _place_team(out: Vector3, b: Basis) -> void:
 			t.global_position = _free_spot(free_c if free_c.size() > 0 else cands, [vehicle.get_rid(), player.get_rid()])
 			used.append(t.global_position)
 			t.rotation.y = player.yaw
+
+# ---- fibre-optic camera under the door: see who is inside before you breach
+var doorcam_t := 0.0
+var doorcam_yaw := 0.0
+var doorcam_pitch := 0.15
+var marked: Array = []          # gunmen / hostages seen through the camera (shown on the map and through the wall)
+var mark_t := 0.0
+
+func _doorcam_ready() -> bool:
+	return phase == "staging" and not in_vehicle and player.alive and cutscene_t <= 0.0 and input_guard <= 0.0 \
+		and not door_open and player.global_position.distance_to(city.door_pos + Vector3(0, 0, 1.6)) < 3.0
+
+func _start_doorcam() -> void:
+	doorcam_t = 10.0
+	doorcam_yaw = 0.0
+	doorcam_pitch = 0.15
+	input_guard = 0.3
+	Controls.aim_toggle = false
+	cine_cam.current = true
+	cine_cam.h_offset = 0.0
+	cine_cam.fov = 92.0
+	cine_cam.near = 0.03
+	cine_cam.far = 70.0
+	Sfx.play("click", -6.0, 1.4)
+	hud.radio("الصقر ١", "الكاميرا تحت الباب… ولا نَفَس.", 2.0)
+
+func _update_doorcam(dt: float) -> void:
+	doorcam_t -= dt
+	var look := Controls.consume_look()
+	doorcam_yaw = clampf(doorcam_yaw - look.x, -1.35, 1.35)
+	doorcam_pitch = clampf(doorcam_pitch - look.y, -0.1, 0.6)
+	var eye: Vector3 = city.door_pos + Vector3(0, 0.14, -0.5)
+	cine_cam.global_position = eye
+	cine_cam.rotation = Vector3(doorcam_pitch, doorcam_yaw, 0)
+	# whoever the lens can actually see gets marked
+	var space := get_world_3d().direct_space_state
+	var seen: Array = []
+	seen.append_array(enemies)
+	seen.append_array(hostages)
+	for a in seen:
+		if a.dead or marked.has(a):
+			continue
+		var tp: Vector3 = a.global_position + Vector3(0, 1.0, 0)
+		if not cine_cam.is_position_in_frustum(tp):
+			continue
+		var q := PhysicsRayQueryParameters3D.create(eye, tp, 1)
+		if space.intersect_ray(q).is_empty():
+			marked.append(a)
+			Sfx.play("beep", -12.0, 1.6)
+	if doorcam_t <= 0.0 or (input_guard <= 0.0 and (Controls.just("gadget") or Controls.just("jump"))):
+		_end_doorcam()
+
+func _end_doorcam() -> void:
+	doorcam_t = 0.0
+	input_guard = 0.3
+	cine_cam.near = 0.05
+	cine_cam.far = 1500.0
+	cine_cam.fov = 55.0
+	player.cam.current = true
+	mark_t = 45.0
+	var ne := marked.filter(func(a): return a.get("side") == "enemy").size()
+	var nh := marked.size() - ne
+	if marked.is_empty():
+		hud.radio("الصقر ١", "ما شفت حدا من هالزاوية. ندخل بحذر.", 2.5)
+	else:
+		hud.show_banner("", "الكاميرا: مسلّحين %d  ·  رهائن %d" % [ne, nh], 3.5)
+		hud.radio("الصقر ١", "شفت اللي جوّا. حفظت أماكنهم.", 2.5)
 
 ## [T] team orders. Before the breach: send a teammate to blow the door. During the assault:
 ## follow me -> hold here -> push in and clear on your own.

@@ -6,6 +6,8 @@ static var _loaded := false
 static var quality := 1        # 0 خفيف · 1 متوسط · 2 عالي
 static var driver := 0         # 0 = the player drives · 1 = a teammate drives (auto-drive to the scene)
 static var voice := true
+static var primary := "rifle"    # rifle | shotgun
+static var gear := "flash"       # flash | smoke | shield
 static var autofire := false   # sights on a gunman while aiming = the weapon fires by itself (on by default on phones)
 
 const QUALITY_NAMES := ["خفيفة", "متوسطة", "عالية"]
@@ -23,6 +25,12 @@ static func load_all() -> void:
 		driver = clampi(int(cf.get_value("settings", "driver", 0)), 0, 1)
 		voice = bool(cf.get_value("settings", "voice", true))
 		autofire = bool(cf.get_value("settings", "autofire", autofire))
+		primary = str(cf.get_value("settings", "primary", "rifle"))
+		gear = str(cf.get_value("settings", "gear", "flash"))
+		if not primary in ["rifle", "shotgun"]:
+			primary = "rifle"
+		if not gear in ["flash", "smoke", "shield"]:
+			gear = "flash"
 	if OS.has_environment("FALCON_QUALITY"):
 		quality = clampi(int(OS.get_environment("FALCON_QUALITY")), 0, 2)
 
@@ -33,6 +41,8 @@ static func save() -> void:
 	cf.set_value("settings", "driver", driver)
 	cf.set_value("settings", "voice", voice)
 	cf.set_value("settings", "autofire", autofire)
+	cf.set_value("settings", "primary", primary)
+	cf.set_value("settings", "gear", gear)
 	cf.save(SAVE)
 
 static func traffic_count() -> int:

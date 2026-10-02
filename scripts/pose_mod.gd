@@ -15,6 +15,7 @@ var point_at := Vector3.ZERO   # world position the "point" gesture aims at
 var sit := 0.0          # 0..1: seated on a chair / sofa (hips at seat height, thighs forward)
 var crouch := 0.0       # 0..1: lower the hips and bend the legs (feet stay planted)
 var twist := 0.0        # radians: turn the chest about the vertical (legs strafe, sights stay on target)
+var reload := 0.0       # 0 = no; 0..1 = how far through a reload (the left hand goes for a magazine)
 var K := Transform3D.IDENTITY   # "civilian space" (Y up, +Z forward, metres) -> skeleton space
 
 func _bone(n: String) -> int:
@@ -63,7 +64,21 @@ func _process_modification() -> void:
 		"rifle":
 			if grip and guard and grip.is_inside_tree():
 				_ik("Right", inv * grip.global_position, Vector3(-0.6, -1.0, -0.5))
-				_ik("Left", inv * guard.global_position, Vector3(0.7, -1.0, 0.0))
+				var lt: Vector3 = inv * guard.global_position
+				if reload > 0.0 and reload < 1.0:
+					# down to the pouch on the belt, up to the magazine well, back onto the handguard
+					var hipc := _toC(sk.get_bone_global_pose(_bone("Hips")).origin)
+					var pouch := _toS(hipc + Vector3(0.2, 0.02, 0.1))
+					var well: Vector3 = inv * (grip.global_position + grip.global_transform.basis * Vector3(0, -0.1, -0.13))
+					if reload < 0.3:
+						lt = lt.lerp(pouch, smoothstep(0.0, 0.3, reload))
+					elif reload < 0.62:
+						lt = pouch.lerp(well, smoothstep(0.3, 0.62, reload))
+					elif reload < 0.8:
+						lt = well
+					else:
+						lt = well.lerp(lt, smoothstep(0.8, 1.0, reload))
+				_ik("Left", lt, Vector3(0.7, -1.0, 0.0))
 		"hands_up":
 			var h := _toC(sk.get_bone_global_pose(_bone("Head")).origin)
 			_ik("Right", _toS(h + Vector3(-0.22, 0.32, 0.05)), Vector3(-1, 0, -0.3))

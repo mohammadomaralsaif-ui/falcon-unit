@@ -27,11 +27,13 @@ var reserve := 150
 const WEAPONS := {
 	"rifle": {"name": "RM-277", "mag": 30, "cd": 0.08, "dmg": 34.0, "spread": 0.02, "reload": 2.0, "sound": "rifle", "kick": 0.009, "fov": 22.0, "auto": true},
 	"pistol": {"name": "Glock 17", "mag": 17, "cd": 0.2, "dmg": 30.0, "spread": 0.014, "reload": 1.3, "sound": "pistol", "kick": 0.02, "fov": 50.0, "auto": false},
+	"shotgun": {"name": "M870", "mag": 7, "cd": 0.8, "dmg": 19.0, "spread": 0.05, "reload": 2.8, "sound": "rifle", "kick": 0.04, "fov": 46.0, "auto": false, "pellets": 9},
 	"sniper": {"name": "M24", "mag": 5, "cd": 1.25, "dmg": 220.0, "spread": 0.05, "reload": 2.6, "sound": "sniper", "kick": 0.05, "fov": 11.0, "auto": false},
 }
 var weapon := "rifle"
 var primary := "rifle"
-var bag := {"rifle": [30, 150], "pistol": [17, 68], "sniper": [5, 25]}
+var bag := {"rifle": [30, 150], "pistol": [17, 68], "sniper": [5, 25], "shotgun": [7, 42]}
+var shield := false
 var switch_t := 0.0
 var _semi_ready := true
 var fire_cd := 0.0
@@ -103,8 +105,27 @@ func give_sniper() -> void:
 		gun = model.gun
 		muzzle = model.muzzle
 
+## Loadout picked in the briefing: the shotgun replaces the rifle as the primary.
+func give_primary(kind: String) -> void:
+	if kind == primary or not WEAPONS.has(kind):
+		return
+	primary = kind
+	if weapon != "pistol":
+		weapon = kind
+		ammo = bag[kind][0]; reserve = bag[kind][1]
+		model.set_weapon(kind)
+		gun = model.gun
+		muzzle = model.muzzle
+
+## Ballistic shield: stops most of what comes from the front, but leaves only the Glock hand free.
+func give_shield() -> void:
+	shield = true
+	model.give_shield()
+	if weapon != "pistol":
+		switch_weapon()
+
 func _frozen() -> bool:
-	return main != null and main.get("cutscene_t") != null and main.cutscene_t > 0.0
+	return main != null and main.get("cutscene_t") != null and (main.cutscene_t > 0.0 or main.doorcam_t > 0.0)
 
 func _physics_process(dt: float) -> void:
 	if not active:
@@ -119,7 +140,8 @@ func _physics_process(dt: float) -> void:
 			velocity.y -= 9.8 * dt
 		move_and_slide()
 		model.play("Idle")
-		Controls.consume_look()
+		if main.doorcam_t <= 0.0:
+			Controls.consume_look()      # (the door camera pans with the look input itself)
 		return
 	var w: Dictionary = WEAPONS[weapon]
 	var aiming := Controls.held("aim")
@@ -149,7 +171,7 @@ func _physics_process(dt: float) -> void:
 	model.set_crouch(crouch_k)
 	# sights up = looking through the optic: the rifle has a 4x combat sight, the M24 its long scope;
 	# the Glock keeps the over-the-shoulder zoom
-	scoped = weapon != "pistol" and aim > 0.75
+	scoped = weapon in ["rifle", "sniper"] and aim > 0.75
 	spring.spring_length = 0.0 if scoped else lerpf(2.8, 1.25, aim)
 	pivot.position.x = 0.0 if scoped else lerpf(0.55, 0.72, aim)
 	# scoped while crouched = rifle rested on the parapet / cover, eye just over it
@@ -167,6 +189,8 @@ func _physics_process(dt: float) -> void:
 		spd = minf(spd, 2.6)          # nobody jogs backwards
 	if crouch_k > 0.5:
 		spd = 1.9
+	if shield:
+		spd = minf(spd, 3.2)          # the shield is heavy: no sprinting behind it
 	if aim > 0.5:
 		spd = minf(spd, 2.0 if weapon != "sniper" else 1.2)
 	var dir := (-transform.basis.z * mv.y + transform.basis.x * mv.x)
@@ -209,13 +233,19 @@ func _physics_process(dt: float) -> void:
 	# weapon up and moving sideways or backwards: the legs turn toward the way you are going while
 	# the chest and rifle stay on the sights; walking backwards plays the stride in reverse
 	var leg_target := 0.0
-	var backpedal := false
+	var stride_clip := ""
 	if armed and hs > 0.5 and mag > 0.1:
-		var th := atan2(-mv.x, mv.y)
-		if absf(th) > deg_to_rad(112.0):
-			backpedal = true
-			th = wrapf(th + PI, -PI, PI)
-		leg_target = clampf(th, -1.15, 1.15)
+		var th := atan2(-mv.x, mv.y)                 # 0 = forward, + = left
+		if absf(th) > deg_to_rad(128.0):
+			stride_clip = "WalkBack"
+			leg_target = clampf(wrapf(th + PI, -PI, PI), -0.6, 0.6)
+		elif absf(th) > deg_to_rad(52.0):
+			stride_clip = "StrafeL" if th > 0.0 else "StrafeR"
+			leg_target = clampf(th - signf(th) * PI * 0.5, -0.5, 0.5)
+		else:
+			leg_target = clampf(th, -0.9, 0.9)
+	if stride_clip != "" and not model.anim.has_animation(stride_clip):
+		stride_clip = ""
 	leg = lerp_angle(leg, leg_target, 1.0 - exp(-dt * 10.0))
 	model.set_leg_yaw(leg)
 	# lean into the run a little
@@ -239,7 +269,12 @@ func _physics_process(dt: float) -> void:
 		want = "Run"
 	elif hs > 0.35:
 		want = "Walk"
-	model.play(want, (clampf(hs / (5.4 if want == "Run" else 1.7), 0.72, 1.35) * (-1.0 if backpedal else 1.0)) if want != "Idle" else 1.0)
+	if stride_clip != "" and want != "Idle":
+		model.play(stride_clip, clampf(hs / 2.0, 0.7, 1.5))
+	else:
+		model.play(want, clampf(hs / (5.4 if want == "Run" else 1.7), 0.72, 1.35) if want != "Idle" else 1.0)
+	# reloading: the support hand leaves the weapon, fetches a magazine and seats it
+	model.pose.reload = clampf(1.0 - reload_t / float(w.reload), 0.0, 1.0) if reload_t > 0.0 else 0.0
 	# spread bloom: moving and firing open the crosshair, standing still / crouching closes it
 	var bloom_rest := clampf(hs / 6.0, 0.0, 1.0) * 0.6 * (1.0 - crouch_k * 0.5)
 	bloom = lerpf(bloom, bloom_rest, 1.0 - exp(-dt * 5.0))
@@ -247,7 +282,7 @@ func _physics_process(dt: float) -> void:
 	model.set_aim(lerpf(model.aim_pitch, pitch * 0.8 if (aim > 0.2 or fire_cd > -0.8) and absf(face) < 0.5 else -0.35, 1.0 - exp(-dt * 12.0)))
 	if reload_t > 0.0:
 		reload_t -= dt
-		gun.rotation.z = sin(reload_t * 4.0) * 0.5
+		gun.rotation.z = sin(clampf(1.0 - reload_t / float(w.reload), 0.0, 1.0) * PI) * 0.35
 		if reload_t <= 0.0:
 			var take: int = mini(int(w.mag) - ammo, reserve)
 			ammo += take; reserve -= take
@@ -353,6 +388,10 @@ func _reload() -> void:
 
 ## Primary (rifle or sniper) <-> Glock. Each weapon keeps its own magazine and reserve.
 func switch_weapon() -> void:
+	if shield and weapon == "pistol":
+		if main:
+			main.hud.show_banner("", "إيدك الثانية حاملة الدرع – المسدس بس", 1.4)
+		return
 	bag[weapon] = [ammo, reserve]
 	weapon = "pistol" if weapon != "pistol" else primary
 	ammo = bag[weapon][0]; reserve = bag[weapon][1]
@@ -368,36 +407,56 @@ func _shoot() -> void:
 	fire_cd = float(w.cd)
 	ammo -= 1
 	stats.shots += 1
-	var spread := lerpf(float(w.spread), 0.004 if weapon != "sniper" else 0.0004, aim) * (1.0 + bloom) * (1.0 - crouch_k * 0.3)
+	var tight: float = {"sniper": 0.0004, "shotgun": 0.03}.get(weapon, 0.004)
+	var spread := lerpf(float(w.spread), tight, aim) * (1.0 + bloom) * (1.0 - crouch_k * 0.3)
 	bloom = minf(bloom + (0.25 if bool(w.auto) else 0.5), 2.0)
 	var from := cam.global_position
-	var fwd := -cam.global_basis.z
-	fwd = (fwd + cam.global_basis.x * randf_range(-spread, spread) + cam.global_basis.y * randf_range(-spread, spread)).normalized()
-	var q := PhysicsRayQueryParameters3D.create(from, from + fwd * 400.0, 1 | 2 | 8 | 32)
-	q.exclude = [get_rid()]
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
-	var end := from + fwd * 400.0
+	var aim_dir := -cam.global_basis.z
 	var mpos := muzzle.global_position
-	if hit:
-		end = hit.position
-		var col: Object = hit.collider
-		if col and col.has_method("take_hit"):
-			var head: bool = hit.position.y - col.global_position.y > 1.48
-			var killed: bool = col.take_hit(float(w.dmg) * (3.2 if head else 1.0), head, self)
-			stats.hits += 1
-			if main:
-				main.on_player_hit(killed, head)
-			if col is AnimatableBody3D:
-				Fx.particles(main, hit.position, hit.normal, "spark", 10)
-				Sfx.play_3d("crash_small", hit.position, -14.0, 2.2)
+	var end := from + aim_dir * 400.0
+	var fwd := aim_dir
+	var pellets: int = int(w.get("pellets", 1))
+	var hit_any := false
+	var killed_any := false
+	var head_any := false
+	for pi in pellets:
+		fwd = (aim_dir + cam.global_basis.x * randf_range(-spread, spread) + cam.global_basis.y * randf_range(-spread, spread)).normalized()
+		var q := PhysicsRayQueryParameters3D.create(from, from + fwd * (400.0 if pellets == 1 else 45.0), 1 | 2 | 8 | 32)
+		q.exclude = [get_rid()]
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		var pend := from + fwd * (400.0 if pellets == 1 else 45.0)
+		if hit:
+			pend = hit.position
+			var col: Object = hit.collider
+			if col and col.has_method("take_hit"):
+				var head: bool = hit.position.y - col.global_position.y > 1.48
+				# buckshot loses its punch with distance
+				var falloff := 1.0 if pellets == 1 else clampf(1.25 - from.distance_to(hit.position) / 22.0, 0.25, 1.0)
+				var killed: bool = col.take_hit(float(w.dmg) * falloff * (3.2 if head and pellets == 1 else 1.0), head, self)
+				hit_any = true
+				killed_any = killed_any or killed
+				head_any = head_any or head
+				if col is AnimatableBody3D:
+					Fx.particles(main, hit.position, hit.normal, "spark", 10 if pellets == 1 else 3)
+					if pi == 0:
+						Sfx.play_3d("crash_small", hit.position, -14.0, 2.2)
+				elif pi % 3 == 0:
+					Fx.blood_hit(main, hit.position, fwd, hit.normal)
+					Sfx.play_3d("flesh", hit.position, -4.0)
 			else:
-				Fx.blood_hit(main, hit.position, fwd, hit.normal)
-				Sfx.play_3d("flesh", hit.position, -4.0)
-		else:
-			Fx.particles(main, hit.position, hit.normal, "spark", 8)
-			Fx.particles(main, hit.position, hit.normal, "dust", 4)
-			if col is StaticBody3D:
-				Fx.bullet_hole(main, hit.position, hit.normal)
+				Fx.particles(main, hit.position, hit.normal, "spark", 8 if pellets == 1 else 2)
+				if pi % 3 == 0:
+					Fx.particles(main, hit.position, hit.normal, "dust", 4 if pellets == 1 else 2)
+				if col is StaticBody3D:
+					Fx.bullet_hole(main, hit.position, hit.normal)
+		if pi == 0:
+			end = pend
+		elif not scoped and pi % 2 == 0:
+			Fx.tracer(main, mpos, pend)
+	if hit_any:
+		stats.hits += 1
+		if main:
+			main.on_player_hit(killed_any, head_any)
 	if not scoped:
 		Fx.tracer(main, mpos, end)
 		Fx.flash(main, mpos, 3.0)
@@ -406,7 +465,12 @@ func _shoot() -> void:
 		# through the optic you still see the shot go and the flash light up what is near
 		Fx.tracer(main, from + fwd * 2.5 - cam.global_basis.y * 0.12, end)
 		Fx.flash(main, from + fwd * 0.8, 2.0)
-	Sfx.play(str(w.sound), -4.0 if weapon != "sniper" else 0.0, randf_range(0.95, 1.05))
+	if weapon == "shotgun":
+		Sfx.play("rifle", 1.0, randf_range(0.5, 0.56))
+		Sfx.play("boom", -14.0, 2.4)
+		get_tree().create_timer(0.3).timeout.connect(func(): Sfx.play("bolt", -4.0, 0.85))      # rack the pump
+	else:
+		Sfx.play(str(w.sound), -4.0 if weapon != "sniper" else 0.0, randf_range(0.95, 1.05))
 	pitch += float(w.kick)
 	yaw += randf_range(-0.006, 0.006) * (3.0 if weapon == "sniper" else 1.0)
 	if weapon == "sniper":
@@ -417,6 +481,15 @@ func _shoot() -> void:
 func take_hit(dmg: float, _head := false, from: Node3D = null) -> bool:
 	if not alive:
 		return false
+	if shield and from != null and from is Node3D:
+		var to: Vector3 = (from as Node3D).global_position - global_position
+		to.y = 0
+		var facing := -global_transform.basis.z
+		if to.length() > 0.5 and facing.dot(to.normalized()) > 0.45:
+			# the round hits the shield: most of it never reaches you
+			dmg *= 0.18
+			Fx.particles(main, global_position + Vector3(0, 1.2, 0) + facing * 0.55, facing, "spark", 6)
+			Sfx.play("crash_small", -10.0, 2.4)
 	hp -= dmg
 	last_hit = Time.get_ticks_msec() / 1000.0
 	if main:
@@ -428,7 +501,7 @@ func take_hit(dmg: float, _head := false, from: Node3D = null) -> bool:
 		Controls.aim_toggle = false
 		model.collapse(1.0)
 		if main:
-			get_tree().create_timer(0.9).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))
+			get_tree().create_timer(1.7).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))
 		if main:
 			main.on_player_dead()
 		return true

@@ -16,6 +16,8 @@ var banner_sub: Label
 var prompt: Label
 var crosshair: Control
 var scope: Control
+var camfx: Control
+var marks: Control
 var hitmark: Control
 var hit_t := 0.0
 var hit_kill := false
@@ -250,6 +252,57 @@ func _build_hud() -> void:
 		scope.draw_circle(c, 2.0, Color(0.9, 0.15, 0.1)))
 	scope.visible = false
 	root.add_child(scope)
+	# door camera feed: green monochrome wash, scan lines, brackets on whoever the lens has found
+	camfx = Control.new(); camfx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	camfx.set_anchors_preset(Control.PRESET_FULL_RECT)
+	camfx.draw.connect(func():
+		var vs := camfx.size
+		camfx.draw_rect(Rect2(Vector2.ZERO, vs), Color(0.1, 0.9, 0.35, 0.16))
+		var y := fmod(Time.get_ticks_msec() * 0.06, 6.0)
+		while y < vs.y:
+			camfx.draw_line(Vector2(0, y), Vector2(vs.x, y), Color(0, 0, 0, 0.16), 2.0)
+			y += 6.0
+		camfx.draw_arc(vs * 0.5, vs.length() * 0.62, 0, TAU, 64, Color(0, 0, 0, 0.85), vs.length() * 0.3)
+		var cam := get_viewport().get_camera_3d()
+		if cam and main:
+			for a in main.marked:
+				if not is_instance_valid(a) or a.dead:
+					continue
+				var wp: Vector3 = a.global_position + Vector3(0, 1.0, 0)
+				if cam.is_position_behind(wp):
+					continue
+				var sp := cam.unproject_position(wp)
+				var d: float = cam.global_position.distance_to(wp)
+				var hh := clampf(520.0 / maxf(d, 1.5), 16.0, 130.0)
+				var col := Color(1, 0.25, 0.2) if a.get("side") == "enemy" else Color(0.4, 0.8, 1.0)
+				for sx in [-1.0, 1.0]:
+					for sy in [-1.0, 1.0]:
+						var c := sp + Vector2(sx * hh * 0.45, sy * hh)
+						camfx.draw_line(c, c - Vector2(sx * 10, 0), col, 2.5)
+						camfx.draw_line(c, c - Vector2(0, sy * 10), col, 2.5)
+		var blink := fmod(Time.get_ticks_msec() * 0.002, 1.0) < 0.6
+		if blink:
+			camfx.draw_circle(Vector2(46, 46), 8, Color(1, 0.2, 0.15))
+		camfx.draw_string(font, Vector2(64, 54), "REC  ·  كاميرا الباب", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(0.8, 1, 0.85)))
+	camfx.visible = false
+	root.add_child(camfx)
+	# after the camera: small markers through the wall where the lens saw people
+	marks = Control.new(); marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	marks.draw.connect(func():
+		var cam := get_viewport().get_camera_3d()
+		if not cam or not main:
+			return
+		for a in main.marked:
+			if not is_instance_valid(a) or a.dead:
+				continue
+			var wp: Vector3 = a.global_position + Vector3(0, 1.9, 0)
+			if cam.is_position_behind(wp):
+				continue
+			var sp := cam.unproject_position(wp)
+			var col := Color(1, 0.3, 0.25, 0.85) if a.get("side") == "enemy" else Color(0.45, 0.85, 1.0, 0.85)
+			marks.draw_colored_polygon(PackedVector2Array([sp + Vector2(0, 7), sp + Vector2(-6, -4), sp + Vector2(6, -4)]), col))
+	root.add_child(marks)
 	hitmark = Control.new(); hitmark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hitmark.set_anchors_preset(Control.PRESET_CENTER)
 	hitmark.draw.connect(func():
@@ -305,7 +358,7 @@ func _build_hud() -> void:
 	waypoint.add_child(wp_lbl)
 
 # ------------------------------------------------------------------ public API
-const TOUCH_HINTS := {"[E] ": "", " [E]": "", "[E]": "", "[F] ": "", " [F]": "", "[F]": "", "[H]": "(زر صفارة)", "[Q]": "(الزر الأزرق)", "[R]": "(زر تعبئة)", "[X]": "(زر تبديل)", "[G]": "(زر فلاش)", "[C]": "(زر انحناء)", "[T]": "(زر الأوامر)", "[فرامل/قفز]": "زر الفرامل", "[زر يمين / تصويب]": "زر التصويب:"}
+const TOUCH_HINTS := {"[V]": "(زر كاميرا)", "[E] ": "", " [E]": "", "[E]": "", "[F] ": "", " [F]": "", "[F]": "", "[H]": "(زر صفارة)", "[Q]": "(الزر الأزرق)", "[R]": "(زر تعبئة)", "[X]": "(زر تبديل)", "[G]": "(زر فلاش)", "[C]": "(زر انحناء)", "[T]": "(زر الأوامر)", "[فرامل/قفز]": "زر الفرامل", "[زر يمين / تصويب]": "زر التصويب:"}
 
 ## On phones, replace keyboard key hints with the on-screen button names.
 func _touchify(t: String) -> String:
@@ -466,22 +519,29 @@ func _process(dt: float) -> void:
 	vignette.modulate.a = maxf(vig_a, low * 0.7 if low > 0.4 else 0.0)
 	var in_car: bool = main.in_vehicle
 	var playing: bool = not (main.phase in ["brief", "result", "intro"]) and main.cutscene_t <= 0.0
-	crosshair.visible = playing and not in_car and pl.alive
+	crosshair.visible = playing and not in_car and pl.alive and main.doorcam_t <= 0.0
 	crosshair.queue_redraw()
+	var doorcam: bool = main.doorcam_t > 0.0
+	camfx.visible = doorcam
+	if doorcam:
+		camfx.queue_redraw()
+	marks.visible = playing and not doorcam and not in_car and main.marked.size() > 0 and main.phase in ["staging", "breach", "assault"]
+	if marks.visible:
+		marks.queue_redraw()
 	scope.visible = playing and not in_car and pl.alive and pl.scoped
 	if scope.visible:
 		scope.queue_redraw()
-	hp_bar.get_parent().visible = playing and not in_car
+	hp_bar.get_parent().visible = playing and not in_car and not doorcam
 	hp_bar.value = pl.hp
-	ammo_lbl.visible = playing and not in_car
+	ammo_lbl.visible = playing and not in_car and not doorcam
 	ammo_lbl.text = pl.WEAPONS[pl.weapon].name + "   " + ("إعادة تعبئة…" if pl.reload_t > 0.0 else "%d  ⁄  %d" % [pl.ammo, pl.reserve])
 	speed_lbl.visible = playing and in_car
 	if in_car:
 		var vh: float = main.vehicle.health
 		speed_lbl.text = ("%d كم/س   ·   السيارة %d%%" % [int(main.vehicle.speed_kmh), int(vh)]) if not main.vehicle.broken else "السيارة معطّلة ✖"
 		speed_lbl.add_theme_color_override("font_color", Color(1, 0.4, 0.3) if vh < 40.0 else Color.WHITE)
-	objectives.get_parent().visible = playing and not pl.scoped
-	minimap.visible = playing and not pl.scoped
+	objectives.get_parent().visible = playing and not pl.scoped and not doorcam
+	minimap.visible = playing and not pl.scoped and not doorcam
 	timer_lbl.visible = playing
 	timer_lbl.text = main.timer_text()
 	var urgent_now: bool = main.timer_urgent() and fmod(Time.get_ticks_msec() * 0.002, 1.0) < 0.6
@@ -491,7 +551,7 @@ func _process(dt: float) -> void:
 	minimap.queue_redraw()
 	# waypoint projection
 	var cam := get_viewport().get_camera_3d()
-	if wp_target != null and cam and playing:
+	if wp_target != null and cam and playing and not doorcam:
 		var p: Vector3 = wp_target
 		var vs := root.size
 		var behind := cam.is_position_behind(p)
@@ -538,12 +598,19 @@ func _process(dt: float) -> void:
 					b.visible = not in_car and main.team.any(func(t): return not t.dead and t.visible)
 					b.get_child(0).text = "اقتحموا" if main.phase == "staging" else {"follow": "اثبتوا", "hold": "تقدّموا", "assault": "اتبعوني"}[main.team_order]
 				"flash":
-					b.visible = not in_car and main.phase in ["staging", "breach", "assault"] and main.flashbangs > 0
-					b.get_child(0).text = "فلاش %d" % main.flashbangs
+					b.visible = not in_car and main.phase in ["staging", "breach", "assault"] and main.grenade_label() != ""
+					b.get_child(0).text = main.grenade_label()
 				"jump", "siren", "interact":
 					b.visible = in_car
+				"gadget":
+					b.visible = doorcam or main._doorcam_ready()
+					b.get_child(0).text = "إغلاق" if doorcam else "كاميرا"
 				"pause":
 					b.visible = true
+		if doorcam:
+			for k2 in touch_buttons:
+				if k2 != "gadget" and k2 != "pause":
+					touch_buttons[k2].visible = false
 		# on a phone the ACTION button already says what to do: keep the centre text short and small
 		prompt.visible = not (prompt_raw.begins_with("[F]") and not in_car)
 		if Controls.aim_toggle and (in_car or not pl.alive):
@@ -587,10 +654,15 @@ func _draw_minimap() -> void:
 			if spos.distance_to(center) < R2:
 				minimap.draw_circle(spos, 4.5, Color(1, 0.85, 0.2))
 			continue
-		if not e.dead and not e.surrendered and e.state == "alert" and main.door_open:
+		if not e.dead and not e.surrendered and ((e.state == "alert" and main.door_open) or main.marked.has(e)):
 			var ep: Vector2 = to_map.call(e.global_position)
 			if ep.distance_to(center) < R2:
 				minimap.draw_circle(ep, 3.5, Color(1, 0.3, 0.25))
+	for hm in main.marked:
+		if is_instance_valid(hm) and hm.get("side") != "enemy" and not hm.dead:
+			var hp2: Vector2 = to_map.call(hm.global_position)
+			if hp2.distance_to(center) < R2:
+				minimap.draw_circle(hp2, 3.5, Color(0.45, 0.9, 0.6))
 	for tm in main.team:
 		if not tm.dead and tm.visible:
 			var tp: Vector2 = to_map.call(tm.global_position)
@@ -708,6 +780,13 @@ func show_briefing(on_start: Callable) -> void:
 		_choice_row(vb, "مين بسوق للموقع؟", [["واحد من الفريق", 1], ["أنا بسوق", 0]], Settings.driver, func(v):
 			Settings.driver = v
 			Settings.save(), 180)
+	if main.M.get("type", "") != "sniper":
+		_choice_row(vb, "السلاح الأساسي", [["شوتغن M870 (قريب وقاتل)", "shotgun"], ["رشاش RM-277 (منظار)", "rifle"]], Settings.primary, func(v):
+			Settings.primary = v
+			Settings.save(), 250, 19)
+		_choice_row(vb, "العدّة", [["درع واقي + مسدس", "shield"], ["دخان ×3", "smoke"], ["قنابل صوتية ×3", "flash"]], Settings.gear, func(v):
+			Settings.gear = v
+			Settings.save(), 168, 19)
 	_choice_row(vb, "جودة الرسم (خفيفة = أسرع على الأجهزة الضعيفة)", [["عالية", 2], ["متوسطة", 1], ["خفيفة", 0]], Settings.quality, func(v):
 		Settings.quality = v
 		Settings.save()
@@ -719,7 +798,7 @@ func show_briefing(on_start: Callable) -> void:
 		Settings.voice = v
 		Voice.enabled = v
 		Settings.save())
-	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · C انحناء · T أوامر · X سلاح" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر · الزر الأزرق بتغيّر حسب الموقف · اسحب هالقائمة لفوق وتحت"
+	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · C انحناء · T أوامر · X سلاح · V كاميرا الباب" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر · الزر الأزرق بتغيّر حسب الموقف · اسحب هالقائمة لفوق وتحت"
 	var hl := _label(hint, 14, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_RIGHT)
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hl.custom_minimum_size.x = 520
@@ -849,6 +928,7 @@ func _build_touch() -> void:
 		"fire": ["نار", 60], "aim": ["تصويب", 42], "action": ["", 42], "reload": ["تعبئة", 30],
 		"crouch": ["انحناء", 30], "switch": ["تبديل", 26], "orders": ["اثبتوا", 32], "flash": ["فلاش", 30],
 		"jump": ["فرامل", 50], "siren": ["صفارة", 32], "interact": ["زامور", 32], "pause": ["II", 22],
+		"gadget": ["كاميرا", 32],
 	}
 	for k in specs:
 		var r: int = specs[k][1]
@@ -894,7 +974,7 @@ func _layout_touch() -> void:
 		"action": Vector2(vs.x - 212, vs.y - 216) if not car else Vector2(vs.x - 240, vs.y - 92),
 		"reload": Vector2(vs.x - 70, vs.y - 262), "switch": Vector2(vs.x - 140, vs.y - 300),
 		"crouch": Vector2(vs.x - 335, vs.y - 72),
-		"orders": Vector2(58, vs.y - 262), "flash": Vector2(58, vs.y - 340),
+		"orders": Vector2(58, vs.y - 262), "flash": Vector2(58, vs.y - 340), "gadget": Vector2(136, vs.y - 262),
 		"jump": Vector2(vs.x - 105, vs.y - 125), "siren": Vector2(vs.x - 70, vs.y - 250),
 		"interact": Vector2(vs.x - 190, vs.y - 212),
 		"pause": Vector2(vs.x * 0.5 + 200, 34),

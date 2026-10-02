@@ -25,7 +25,7 @@ LEADERS = sorted({m["leader"] for m in missions if m["leader"]})
 # speaker -> (voice model, pitch shift in semitones, pace)
 EN = json.load(open(os.path.join(ROOT, "tools", "voice_en.json"), encoding="utf-8"))   # Arabic template -> English line
 EN_NAMES = {"أبو جاسر": "Abu Jasser", "الخال": "Al-Khal", "جبل عمّان": "Jabal Amman", "جبل الحسين": "Jabal Al-Hussein",
-            "عبدون": "Abdoun", "ماركا": "Marka", "الصقر ٢": "Falcon Two", "الصقر ٣": "Falcon Three", "الصقر ٤": "Falcon Four", "الصقر ٥": "Falcon Five"}
+            "عبدون": "Abdoun", "ماركا": "Marka", "الذيب": "Al-Theeb", "العقرب": "Al-Aqrab", "الشميساني": "Shmeisani", "طبربور": "Tabarbour", "دير غبار": "Deir Ghbar", "الصقر ٢": "Falcon Two", "الصقر ٣": "Falcon Three", "الصقر ٤": "Falcon Four", "الصقر ٥": "Falcon Five"}
 
 # The game speaks English (clear, natural neural voices) with Arabic subtitles on screen.
 # speaker -> (Piper voice, pitch shift in semitones, pace)
@@ -67,6 +67,7 @@ for m in missions:
     hcount = sum(r.count("H") for r in m["map"]); ecount = sum(r.count("V") for r in m["map"])
     add("نشرة الأخبار", m["news_line"], en_of(m["news_line"]))
     add("فريق المراقبة" if m["id"] == "raid" else NEGOTIATOR, m["negotiator_line"], en_of(m["negotiator_line"]))
+    if m.get("type") == "sniper" and "dialogue" not in m: m["dialogue"] = []; m.setdefault("banter", [])
     add(COLONEL, m["commander_line"], en_of(m["commander_line"]))
     for b in m["brief"]:
         add(COLONEL, b, en_of(b))
@@ -110,8 +111,9 @@ def expand(text, tail):
         return [(text, en)]
     if "M.news" in tail: vals = [(m["news"], en_of(m["news"])) for m in missions]
     elif "M.area" in tail: vals = [(m["area"], EN_NAMES[m["area"]]) for m in missions]
-    elif "enemies.size" in tail: vals = [(v, v) for v in range(3, 10)]
+    elif "enemies.size" in tail: vals = [(v, v) for v in range(3, 11)]
     elif "flashbangs" in tail: vals = [(3, 3)]
+    elif "smokes" in tail: vals = [(3, 3)]
     elif "LEADER" in tail: vals = [(l, EN_NAMES[l]) for l in LEADERS]
     elif "display_name" in tail: vals = [(t, EN_NAMES[t]) for t in TEAM]
     else: return []

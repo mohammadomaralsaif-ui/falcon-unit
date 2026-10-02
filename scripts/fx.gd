@@ -269,6 +269,42 @@ static func blood_splat(root: Node, pos: Vector3, normal: Vector3, size := 0.6) 
 			old.queue_free()
 	return mi
 
+static var _cloud_mat: StandardMaterial3D
+
+## Smoke grenade cloud: a handful of big soft sprites that swell, hang and thin out.
+static func smoke_cloud(root: Node3D, pos: Vector3, radius: float, dur: float) -> void:
+	_init_mats()
+	if not _cloud_mat:
+		_cloud_mat = StandardMaterial3D.new()
+		_cloud_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_cloud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_cloud_mat.albedo_color = Color(0.74, 0.74, 0.72, 0.62)
+		_cloud_mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		_cloud_mat.albedo_texture = _smoke_mat.albedo_texture
+		_cloud_mat.disable_receive_shadows = true
+	var holder := Node3D.new()
+	root.add_child(holder)
+	holder.global_position = pos
+	var n := 7
+	for i in n:
+		var mi := MeshInstance3D.new()
+		var q := QuadMesh.new(); q.size = Vector2(radius * 1.5, radius * 1.3)
+		mi.mesh = q
+		mi.material_override = _cloud_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var a := TAU * i / n
+		var off := Vector3(cos(a), 0, sin(a)) * radius * (0.45 if i > 0 else 0.0) + Vector3(0, randf_range(-0.2, 0.9), 0)
+		mi.position = Vector3.ZERO
+		mi.scale = Vector3.ONE * 0.1
+		holder.add_child(mi)
+		var tw := mi.create_tween()
+		tw.tween_property(mi, "position", off, 1.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(mi, "scale", Vector3.ONE, 1.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(mi, "position", off + Vector3(0, 0.5, 0), dur - 3.6)
+		tw.tween_property(mi, "scale", Vector3.ONE * 1.6, 2.0)
+		tw.parallel().tween_property(mi, "transparency", 1.0, 2.0)
+	root.get_tree().create_timer(dur + 0.2).timeout.connect(holder.queue_free)
+
 ## Bullet hits a person: spray + splatter on the wall behind and the floor below.
 static func blood_hit(root: Node3D, pos: Vector3, dir: Vector3, normal: Vector3) -> void:
 	# a short spray out of the exit side, a puff at the wound

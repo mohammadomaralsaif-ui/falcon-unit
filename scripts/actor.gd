@@ -131,6 +131,8 @@ func _eye() -> Vector3:
 	return global_position + Vector3(0, 1.6, 0)
 
 func can_see(p: Vector3) -> bool:
+	if main and main.smoke_clouds.size() > 0 and main.smoke_blocks(_eye(), p):
+		return false
 	var q := PhysicsRayQueryParameters3D.create(_eye(), p, 1 | 8)
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
 
@@ -368,9 +370,7 @@ func take_hit(dmg: float, head := false, from: Node3D = null) -> bool:
 	if hp > 0.0:
 		# flinch: knocked back a little and can't fire straight away
 		fire_cd = maxf(fire_cd, 0.4)
-		var tw := create_tween()
-		tw.tween_property(model, "rotation:x", 0.22, 0.07)
-		tw.tween_property(model, "rotation:x", 0.0, 0.2)
+		model.hit_react(head)
 	if hp <= 0.0:
 		die(head, from)
 		return true
@@ -391,4 +391,4 @@ func die(head := false, from: Node3D = null) -> void:
 	model.collapse()
 	if main:
 		main.on_actor_dead(self, head, from)
-		get_tree().create_timer(0.9).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))
+		get_tree().create_timer(1.7).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))
