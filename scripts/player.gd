@@ -24,7 +24,7 @@ var ammo := 30
 var reserve := 150
 ## fov: camera field of view while aiming (smaller = more zoom)
 const WEAPONS := {
-	"rifle": {"name": "RM-277", "mag": 30, "cd": 0.08, "dmg": 34.0, "spread": 0.02, "reload": 2.0, "sound": "rifle", "kick": 0.012, "fov": 40.0, "auto": true},
+	"rifle": {"name": "RM-277", "mag": 30, "cd": 0.08, "dmg": 34.0, "spread": 0.02, "reload": 2.0, "sound": "rifle", "kick": 0.009, "fov": 22.0, "auto": true},
 	"pistol": {"name": "Glock 17", "mag": 17, "cd": 0.2, "dmg": 30.0, "spread": 0.014, "reload": 1.3, "sound": "pistol", "kick": 0.02, "fov": 50.0, "auto": false},
 	"sniper": {"name": "M24", "mag": 5, "cd": 1.25, "dmg": 220.0, "spread": 0.05, "reload": 2.6, "sound": "sniper", "kick": 0.05, "fov": 11.0, "auto": false},
 }
@@ -50,6 +50,7 @@ var cur_anim := ""
 var active := true
 var step_t := 0.0
 var face := 0.0          # model yaw relative to the camera heading
+var leg := 0.0           # hips/legs yaw under a torso that keeps facing the sights (strafing)
 var lean := 0.0
 var stride := 0.0
 var air_t := 0.0
@@ -144,7 +145,9 @@ func _physics_process(dt: float) -> void:
 	_cap.height = lerpf(1.8, 1.2, crouch_k)
 	shape.position.y = _cap.height * 0.5
 	model.set_crouch(crouch_k)
-	scoped = weapon == "sniper" and aim > 0.75
+	# sights up = looking through the optic: the rifle has a 4x combat sight, the M24 its long scope;
+	# the Glock keeps the over-the-shoulder zoom
+	scoped = weapon != "pistol" and aim > 0.75
 	spring.spring_length = 0.0 if scoped else lerpf(2.8, 1.25, aim)
 	pivot.position.x = 0.0 if scoped else lerpf(0.55, 0.72, aim)
 	# scoped while crouched = rifle rested on the parapet / cover, eye just over it
@@ -201,6 +204,18 @@ func _physics_process(dt: float) -> void:
 		face_target = atan2(-mv.x, mv.y)
 	face = lerp_angle(face, face_target, 1.0 - exp(-dt * (16.0 if armed else 9.0)))
 	model.rotation.y = face
+	# weapon up and moving sideways or backwards: the legs turn toward the way you are going while
+	# the chest and rifle stay on the sights; walking backwards plays the stride in reverse
+	var leg_target := 0.0
+	var backpedal := false
+	if armed and hs > 0.5 and mag > 0.1:
+		var th := atan2(-mv.x, mv.y)
+		if absf(th) > deg_to_rad(112.0):
+			backpedal = true
+			th = wrapf(th + PI, -PI, PI)
+		leg_target = clampf(th, -1.15, 1.15)
+	leg = lerp_angle(leg, leg_target, 1.0 - exp(-dt * 10.0))
+	model.set_leg_yaw(leg)
 	# lean into the run a little
 	lean = lerpf(lean, clampf(hs / 6.6, 0.0, 1.0) * (0.12 if not armed else 0.03), 1.0 - exp(-dt * 6.0))
 	model.rotation.x = -lean
@@ -222,7 +237,7 @@ func _physics_process(dt: float) -> void:
 		want = "Run"
 	elif hs > 0.35:
 		want = "Walk"
-	model.play(want, clampf(hs / (5.4 if want == "Run" else 1.7), 0.72, 1.35) if want != "Idle" else 1.0)
+	model.play(want, (clampf(hs / (5.4 if want == "Run" else 1.7), 0.72, 1.35) * (-1.0 if backpedal else 1.0)) if want != "Idle" else 1.0)
 	# spread bloom: moving and firing open the crosshair, standing still / crouching closes it
 	var bloom_rest := clampf(hs / 6.0, 0.0, 1.0) * 0.6 * (1.0 - crouch_k * 0.5)
 	bloom = lerpf(bloom, bloom_rest, 1.0 - exp(-dt * 5.0))
@@ -375,6 +390,10 @@ func _shoot() -> void:
 		Fx.tracer(main, mpos, end)
 		Fx.flash(main, mpos, 3.0)
 		Fx.muzzle(main, muzzle)
+	elif weapon == "rifle":
+		# through the optic you still see the shot go and the flash light up what is near
+		Fx.tracer(main, from + fwd * 2.5 - cam.global_basis.y * 0.12, end)
+		Fx.flash(main, from + fwd * 0.8, 2.0)
 	Sfx.play(str(w.sound), -4.0 if weapon != "sniper" else 0.0, randf_range(0.95, 1.05))
 	pitch += float(w.kick)
 	yaw += randf_range(-0.006, 0.006) * (3.0 if weapon == "sniper" else 1.0)
@@ -394,12 +413,10 @@ func take_hit(dmg: float, _head := false, from: Node3D = null) -> bool:
 		hp = 0.0
 		alive = false
 		model.visible = true
-		model.anim.pause()
-		model.set_mode("none")
-		var tw := create_tween()
-		tw.tween_property(model, "rotation:x", -PI / 2, 0.6)
+		Controls.aim_toggle = false
+		model.collapse(1.0)
 		if main:
-			get_tree().create_timer(0.7).timeout.connect(func(): Fx.blood_pool(main, global_position))
+			get_tree().create_timer(0.9).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))
 		if main:
 			main.on_player_dead()
 		return true

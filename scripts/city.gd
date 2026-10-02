@@ -979,7 +979,7 @@ func _hills() -> void:
 		_static_box(sz, p + Vector3(0, wh * 0.5, 0))
 	# houses: one MultiMesh, each with windows and a flat roof, packed densest next to the district
 	var xf := []; var cols := []
-	var tones := [Color(0.93, 0.89, 0.8), Color(0.86, 0.8, 0.68), Color(0.97, 0.95, 0.9), Color(0.8, 0.74, 0.62), Color(0.9, 0.86, 0.8)]
+	var tones := [Color(0.84, 0.79, 0.69), Color(0.78, 0.71, 0.58), Color(0.9, 0.87, 0.8), Color(0.72, 0.65, 0.53), Color(0.82, 0.77, 0.7), Color(0.76, 0.72, 0.66)]
 	for i in 6200:
 		var near := i < 2600
 		var span := (c + 150.0) if near else ext * 0.95

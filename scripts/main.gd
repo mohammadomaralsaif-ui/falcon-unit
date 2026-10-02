@@ -419,7 +419,7 @@ func _environment() -> void:
 	env.ambient_light_energy = {"golden": 0.8, "night": 1.0, "morning": 0.85}[sky_kind]
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 1.05
+	env.tonemap_exposure = 0.96
 	env.tonemap_white = 6.0
 	env.glow_enabled = true
 	env.glow_intensity = 0.5
@@ -427,7 +427,7 @@ func _environment() -> void:
 	env.glow_hdr_threshold = 1.2
 	env.fog_enabled = true
 	env.fog_light_color = {"golden": Color(0.86, 0.74, 0.6), "night": Color(0.06, 0.06, 0.1), "morning": Color(0.82, 0.86, 0.9)}[sky_kind]
-	env.fog_density = 0.0013          # light haze only: the far end of a street stays readable
+	env.fog_density = 0.0009          # light haze only: the far end of a street stays readable
 	env.fog_aerial_perspective = 0.25
 	env.fog_sky_affect = 0.25
 	env.adjustment_enabled = true
@@ -439,7 +439,7 @@ func _environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = {"golden": Vector3(-24, -128, 0), "night": Vector3(-55, 40, 0), "morning": Vector3(-42, 70, 0)}[sky_kind]
 	sun.light_color = {"golden": Color(1.0, 0.84, 0.64), "night": Color(0.55, 0.65, 1.0), "morning": Color(1.0, 0.96, 0.88)}[sky_kind]
-	sun.light_energy = {"golden": 1.5, "night": 0.5, "morning": 1.35}[sky_kind]
+	sun.light_energy = {"golden": 1.35, "night": 0.5, "morning": 1.25}[sky_kind]
 	sun.shadow_opacity = 0.82
 	if sky_kind == "night":
 		env.glow_intensity = 0.9
@@ -500,7 +500,8 @@ func _start_intro() -> void:
 	var vp: Vector3 = vehicle.global_position
 	intro_shots = [
 		[Vector3(mid - 90, 95, city.size_total + 50), Vector3(mid + 20, 75, city.size_total + 10), c, 6.0],
-		[c + Vector3(-16, 2.2, 26), c + Vector3(9, 3.2, 21), c + Vector3(0, 2.2, 0), 6.5],
+		# from the far kerb, in the open street (the old spot was inside the building opposite)
+		[c + Vector3(-14, 1.9, 13.2), c + Vector3(8, 2.6, 12.4), c + Vector3(0, 2.4, 0), 6.5],
 		[vp + Vector3(-7, 1.4, -9), vp + Vector3(5, 2.2, -8), vp + Vector3(0, 1.0, 0), 6.0],
 	]
 	if sniper_mission and city.sniper_nests.size() > 0:

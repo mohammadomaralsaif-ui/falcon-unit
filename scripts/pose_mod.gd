@@ -14,6 +14,7 @@ var _b := {}
 var point_at := Vector3.ZERO   # world position the "point" gesture aims at
 var sit := 0.0          # 0..1: seated on a chair / sofa (hips at seat height, thighs forward)
 var crouch := 0.0       # 0..1: lower the hips and bend the legs (feet stay planted)
+var twist := 0.0        # radians: turn the chest about the vertical (legs strafe, sights stay on target)
 var K := Transform3D.IDENTITY   # "civilian space" (Y up, +Z forward, metres) -> skeleton space
 
 func _bone(n: String) -> int:
@@ -41,7 +42,7 @@ func _dirS(d: Vector3) -> Vector3:
 
 func _process_modification() -> void:
 	var sk := get_skeleton()
-	if not sk or (mode == "none" and sit <= 0.01 and crouch <= 0.01):
+	if not sk or (mode == "none" and sit <= 0.01 and crouch <= 0.01 and absf(twist) <= 0.01):
 		return
 	var inv := sk.global_transform.affine_inverse()
 	if body:
@@ -50,6 +51,14 @@ func _process_modification() -> void:
 		_sit(sk)
 	elif crouch > 0.01 and not mode.begins_with("kneel"):
 		_crouch(sk)
+	if absf(twist) > 0.01:
+		var up := _dirS(Vector3.UP)
+		for bn in ["Spine", "Spine1", "Spine2"]:
+			var bi := _bone(bn)
+			if bi >= 0:
+				var g := sk.get_bone_global_pose(bi)
+				g.basis = Basis(up, twist / 3.0) * g.basis
+				sk.set_bone_global_pose(bi, g)
 	match mode:
 		"rifle":
 			if grip and guard and grip.is_inside_tree():

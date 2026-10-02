@@ -387,12 +387,8 @@ func die(head := false, from: Node3D = null) -> void:
 	for c in get_children():
 		if c is CollisionShape3D:
 			c.set_deferred("disabled", true)
-	model.anim.pause()
-	model.set_mode("none")
 	gun.visible = false
-	var tw := create_tween()
-	tw.tween_property(model, "rotation:x", -PI / 2 * (1 if randf() < 0.6 else -1), 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(model, "position:y", 0.15, 0.5)
+	model.collapse()
 	if main:
 		main.on_actor_dead(self, head, from)
-		get_tree().create_timer(0.6).timeout.connect(func(): Fx.blood_pool(main, global_position))
+		get_tree().create_timer(0.9).timeout.connect(func(): Fx.blood_pool(main, model.fallen_center()))

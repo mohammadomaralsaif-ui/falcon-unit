@@ -216,14 +216,30 @@ func _build_hud() -> void:
 	scope.draw.connect(func():
 		var vs := scope.size
 		var c := vs * 0.5
-		var r := minf(vs.x, vs.y) * 0.46
+		var pl = main.player if main else null
+		var optic: bool = pl != null and pl.weapon == "rifle"      # 4x combat optic; else the sniper scope
+		var r := minf(vs.x, vs.y) * (0.62 if optic else 0.46)
 		var black := Color(0, 0, 0, 0.97)
 		# black mask outside the lens: thick ring + side panels
 		scope.draw_arc(c, r + 400.0, 0, TAU, 96, black, 800.0)
-		scope.draw_rect(Rect2(0, 0, c.x - r - 2, vs.y), black)
-		scope.draw_rect(Rect2(c.x + r + 2, 0, vs.x - c.x - r, vs.y), black)
-		scope.draw_arc(c, r, 0, TAU, 96, Color(0.05, 0.05, 0.05), 6.0)
-		var red: bool = main.player.on_target if main and main.player else false
+		if c.x - r - 2 > 0:
+			scope.draw_rect(Rect2(0, 0, c.x - r - 2, vs.y), black)
+			scope.draw_rect(Rect2(c.x + r + 2, 0, vs.x - c.x - r, vs.y), black)
+		scope.draw_arc(c, r, 0, TAU, 96, Color(0.05, 0.05, 0.05), 8.0 if optic else 6.0)
+		var red: bool = pl.on_target if pl else false
+		if optic:
+			# illuminated reticle: ring, chevron tip and range ticks
+			var rc := Color(1.0, 0.2, 0.12, 0.95) if red else Color(0.95, 0.25, 0.15, 0.85)
+			scope.draw_arc(c, r * 0.085, 0, TAU, 48, rc, 2.5, true)
+			scope.draw_line(c + Vector2(-9, 12), c, rc, 2.5, true)
+			scope.draw_line(c + Vector2(9, 12), c, rc, 2.5, true)
+			var dk := Color(0, 0, 0, 0.75)
+			scope.draw_line(Vector2(c.x - r, c.y), Vector2(c.x - r * 0.2, c.y), dk, 2.0)
+			scope.draw_line(Vector2(c.x + r * 0.2, c.y), Vector2(c.x + r, c.y), dk, 2.0)
+			scope.draw_line(Vector2(c.x, c.y + r * 0.2), Vector2(c.x, c.y + r), dk, 2.0)
+			for k in range(1, 4):
+				scope.draw_line(Vector2(c.x - 6, c.y + r * 0.085 + k * r * 0.045), Vector2(c.x + 6, c.y + r * 0.085 + k * r * 0.045), rc, 1.5)
+			return
 		var lc := Color(0.9, 0.15, 0.1) if red else Color(0, 0, 0, 0.9)
 		scope.draw_line(Vector2(c.x - r, c.y), Vector2(c.x - 14, c.y), lc, 2.0)
 		scope.draw_line(Vector2(c.x + 14, c.y), Vector2(c.x + r, c.y), lc, 2.0)
@@ -468,6 +484,9 @@ func _process(dt: float) -> void:
 					b.visible = in_car
 				"fire", "aim", "reload", "switch", "crouch":
 					b.visible = not in_car
+					if k == "aim":
+						b.texture_normal = b.get_meta("tex_on") if Controls.aim_toggle else b.get_meta("tex_off")
+						b.get_child(0).text = "إنزال" if Controls.aim_toggle else "تصويب"
 					if k == "crouch":
 						b.get_child(0).text = "وقوف" if pl.crouch else "انحناء"
 				"orders":
@@ -784,7 +803,13 @@ func _build_touch() -> void:
 		var sh := CircleShape2D.new(); sh.radius = r
 		b.shape = sh
 		b.shape_centered = true
-		b.action = k
+		if k == "aim":
+			# a toggle, so the thumb is free to drag the sights around while aiming
+			b.pressed.connect(Controls.toggle_aim)
+			b.set_meta("tex_off", b.texture_normal)
+			b.set_meta("tex_on", _circle_tex(r, Color(0.96, 0.8, 0.35, 0.6), Color(1, 1, 1, 0.9)))
+		else:
+			b.action = k
 		b.passby_press = k == "fire"
 		var l := _label(specs[k][0], 18 if r < 50 else 24)
 		l.size = Vector2(r * 2, r * 2)
@@ -830,6 +855,11 @@ func _on_button(p: Vector2) -> bool:
 			return true
 	return false
 
+func _on_named(k: String, p: Vector2) -> bool:
+	var b: TouchScreenButton = touch_buttons[k]
+	var r: float = (b.shape as CircleShape2D).radius
+	return b.visible and p.distance_to(b.position + Vector2(r, r)) < r + 6
+
 func _on_fire(p: Vector2) -> bool:
 	var b: TouchScreenButton = touch_buttons["fire"]
 	if not b.visible:
@@ -850,7 +880,7 @@ func _input(e: InputEvent) -> void:
 				joy_finger = e.index
 				joy_origin = e.position
 				Controls.touch_move = Vector2.ZERO
-			elif e.position.x >= root.size.x * 0.4 and look_finger < 0 and (not _on_button(e.position) or _on_fire(e.position)):
+			elif e.position.x >= root.size.x * 0.4 and look_finger < 0 and (not _on_button(e.position) or _on_fire(e.position) or _on_named("aim", e.position)):
 				look_finger = e.index
 				look_last = e.position
 		else:

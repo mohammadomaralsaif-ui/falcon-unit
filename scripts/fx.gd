@@ -16,7 +16,9 @@ static func _mesh(key: String) -> Mesh:
 			"spark":
 				var b := BoxMesh.new(); b.size = Vector3(0.03, 0.03, 0.03); _meshes[key] = b
 			"blood":
-				var b := BoxMesh.new(); b.size = Vector3(0.05, 0.05, 0.05); _meshes[key] = b
+				var q := QuadMesh.new(); q.size = Vector2(0.05, 0.05); _meshes[key] = q
+			"blood_mist":
+				var q := QuadMesh.new(); q.size = Vector2(0.34, 0.34); _meshes[key] = q
 			"dust":
 				var q := QuadMesh.new(); q.size = Vector2(0.3, 0.3); _meshes[key] = q
 			"smoke":
@@ -57,9 +59,14 @@ static func _init_mats() -> void:
 	gt.fill_from = Vector2(0.5, 0.5); gt.fill_to = Vector2(1.0, 0.5)
 	gt.width = 64; gt.height = 64
 	_smoke_mat.albedo_texture = gt
+	# soft round dark-red sprites that always face the camera (droplets and the fine spray)
 	_blood_mat = StandardMaterial3D.new()
-	_blood_mat.albedo_color = Color(0.4, 0.02, 0.02)
-	_blood_mat.roughness = 0.4
+	_blood_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_blood_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_blood_mat.albedo_color = Color(0.3, 0.012, 0.015, 0.95)
+	_blood_mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	_blood_mat.vertex_color_use_as_albedo = true
+	_blood_mat.albedo_texture = gt
 
 static func tracer(root: Node, a: Vector3, b: Vector3, col := Color(1, 0.85, 0.5)) -> void:
 	_init_mats()
@@ -103,8 +110,18 @@ static func particles(root: Node, pos: Vector3, normal: Vector3, kind := "spark"
 			p.mesh = _mesh("spark"); p.material_override = _spark_mat
 			p.lifetime = 0.35; p.initial_velocity_min = 3; p.initial_velocity_max = 8; p.gravity = Vector3(0, -9.8, 0)
 		"blood":
+			# droplets: small, fast, pulled down, gone in half a second
 			p.mesh = _mesh("blood"); p.material_override = _blood_mat
-			p.lifetime = 0.6; p.initial_velocity_min = 1.5; p.initial_velocity_max = 4; p.gravity = Vector3(0, -9.8, 0)
+			p.lifetime = 0.5; p.initial_velocity_min = 1.2; p.initial_velocity_max = 4.2; p.gravity = Vector3(0, -9.8, 0)
+			p.scale_amount_min = 0.5; p.scale_amount_max = 1.3
+			p.color_ramp = _fade()
+		"blood_mist":
+			# the fine red puff at the wound
+			p.mesh = _mesh("blood_mist"); p.material_override = _blood_mat
+			p.lifetime = 0.3; p.initial_velocity_min = 0.3; p.initial_velocity_max = 1.1; p.gravity = Vector3(0, -0.6, 0)
+			p.scale_amount_min = 0.6; p.scale_amount_max = 1.5
+			p.color = Color(1, 1, 1, 0.5)
+			p.color_ramp = _fade()
 		"dust":
 			p.mesh = _mesh("dust"); p.material_override = _smoke_mat
 			p.lifetime = 0.9; p.initial_velocity_min = 0.3; p.initial_velocity_max = 1.2; p.gravity = Vector3(0, 0.3, 0)
@@ -114,12 +131,21 @@ static func particles(root: Node, pos: Vector3, normal: Vector3, kind := "spark"
 			p.lifetime = 2.5; p.initial_velocity_min = 0.5; p.initial_velocity_max = 2.5; p.gravity = Vector3(0, 0.6, 0)
 			p.scale_amount_min = 1.0; p.scale_amount_max = 3.0
 	p.direction = normal if normal.length() > 0.1 else Vector3.UP
-	p.spread = 50.0
+	p.spread = 50.0 if kind != "blood" else 32.0
 	root.add_child(p)
 	p.global_position = pos
 	p.emitting = true
 	var t := root.get_tree().create_timer(p.lifetime + 0.2)
 	t.timeout.connect(p.queue_free)
+
+static var _fade_grad: Gradient
+static func _fade() -> Gradient:
+	if not _fade_grad:
+		_fade_grad = Gradient.new()
+		_fade_grad.set_color(0, Color(1, 1, 1, 1))
+		_fade_grad.set_color(1, Color(1, 1, 1, 0))
+		_fade_grad.add_point(0.6, Color(1, 1, 1, 0.9))
+	return _fade_grad
 
 static var _flash_mat: StandardMaterial3D
 static var _hole_mat: StandardMaterial3D
@@ -212,8 +238,9 @@ static func _blood_material() -> StandardMaterial3D:
 	_splat_mat = StandardMaterial3D.new()
 	_splat_mat.albedo_texture = ImageTexture.create_from_image(img)
 	_splat_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_splat_mat.roughness = 0.25
-	_splat_mat.metallic_specular = 0.7
+	# matte enough that the sky doesn't mirror in it (it used to flash white-pink outdoors)
+	_splat_mat.roughness = 0.8
+	_splat_mat.metallic_specular = 0.15
 	return _splat_mat
 
 static func _splat_mesh() -> Mesh:
@@ -244,7 +271,9 @@ static func blood_splat(root: Node, pos: Vector3, normal: Vector3, size := 0.6) 
 
 ## Bullet hits a person: spray + splatter on the wall behind and the floor below.
 static func blood_hit(root: Node3D, pos: Vector3, dir: Vector3, normal: Vector3) -> void:
-	particles(root, pos, (normal + dir * 0.6).normalized(), "blood", 18)
+	# a short spray out of the exit side, a puff at the wound
+	particles(root, pos, (dir + Vector3.UP * 0.25).normalized(), "blood", 12)
+	particles(root, pos, (normal + dir * 0.3).normalized(), "blood_mist", 4)
 	var space := root.get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(pos + dir * 0.4, pos + dir * 3.2, 1)
 	var hit := space.intersect_ray(q)

@@ -67,6 +67,12 @@ func set_touch(action: String, down: bool) -> void:
 	_touch_pressed[action] = down
 
 var _fire_blocked := false
+var aim_toggle := false      # touch: tap the aim button to raise the sights, tap again to lower them
+
+func toggle_aim() -> void:
+	aim_toggle = not aim_toggle
+	if aim_toggle:
+		_touch_just["aim"] = Time.get_ticks_msec()
 
 ## Clear all touch / look state (scene reload, controls hidden).
 func reset() -> void:
@@ -75,6 +81,7 @@ func reset() -> void:
 	mouse_look = Vector2.ZERO
 	_touch_pressed.clear()
 	_touch_just.clear()
+	aim_toggle = false
 	for a in ["fire", "aim", "jump", "interact", "vehicle", "reload", "yell", "siren", "sprint", "flash", "switch", "crouch", "orders"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
@@ -90,7 +97,9 @@ func _process(_dt: float) -> void:
 func held(action: String) -> bool:
 	if action == "fire" and _fire_blocked:
 		return false
-	if action == "sprint" and is_touch and touch_move.y > 0.92 and not held("fire") and not held("aim"):
+	if action == "sprint" and is_touch and touch_move.y > 0.92 and not held("fire") and not aim_toggle and not _touch_pressed.get("aim", false):
+		return true
+	if action == "aim" and aim_toggle:
 		return true
 	return Input.is_action_pressed(action) or _touch_pressed.get(action, false)
 

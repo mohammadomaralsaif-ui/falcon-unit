@@ -108,9 +108,9 @@ func _ready() -> void:
 
 func play(n: String, speed := 1.0) -> void:
 	if n != cur:
-		anim.play(n, 0.25)
+		anim.play(n, 0.22)
 		cur = n
-	anim.speed_scale = speed
+	anim.speed_scale = speed       # negative = the stride plays backwards (walking backwards)
 
 var _rifle := []
 var _guns := {}
@@ -160,6 +160,39 @@ func set_crouch(k: float) -> void:
 	crouch = k
 	pose.crouch = k
 	set_aim(aim_pitch)
+
+## Turn the hips and legs by `a` (radians) while the chest keeps facing forward: a strafing stride.
+func set_leg_yaw(a: float) -> void:
+	if absf(a - pose.twist * -1.0) < 0.001:
+		return
+	model.rotation.y = PI + a
+	pose.twist = -a
+
+## Where the torso ends up on the ground once the body has fallen (for the blood pool).
+func fallen_center() -> Vector3:
+	var along := global_transform.basis.y
+	along.y = 0
+	return global_position + along * 0.85
+
+## Shot dead: the knees give way first, then the body goes over and settles — not a falling plank.
+func collapse(side := 0.0) -> void:
+	anim.play("Idle", 0.0)      # legs together, not frozen mid-stride
+	cur = "Idle"
+	anim.pause()
+	set_mode("none")
+	set_leg_yaw(0.0)
+	if side == 0.0:
+		side = 1.0 if randf() < 0.6 else -1.0
+	var roll := randf_range(-0.4, 0.4)
+	var tw := create_tween()
+	tw.tween_method(set_crouch, crouch, 1.0, 0.2)
+	tw.parallel().tween_property(self, "rotation:x", -0.3 * side, 0.2)
+	tw.tween_property(self, "rotation:x", -PI / 2 * side, 0.36).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(self, "position:y", 0.15, 0.36)
+	tw.parallel().tween_property(self, "rotation:z", roll, 0.36)
+	tw.parallel().tween_method(set_crouch, 1.0, 0.1, 0.36)
+	tw.tween_property(self, "rotation:x", -PI / 2 * side * 0.96, 0.07)
+	tw.tween_property(self, "rotation:x", -PI / 2 * side, 0.1)
 
 func set_mode(m: String) -> void:
 	pose.mode = m
