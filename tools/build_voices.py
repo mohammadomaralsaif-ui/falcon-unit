@@ -23,21 +23,26 @@ missions = json.load(open(os.path.join(VDIR, "missions.json")))
 LEADERS = sorted({m["leader"] for m in missions if m["leader"]})
 
 # speaker -> (voice model, pitch shift in semitones, pace)
+EN = json.load(open(os.path.join(ROOT, "tools", "voice_en.json"), encoding="utf-8"))   # Arabic template -> English line
+EN_NAMES = {"أبو جاسر": "Abu Jasser", "الخال": "Al-Khal", "جبل عمّان": "Jabal Amman", "جبل الحسين": "Jabal Al-Hussein",
+            "عبدون": "Abdoun", "ماركا": "Marka", "الصقر ٢": "Falcon Two", "الصقر ٣": "Falcon Three", "الصقر ٤": "Falcon Four", "الصقر ٥": "Falcon Five"}
+
+# The game speaks English (clear, natural neural voices) with Arabic subtitles on screen.
+# speaker -> (Piper voice, pitch shift in semitones, pace)
 CAST = {
-    # men: the clearest Arabic voice (Kareem), re-pitched so every character has his own size and age
-    COLONEL: ("kareem", -2.7, 0.96), "قائد العمليات": ("kareem", -2.7, 1.0),
-    PLAYER: ("kareem", 0.0, 1.06),
-    "الصقر ٢": ("kareem", 1.8, 1.1), "الصقر ٣": ("kareem", 3.3, 1.1),
-    "الصقر ٤": ("kareem", 4.8, 1.12), "الصقر ٥": ("kareem", -1.3, 1.12),
-    "فريق المراقبة": ("kareem", 1.0, 1.08), "القنّاص": ("kareem", 2.6, 1.05), "الفريق الأرضي": ("kareem", -0.7, 1.1),
-    "المسعف": ("kareem", 4.2, 1.05), "مسلّح": ("kareem", -4.5, 1.02),
-    "مواطن": ("kareem", 2.6, 0.98), "رهينة": ("kareem", 5.8, 1.08),
-    # women: the Dii voice
-    NEGOTIATOR: ("SA_dii", 0.0, 1.0), "غرفة العمليات": ("SA_dii", -2.5, 1.05),
-    "نشرة الأخبار": ("SA_dii", 1.5, 1.05), "المراسلة": ("SA_dii", 2.5, 1.1),
+    COLONEL: ("en_GB-alan-medium", 0.0, 1.0), "قائد العمليات": ("en_GB-alan-medium", 0.0, 1.05),
+    PLAYER: ("en_US-ryan-high", 0.0, 1.0),
+    "الصقر ٢": ("en_US-joe-medium", 0.0, 1.05), "الصقر ٣": ("en_US-bryce-medium", 0.0, 1.3),
+    "الصقر ٤": ("en_US-john-medium", 0.0, 1.15), "الصقر ٥": ("en_US-kusal-medium", 0.0, 1.05),
+    "فريق المراقبة": ("en_US-hfc_male-medium", 0.0, 1.05), "القنّاص": ("en_GB-northern_english_male-medium", 0.0, 1.0),
+    "الفريق الأرضي": ("en_US-norman-medium", 0.0, 1.0),
+    "المسعف": ("en_US-sam-medium", 0.0, 1.1), "مسلّح": ("en_US-reza_ibrahim-medium", -1.5, 1.1),
+    "مواطن": ("en_US-danny-low", 0.0, 1.0), "رهينة": ("en_US-sam-medium", 2.0, 1.1),
+    NEGOTIATOR: ("en_US-lessac-high", 0.0, 1.0), "غرفة العمليات": ("en_US-amy-medium", 0.0, 1.15),
+    "نشرة الأخبار": ("en_US-kristin-medium", 0.0, 1.05), "المراسلة": ("en_US-hfc_female-medium", 0.0, 1.05),
 }
 for l in LEADERS:
-    CAST[l] = ("kareem", -4.5, 1.0)
+    CAST[l] = ("en_US-reza_ibrahim-medium", -1.5, 1.05)
 
 NUM = {0: "صفر", 1: "واحد", 2: "اثنين", 3: "ثلاثة", 4: "أربعة", 5: "خمسة", 6: "ستة", 7: "سبعة", 8: "ثمانية", 9: "تسعة", 10: "عشرة"}
 def speakable(t):
@@ -48,27 +53,31 @@ def speakable(t):
     t = re.sub("[ًٌٍَُِّْ]", "", t)          # the diacritiser re-adds vowels consistently
     return re.sub(r"\s+", " ", t).strip()
 
-lines = set()      # (speaker, raw text)
-def add(who, text):
-    if who in CAST and text.strip():
-        lines.add((who, text))
+lines = {}         # (speaker, raw Arabic text shown as subtitle) -> English line that is spoken
+def add(who, text, en):
+    if who in CAST and text.strip() and re.search("[\u0600-\u06FF]", text):
+        lines[(who, text)] = re.sub(r"\[[^\]]*\]", "", en)
+def en_of(template):
+    if template not in EN:
+        raise SystemExit("no English line for: " + template)
+    return EN[template]
 
 # ---- mission data
 for m in missions:
     hcount = sum(r.count("H") for r in m["map"]); ecount = sum(r.count("V") for r in m["map"])
-    add("نشرة الأخبار", m["news_line"])
-    add("فريق المراقبة" if m["id"] == "raid" else NEGOTIATOR, m["negotiator_line"])
-    add(COLONEL, m["commander_line"])
-    add("غرفة العمليات", "نداء عاجل لوحدة الصقر: %s. تحرّكوا فوراً!" % m["news"])
-    add("غرفة العمليات", "إلى الصقر ١: الطريق إلى %s مفتوح، الدوريات سكّرت الشوارع الفرعية." % m["area"])
+    add("نشرة الأخبار", m["news_line"], en_of(m["news_line"]))
+    add("فريق المراقبة" if m["id"] == "raid" else NEGOTIATOR, m["negotiator_line"], en_of(m["negotiator_line"]))
+    add(COLONEL, m["commander_line"], en_of(m["commander_line"]))
     for b in m["brief"]:
-        add(COLONEL, b)
+        add(COLONEL, b, en_of(b))
     for who, text in m["banter"]:
-        add(who, text)
+        add(who, text, en_of(text))
     names = {"C": COLONEL, "P": PLAYER, "N": NEGOTIATOR, "T": "الصقر ٢"}
     for n in m["enemies"]:
         for d in m["dialogue"]:
-            add(names[d[0]], d[1].replace("{n}", str(n)).replace("{h}", str(hcount)).replace("{e}", str(ecount)).replace("{leader}", m["leader"]))
+            def fill(t, leader):
+                return t.replace("{n}", str(n)).replace("{h}", str(hcount)).replace("{e}", str(ecount)).replace("{leader}", leader)
+            add(names[d[0]], fill(d[1], m["leader"]), fill(en_of(d[1]), EN_NAMES.get(m["leader"], "")))
 
 # ---- hud.radio(...) calls in the scripts
 def split_args(s):
@@ -95,15 +104,18 @@ def who_candidates(expr):
     if expr.strip() == "who": c += [PLAYER] + TEAM
     return c
 def expand(text, tail):
-    if "%" not in text: return [text]
-    if "M.news" in tail: vals = [m["news"] for m in missions]
-    elif "M.area" in tail: vals = [m["area"] for m in missions]
-    elif "enemies.size" in tail: vals = list(range(3, 10))
-    elif "flashbangs" in tail: vals = [3]
-    elif "LEADER" in tail: vals = LEADERS
-    elif "display_name" in tail: vals = TEAM
+    """All (Arabic, English) versions of a line that has a %s / %d in it."""
+    en = en_of(text)
+    if "%" not in text:
+        return [(text, en)]
+    if "M.news" in tail: vals = [(m["news"], en_of(m["news"])) for m in missions]
+    elif "M.area" in tail: vals = [(m["area"], EN_NAMES[m["area"]]) for m in missions]
+    elif "enemies.size" in tail: vals = [(v, v) for v in range(3, 10)]
+    elif "flashbangs" in tail: vals = [(3, 3)]
+    elif "LEADER" in tail: vals = [(l, EN_NAMES[l]) for l in LEADERS]
+    elif "display_name" in tail: vals = [(t, EN_NAMES[t]) for t in TEAM]
     else: return []
-    return [text % v for v in vals]
+    return [(text % a, en % e) for a, e in vals]
 consts = {}
 for fn in ["main.gd", "vehicle.gd", "actor.gd", "hud.gd"]:
     src = open(os.path.join(ROOT, "scripts", fn), encoding="utf-8").read()
@@ -118,27 +130,29 @@ for fn in ["main.gd", "vehicle.gd", "actor.gd", "hud.gd"]:
         for lm in LIT.finditer(args[1]):
             tail = args[1][lm.end():lm.end() + 40]
             tail = tail if tail.lstrip().startswith("%") else ""
-            for t in expand(lm.group(1), tail) if "%" in lm.group(1) else [lm.group(1)]:
+            if not re.search("[\u0600-\u06FF]", lm.group(1)):
+                continue
+            for t, e in expand(lm.group(1), tail):
                 for w in whos:
-                    add(w, t)
+                    add(w, t, e)
 for name, who in [("ENEMY_ALERT", "مسلّح"), ("ENEMY_SURRENDER", "مسلّح"), ("HOSTAGE_THANKS", "رهينة"), ("CROWD_LINES", "مواطن"), ("PED_LINES", "مواطن"), ("PLAYER_REPLIES", PLAYER), ("REPORTER_LINES", "المراسلة")]:
     for t in consts.get(name, []):
-        add(who, t)
+        add(who, t, en_of(t))
 
 out_dir = os.path.join(ROOT, "assets", "voice")
 os.makedirs(out_dir, exist_ok=True)
 wanted = set()
 index = {}
 total = 0.0
-for who, text in sorted(lines):
+for (who, text), en in sorted(lines.items()):
     key = hashlib.md5((who + "|" + text).encode("utf-8")).hexdigest()
     wanted.add(key + ".ogg")
-    index[key] = [who, text]
+    index[key] = [who, text, en]
     path = os.path.join(out_dir, key + ".ogg")
     if os.path.exists(path):
         continue
     model, st, pace = CAST[who]
-    x, sr = vlib.synth(speakable(text), model, st, pace)
+    x, sr = vlib.synth(en, model, st, pace, prepared=True)
     sf.write(path, x, sr, format="OGG", subtype="VORBIS")
     total += len(x) / sr
 for f in os.listdir(out_dir):

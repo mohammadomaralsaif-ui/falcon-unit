@@ -6,47 +6,84 @@ var streams := {}
 var _pool: Array[AudioStreamPlayer] = []
 var _pool3d: Array[AudioStreamPlayer3D] = []
 
+const BAKED := "res://assets/sfx/"
+
+## Sounds are synthesised once on a PC (tools: tests/bake_sfx.tscn) and shipped as resources, so the
+## phone doesn't spend seconds generating audio at start-up. Missing files are generated on the spot.
+func _make(name: String) -> AudioStream:
+	match name:
+		"rifle": return _shot(0.22, 1.0, 140.0)
+		"pistol": return _shot(0.16, 0.8, 180.0)
+		"far": return _shot(0.3, 0.45, 90.0, true)
+		"boom": return _shot(1.2, 1.0, 55.0, true)
+		"click": return _tone(0.04, 1800.0, 1200.0, 0.4, true)
+		"beep": return _tone(0.12, 1400.0, 1400.0, 0.35, true)
+		"hit": return _tone(0.05, 1600.0, 1400.0, 0.4, true)
+		"cuff": return _tone(0.15, 2200.0, 1700.0, 0.3, true)
+		"siren": return _siren()
+		"engine": return _engine()
+		"screech": return _screech()
+		"crash": return _crash(1.0)
+		"crash_small": return _crash(0.45)
+		"horn": return _horn()
+		"step": return _step()
+		"flesh": return _flesh()
+		"reload": return _reload()
+		"radio": return _radio()
+		"ring": return _ring()
+		"sniper": return _shot(0.9, 1.0, 95.0)
+		"bolt": return _bolt()
+		"sputter": return _sputter()
+		"glass": return _glass()
+		"ambience": return _ambience(false)
+		"ambience_night": return _ambience(true)
+	return null
+
+const NAMES := ["rifle", "pistol", "far", "boom", "click", "beep", "hit", "cuff", "siren", "engine", "screech", "crash", "crash_small", "horn", "step", "flesh", "reload", "radio", "ring", "sniper", "bolt", "sputter", "glass"]
+
+func _get_stream(name: String) -> AudioStream:
+	var path := BAKED + name + ".res"
+	if ResourceLoader.exists(path):
+		return load(path)
+	return _make(name)
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	streams["rifle"] = _shot(0.22, 1.0, 140.0)
-	streams["pistol"] = _shot(0.16, 0.8, 180.0)
-	streams["far"] = _shot(0.3, 0.45, 90.0, true)
-	streams["boom"] = _shot(1.2, 1.0, 55.0, true)
-	streams["click"] = _tone(0.04, 1800.0, 1200.0, 0.4, true)
-	streams["beep"] = _tone(0.12, 1400.0, 1400.0, 0.35, true)
-	streams["hit"] = _tone(0.05, 1600.0, 1400.0, 0.4, true)
-	streams["cuff"] = _tone(0.15, 2200.0, 1700.0, 0.3, true)
-	streams["siren"] = _siren()
-	streams["engine"] = _engine()
-	streams["screech"] = _screech()
-	streams["crash"] = _crash(1.0)
-	streams["crash_small"] = _crash(0.45)
-	streams["horn"] = _horn()
-	streams["step"] = _step()
-	streams["flesh"] = _flesh()
-	streams["reload"] = _reload()
-	streams["radio"] = _radio()
-	streams["ring"] = _ring()
-	streams["sniper"] = _shot(0.9, 1.0, 95.0)
-	streams["bolt"] = _bolt()
-	streams["sputter"] = _sputter()
-	streams["glass"] = _glass()
+	# everything except dialogue goes through the "SFX" bus, which is turned down while someone speaks
+	if AudioServer.get_bus_index("SFX") < 0:
+		var bi := AudioServer.bus_count
+		AudioServer.add_bus(bi)
+		AudioServer.set_bus_name(bi, "SFX")
+		AudioServer.set_bus_send(bi, "Master")
+	for n in NAMES:
+		streams[n] = _get_stream(n)
 	for i in 12:
 		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
 		add_child(p)
 		_pool.append(p)
 	for i in 10:
 		var p3 := AudioStreamPlayer3D.new()
 		p3.unit_size = 6.0
 		p3.max_distance = 120.0
+		p3.bus = "SFX"
 		add_child(p3)
 		_pool3d.append(p3)
+
+var _duck := 0.0
+
+## Called every frame by the HUD: world sounds dip while a voice line is playing so speech stays clear.
+func duck(speaking: bool, dt: float) -> void:
+	_duck = move_toward(_duck, 1.0 if speaking else 0.0, dt * (6.0 if speaking else 1.5))
+	var bi := AudioServer.get_bus_index("SFX")
+	if bi >= 0:
+		AudioServer.set_bus_volume_db(bi, -13.0 * _duck)
 
 ## City background loop, generated on first use (it is the biggest procedural sound).
 func ambience(night: bool) -> AudioStreamWAV:
 	var k := "ambience_night" if night else "ambience"
 	if not streams.has(k):
-		streams[k] = _ambience(night)
+		streams[k] = _get_stream(k)
 	return streams[k]
 
 ## Positional one-shot (panned + attenuated by the engine).

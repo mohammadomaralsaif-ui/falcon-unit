@@ -49,6 +49,7 @@ static func apply(vp: Viewport, env: Environment, sun: DirectionalLight3D) -> vo
 	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 	vp.scaling_3d_scale = [0.6, 0.8, 1.0][quality]
 	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.mesh_lod_threshold = [6.0, 3.0, 1.5][quality]      # switch to simpler car/prop meshes sooner on weak phones
 	if env:
 		env.glow_enabled = quality > 0
 		env.fog_enabled = true

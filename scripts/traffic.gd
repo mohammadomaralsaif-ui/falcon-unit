@@ -24,6 +24,12 @@ class Car:
 	var honk_cd := 0.0
 	var hit_t := 0.0
 	var yield_k := 0.0
+	var push := Vector3.ZERO     # shoved by an impact: slides, spins, may end up wrecked
+	var spin := 0.0
+	var wrecked := 0.0           # >0: knocked out (seconds left before it is towed / recycled)
+	var smoke_t := 0.0
+	var off := Vector3.ZERO      # how far the crash knocked it out of its lane (steered back once it drives on)
+	var off_yaw := 0.0
 
 func setup(_city: Node, count: int) -> void:
 	city = _city
@@ -52,7 +58,7 @@ func setup(_city: Node, count: int) -> void:
 		c.body.collision_mask = 0
 		c.body.sync_to_physics = false
 		var mi := MeshInstance3D.new()
-		mi.mesh = city.random_car_mesh()
+		city.dress_random_car(mi)
 		c.body.add_child(mi)
 		var cs := CollisionShape3D.new()
 		var bs := BoxShape3D.new(); bs.size = Vector3(1.8, 1.4, 4.4)
@@ -64,6 +70,7 @@ func setup(_city: Node, count: int) -> void:
 		c.snd.unit_size = 4.0
 		c.snd.max_distance = 45.0
 		c.snd.volume_db = -14.0
+		c.snd.bus = "SFX"
 		c.snd.pitch_scale = rng.randf_range(0.85, 1.15)
 		c.body.add_child(c.snd)
 		c.snd.play()
@@ -72,14 +79,34 @@ func setup(_city: Node, count: int) -> void:
 
 var main: Node
 
-## The player's car rammed this civilian car.
-func on_hit(body: Node, rel_speed: float) -> void:
+## The player's truck rammed this civilian car: it is shoved along the impact, spins, and a hard
+## hit leaves it wrecked and smoking in the road.
+func on_hit(body: Node, rel_speed: float, dir := Vector3.ZERO) -> void:
 	for c: Car in cars:
 		if c.body == body:
 			c.hit_t = clampf(rel_speed * 0.6, 3.0, 9.0)
 			c.speed = 0.0
 			c.stuck = 0.0
-			Fx.particles(main, c.body.global_position + Vector3(0, 0.9, 0), Vector3.UP, "dust", 5)
+			var d := dir
+			d.y = 0
+			var away: Vector3 = c.body.global_position - main.vehicle.global_position
+			away.y = 0
+			if d.length() < 0.1:
+				d = away
+			d = d.normalized()
+			# shunted aside, not carried along on the bumper: add the sideways part of "away from the truck"
+			var side := away - d * away.dot(d)
+			if side.length() < 0.25:
+				side = Vector3.UP.cross(d) * (1.0 if randf() < 0.5 else -1.0)
+			d = (d * 0.55 + side.normalized() * 0.85).normalized()
+			c.push = d * clampf(rel_speed * 0.75, 2.5, 13.0)
+			c.spin = randf_range(-1.0, 1.0) * clampf(rel_speed * 0.18, 0.4, 2.4)
+			var own: float = maxf(main.vehicle.linear_velocity.length(), main.vehicle.prev_vel.length())
+			if rel_speed > 8.0 and own > 7.5:
+				c.wrecked = 40.0
+				c.snd.stop()
+			Fx.particles(main, c.body.global_position + Vector3(0, 0.9, 0), Vector3.UP, "dust", 6)
+			Fx.particles(main, c.body.global_position + Vector3(0, 0.7, 0), -d.normalized() + Vector3.UP * 0.4, "spark", int(clampf(rel_speed * 2.0, 8, 30)))
 			return
 
 func _far_from_player(p: Vector3, d: float) -> bool:
@@ -124,11 +151,33 @@ func _place(c: Car) -> void:
 	var d := (b - a).normalized()
 	var p := _lane_pos(c)
 	var yaw := atan2(d.x, d.z)
-	c.body.global_transform = Transform3D(Basis(Vector3.UP, yaw), p)
+	c.body.global_transform = Transform3D(Basis(Vector3.UP, yaw + c.off_yaw), p + c.off)
 
 func _physics_process(dt: float) -> void:
 	var space := get_world_3d().direct_space_state
 	for c: Car in cars:
+		# knocked about by a crash: slide and spin to a stop; wrecks sit there smoking
+		if c.push.length() > 0.15 or c.wrecked > 0.0:
+			c.off += c.push * dt
+			c.off_yaw += c.spin * dt
+			_place(c)
+			c.push = c.push.move_toward(Vector3.ZERO, dt * 11.0)
+			c.spin = move_toward(c.spin, 0.0, dt * 2.2)
+			c.body.set_meta("traffic_speed", 0.0)
+			if c.wrecked > 0.0:
+				c.wrecked -= dt
+				c.smoke_t -= dt
+				if c.smoke_t <= 0.0 and not _far_from_player(c.body.global_position, 70.0):
+					c.smoke_t = 0.35
+					Fx.particles(main, c.body.global_position + c.body.global_transform.basis.z * 1.6 + Vector3(0, 1.0, 0), Vector3.UP, "smoke", 3)
+				if c.wrecked <= 0.0 or (c.wrecked < 28.0 and _far_from_player(c.body.global_position, 90.0)):
+					c.wrecked = 0.0
+					c.stuck = 99.0      # recycled far away by the normal respawn below
+					c.snd.play()
+				else:
+					continue
+			else:
+				continue
 		var a := _node_pos(c.from)
 		var b := _node_pos(c.to)
 		var seg := a.distance_to(b)
@@ -170,6 +219,10 @@ func _physics_process(dt: float) -> void:
 			want = minf(want, 6.0)
 		c.speed = move_toward(c.speed, want, dt * (30.0 if c.hit_t > 0.0 else (9.0 if want < c.speed else 3.0)))
 		c.body.set_meta("traffic_speed", c.speed)
+		if c.off != Vector3.ZERO or c.off_yaw != 0.0:
+			var k: float = clampf(c.speed / 4.0, 0.0, 1.0)
+			c.off = c.off.move_toward(Vector3.ZERO, dt * 1.6 * k)
+			c.off_yaw = move_toward(wrapf(c.off_yaw, -PI, PI), 0.0, dt * 0.9 * k)
 		if c.speed < 0.3:
 			c.stuck += dt
 		else:
@@ -195,6 +248,8 @@ func _physics_process(dt: float) -> void:
 				if _far_from_player(_lane_pos(c), 80.0):
 					break
 			c.speed = 0.0
+			c.off = Vector3.ZERO
+			c.off_yaw = 0.0
 			_place(c)
 			continue
 		c.t += c.speed * dt / seg

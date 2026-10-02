@@ -205,7 +205,7 @@ static func wheel(parent: Node3D, r: float, w: float) -> Node3D:
 	return root
 
 ## kind: sedan | taxi | police | suv | swat | van(ambulance)
-static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels := true) -> Node3D:
+static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels := true, variant := -1) -> Node3D:
 	var base_kind := "sedan"
 	if kind == "suv" or kind == "swat":
 		base_kind = "suv"
@@ -213,7 +213,7 @@ static func build(kind: String, color := Color(0.85, 0.85, 0.86), with_wheels :=
 		base_kind = "van"
 	var s: Dictionary = SPECS[base_kind]
 	# a real model dropped into assets/cars/ wins over the procedural one
-	var real := CustomModels.car(kind, float(s.L), randi())
+	var real := CustomModels.car(kind, float(s.L), randi() if variant < 0 else variant)
 	if real:
 		real.set_meta("flashers", {})
 		real.set_meta("spec", s)

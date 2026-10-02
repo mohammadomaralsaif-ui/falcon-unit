@@ -108,6 +108,61 @@ const REPORTER_LINES := ["حضرة الضابط! كلمة لقناة الإخب�
 const TEAM_NAMES := ["الصقر ٢", "الصقر ٣", "الصقر ٤", "الصقر ٥"]
 const TEAM_OFFSETS := [Vector3(-1.4, 0, 2.0), Vector3(1.4, 0, 2.2), Vector3(-1.6, 0, 4.2), Vector3(1.6, 0, 4.4)]
 
+var loaded := false
+var _pt := 0
+var _load_layer: CanvasLayer
+var _load_bar: ProgressBar
+var _load_lbl: Label
+
+func _stage(label: String, frac: float) -> void:
+	if OS.has_environment("FALCON_PROFILE"):
+		print("STAGE %-22s %5d ms" % [label, Time.get_ticks_msec() - _pt])
+	_pt = Time.get_ticks_msec()
+	if _load_bar:
+		_load_bar.value = frac * 100.0
+		_load_lbl.text = label
+	# let the loading screen redraw between the heavy steps (two frames: one to draw, one to show)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_pt = Time.get_ticks_msec()
+
+func _loading_screen() -> void:
+	_load_layer = CanvasLayer.new()
+	_load_layer.layer = 50
+	add_child(_load_layer)
+	var bg := ColorRect.new()
+	bg.color = Color(0.043, 0.078, 0.125)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_load_layer.add_child(bg)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_CENTER)
+	vb.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	vb.grow_vertical = Control.GROW_DIRECTION_BOTH
+	vb.custom_minimum_size = Vector2(520, 0)
+	vb.add_theme_constant_override("separation", 14)
+	_load_layer.add_child(vb)
+	var f: Font = load("res://assets/fonts/Tajawal-Bold.ttf")
+	var title := Label.new()
+	title.text = "وحدة الصقر"
+	title.add_theme_font_override("font", f); title.add_theme_font_size_override("font_size", 64)
+	title.add_theme_color_override("font_color", Color(0.96, 0.8, 0.35))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(title)
+	var sub := Label.new()
+	sub.text = M.title + " · " + M.area
+	sub.add_theme_font_override("font", f); sub.add_theme_font_size_override("font_size", 26)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(sub)
+	_load_bar = ProgressBar.new()
+	_load_bar.custom_minimum_size = Vector2(520, 10)
+	_load_bar.show_percentage = false
+	vb.add_child(_load_bar)
+	_load_lbl = Label.new()
+	_load_lbl.add_theme_font_override("font", f); _load_lbl.add_theme_font_size_override("font_size", 18)
+	_load_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
+	_load_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(_load_lbl)
+
 func _ready() -> void:
 	Controls.reset()
 	Engine.time_scale = 1.0
@@ -123,11 +178,23 @@ func _ready() -> void:
 	sniper_mission = M.get("type", "") == "sniper"
 	if sniper_mission:
 		enemy_sight = 80.0
+	_loading_screen()
+	_pt = Time.get_ticks_msec()
+	_load_world()
+
+## The world is built in steps with the loading screen refreshed in between, so the phone never
+## looks frozen while the city is generated.
+func _load_world() -> void:
+	await _stage("تجهيز…", 0.02)
 	_environment()
+	if OS.has_environment("FALCON_PROFILE"): print("  env ", Time.get_ticks_msec() - _pt)
 	city = Node3D.new()
 	city.set_script(City)
 	add_child(city)
+	if OS.has_environment("FALCON_PROFILE"): print("  city node ", Time.get_ticks_msec() - _pt)
 	city.build(7, M)
+	if OS.has_environment("FALCON_PROFILE"): print("  city built ", Time.get_ticks_msec() - _pt)
+	await _stage("بناء المدينة", 0.35)
 	city.build_cordon()
 	if night:
 		city.mat("lamp").emission_energy_multiplier = 9.0
@@ -139,7 +206,9 @@ func _ready() -> void:
 			sl.position = city.cordon_point + Vector3(-18.0 + k * 12.0, 5.6, -3.0 + (k % 2) * 9.0)
 			add_child(sl)
 	city.merge_static()
+	await _stage("دمج المباني", 0.6)
 	_setup_nav()
+	await _stage("خريطة الحركة", 0.66)
 	traffic = Node3D.new()
 	traffic.set_script(Traffic)
 	add_child(traffic)
@@ -150,6 +219,7 @@ func _ready() -> void:
 	vehicle.main = self
 	add_child(vehicle)
 	vehicle.global_transform = city.spawn_point
+	await _stage("السيارات", 0.74)
 	player = CharacterBody3D.new()
 	player.set_script(Player)
 	player.main = self
@@ -177,11 +247,14 @@ func _ready() -> void:
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.position = Vector3(0, 2.15, 0)
 	colonel.add_child(tag)
+	await _stage("الشخصيات", 0.82)
 	ambience = AudioStreamPlayer.new()
 	ambience.stream = Sfx.ambience(night)
-	ambience.volume_db = -7.0
+	ambience.volume_db = -17.0
+	ambience.bus = "SFX"
 	add_child(ambience)
 	ambience.play()
+	await _stage("الأصوات", 0.86)
 	peds = Node3D.new()
 	peds.set_script(Pedestrians)
 	add_child(peds)
@@ -189,6 +262,7 @@ func _ready() -> void:
 	_spawn_objectives()
 	if not sniper_mission:
 		_spawn_crowd()
+	await _stage("الناس", 0.95)
 	cine_cam = Camera3D.new()
 	cine_cam.fov = 55; cine_cam.far = 1500
 	add_child(cine_cam)
@@ -198,11 +272,24 @@ func _ready() -> void:
 	hud.main = self
 	add_child(hud)
 	hud.set_letterbox(true)
+	await _stage("جاهز", 1.0)
+	loaded = true
+	_load_layer.queue_free()
+	_load_bar = null
+	world_ready.emit()
 	if Missions.autostart:
 		Missions.autostart = false
 		_start_mission.call_deferred()
 	else:
+		_menu_scene()
 		hud.show_briefing(_start_mission)
+
+signal world_ready
+
+## Menu backdrop: the duty room with the team waiting. Far cheaper to draw than the whole city.
+func _menu_scene() -> void:
+	if city.hq_pos != Vector3.INF:
+		_build_ops_room()
 
 func _spawn_objectives() -> void:
 	# evidence: laptops / ledgers / weapon cases on tables, glowing so they read in the dark
@@ -419,63 +506,94 @@ func _start_intro() -> void:
 	if city.hq_pos != Vector3.INF:
 		_build_ops_room()
 		var hp: Vector3 = city.hq_pos
-		intro_shots.push_front([hp + Vector3(2.4, 2.1, 1.3), hp + Vector3(0.4, 1.8, 0.4), hp + Vector3(-2.7, 1.25, -2.4), 7.0])
+		intro_shots.push_front([hp + Vector3(4.6, 1.75, -3.4), hp + Vector3(3.9, 1.6, -2.6), hp + Vector3(1.6, 1.15, -0.5), 8.0])
 	else:
 		intro_shots.push_front(intro_shots[0])
 	intro_i = -1
 	_next_shot()
 
-## People and props for the HQ scene (inside the office model): wall screen, duty officer, the team on stand-by.
+var ops_team: Array = []      # the unit, seated on the sofa until the call comes
+var ops_officer: Node3D
+
+## The duty room inside HQ (the office model): the team sits on the sofa, the duty officer stands
+## by the wall display. Used as the menu backdrop and for the opening scene.
 func _build_ops_room() -> void:
+	if not hq_set.is_empty():
+		return
 	var hp: Vector3 = city.hq_pos
 	var fl := 0.3
 	var screen := MeshInstance3D.new()
-	var qm := BoxMesh.new(); qm.size = Vector3(3.6, 1.9, 0.08)
+	var qm := BoxMesh.new(); qm.size = Vector3(0.08, 1.7, 3.0)
 	screen.mesh = qm
 	var sm := StandardMaterial3D.new()
 	sm.albedo_color = Color(0.02, 0.05, 0.1)
-	sm.emission_enabled = true; sm.emission = Color(0.15, 0.5, 0.9); sm.emission_energy_multiplier = 1.4
+	sm.emission_enabled = true; sm.emission = Color(0.12, 0.4, 0.75); sm.emission_energy_multiplier = 1.1
 	screen.material_override = sm
 	add_child(screen)
-	screen.global_position = hp + Vector3(-2.7, fl + 1.9, -5.0)
+	screen.global_position = hp + Vector3(5.0, fl + 1.55, -0.6)
 	hq_set.append(screen)
+	var stand := MeshInstance3D.new()
+	var stm := BoxMesh.new(); stm.size = Vector3(0.12, 0.7, 0.5)
+	stand.mesh = stm
+	var dmat := StandardMaterial3D.new(); dmat.albedo_color = Color(0.08, 0.08, 0.09)
+	stand.material_override = dmat
+	add_child(stand)
+	stand.global_position = hp + Vector3(5.0, fl + 0.35, -0.6)
+	hq_set.append(stand)
 	var lbl := Label3D.new()
-	lbl.text = "غرفة العمليات · %s\n%s" % [M.area, M.title]
+	lbl.text = "غرفة العمليات\n%s · %s" % [M.title, M.area]
 	lbl.font = load("res://assets/fonts/Tajawal-Bold.ttf")
-	lbl.font_size = 64; lbl.pixel_size = 0.004; lbl.outline_size = 0
-	lbl.modulate = Color(0.75, 0.92, 1.0)
+	lbl.font_size = 64; lbl.pixel_size = 0.0038; lbl.outline_size = 0
+	lbl.modulate = Color(0.8, 0.94, 1.0)
 	add_child(lbl)
-	lbl.global_position = screen.global_position + Vector3(0, 0, 0.06)
+	lbl.global_position = screen.global_position + Vector3(-0.06, 0, 0)
+	lbl.rotation.y = -PI / 2
 	hq_set.append(lbl)
-	var desk := MeshInstance3D.new()
-	var dm := BoxMesh.new(); dm.size = Vector3(2.4, 0.8, 0.9)
-	desk.mesh = dm
-	var dmat := StandardMaterial3D.new(); dmat.albedo_color = Color(0.12, 0.12, 0.14)
-	desk.material_override = dmat
-	add_child(desk)
-	desk.global_position = hp + Vector3(-2.7, fl - 2.0, -4.2)
-	hq_set.append(desk)
-	var lamp := OmniLight3D.new()
-	lamp.light_color = Color(1.0, 0.25, 0.2); lamp.light_energy = 2.5; lamp.omni_range = 9.0
-	add_child(lamp)
-	lamp.global_position = hp + Vector3(-2.7, fl + 2.6, -1.5)
-	lamp.set_meta("alarm", true)
-	hq_set.append(lamp)
-	var fill := OmniLight3D.new()
-	fill.light_color = Color(0.8, 0.9, 1.0); fill.light_energy = 1.8; fill.omni_range = 12.0
-	add_child(fill)
-	fill.global_position = hp + Vector3(0.5, fl + 2.6, 0.5)
-	hq_set.append(fill)
-	var cast := [["officer", Vector3(-2.7, fl, -3.4), PI, "point"], ["swat", Vector3(-4.6, fl, -1.6), -PI / 2, "rifle"], ["swat", Vector3(-0.9, fl, -1.2), PI / 2, "rifle"], ["swat", Vector3(-2.2, fl, 0.5), 0.2, "rifle"]]
-	for i in cast.size():
-		var c: Array = cast[i]
-		var p := Person.new(c[0], 300 + i)
+	for lp in [Vector3(3.0, fl + 2.7, 1.2), Vector3(1.5, fl + 2.7, -2.2)]:
+		var fill := OmniLight3D.new()
+		fill.light_color = Color(1.0, 0.96, 0.9); fill.light_energy = 1.5; fill.omni_range = 9.0
+		add_child(fill)
+		fill.global_position = hp + lp
+		hq_set.append(fill)
+	ops_officer = Person.new("officer", 300)
+	add_child(ops_officer)
+	ops_officer.global_position = hp + Vector3(4.3, fl, 1.2)
+	ops_officer.rotation.y = PI / 2
+	hq_set.append(ops_officer)
+	ops_team.clear()
+	# sofa seats: [position, facing]
+	var seats := [[Vector3(1.32, fl, -1.05), -PI / 2], [Vector3(1.32, fl, -0.3), -PI / 2], [Vector3(2.05, fl, -1.62), PI], [Vector3(1.32, fl, 0.45), -PI / 2]]
+	for i in mini(seats.size(), 1 + team_size):
+		var p := Person.new("swat", 1 if i == 0 else 300 + i)
 		add_child(p)
-		p.global_position = hp + (c[1] as Vector3)
-		p.rotation.y = float(c[2])
-		p.pose.point_at = screen.global_position
-		p.set_mode(c[3])
+		p.global_position = hp + (seats[i][0] as Vector3)
+		p.rotation.y = float(seats[i][1])
+		p.set_mode("none")
+		p.set_sit(1.0)
 		hq_set.append(p)
+		ops_team.append(p)
+
+## The call comes in: the officer takes it, the team gets up and grabs their rifles.
+func _ops_scramble() -> void:
+	if ops_officer and is_instance_valid(ops_officer):
+		ops_officer.set_mode("radio")
+	await get_tree().create_timer(2.6).timeout
+	if phase != "intro" or intro_i != 0:
+		return
+	if ops_officer and is_instance_valid(ops_officer):
+		ops_officer.pose.point_at = city.hq_pos + Vector3(5.0, 1.8, -0.6)
+		ops_officer.set_mode("point")
+	for i in ops_team.size():
+		var p: Node3D = ops_team[i]
+		if not is_instance_valid(p):
+			continue
+		var tw := create_tween()
+		tw.tween_interval(i * 0.25)
+		tw.tween_method(p.set_sit, 1.0, 0.0, 0.7)
+		tw.parallel().tween_property(p, "global_position", p.global_position + Vector3(0.45, 0, 0.0) if absf(p.rotation.y + PI / 2) < 0.1 else p.global_position + Vector3(0, 0, 0.45), 0.7)
+		tw.tween_callback(func():
+			p.set_mode("rifle")
+			p.set_aim(-0.6))        # rifles at low ready, not pointed at each other
 
 func _clear_ops_room() -> void:
 	for n in hq_set:
@@ -491,6 +609,7 @@ func _next_shot() -> void:
 		0:
 			if city.hq_pos != Vector3.INF:
 				Sfx.play("ring", 2.0)
+				_ops_scramble()
 				hud.show_banner("غرفة العمليات", "مديرية الأمن العام · وحدة الصقر", 4.0)
 				hud.radio("غرفة العمليات", "نداء عاجل لوحدة الصقر: %s. تحرّكوا فوراً!" % M.news, 6.5)
 			else:
@@ -526,13 +645,15 @@ func _begin_drive() -> void:
 	in_vehicle = false
 	vehicle.set_driving(false)
 	var hp: Vector3 = city.hq_pos
-	var out := Vector3(hp.x, 0.2, city.size_total + 1.6)
+	var out := Vector3(hp.x + 1.5, 0.2, city.size_total + 1.9)
 	player.global_position = out
-	player.yaw = 0.0
-	player.rotation.y = 0.0
+	var tv: Vector3 = vehicle.global_position - out
+	player.yaw = atan2(-tv.x, -tv.z)
+	player.rotation.y = player.yaw
+	cine_cam.far = 1500.0
 	player.pitch = -0.08
 	player.set_active(true)
-	_place_team(out, Basis.IDENTITY)
+	_place_team(out, Basis(Vector3.UP, PI * 0.5))
 	hud.radio("الصقر ١", "يلّا يا شباب عالسيارة! تحرّكوا!", 2.5)
 	if team_size > 0:
 		hud.radio("الصقر ٢", "العدّة جاهزة وعبوة الاقتحام معنا. وراك!", 3.0)
@@ -563,8 +684,10 @@ func _start_auto_drive() -> void:
 	var east := cp.x > sp.x
 	var lane := 2.3 if east else -2.3
 	var sx := 1.0 if east else -1.0
+	var lane_x: float = city.road_center(1) + 2.2
+	sp = Vector3(lane_x, 0, sp.z)
 	# swing a little wide before the corner, then settle into the right-hand lane
-	vehicle.route = [Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 12.0, 0, zs + lane)]
+	vehicle.route = [Vector3(lane_x + 2.5, 0, city.size_total - 4.5), Vector3(lane_x, 0, city.size_total - 12.0), Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 12.0, 0, zs + lane)]
 	vehicle.route_i = 0
 	vehicle.auto_drive = true
 	hud.set_objectives(["◆ الصقر ٢ بيسوق للموقع – %s" % M.title, "◇ اضغط [فرامل/قفز] أو حرّك العصا لتاخذ القيادة"])
@@ -905,6 +1028,8 @@ func _arrest_leader() -> void:
 
 # ------------------------------------------------------------------ per-frame
 func _process(dt: float) -> void:
+	if not loaded:
+		return
 	var real_dt := dt / maxf(Engine.time_scale, 0.05)
 	if slowmo_t > 0.0:
 		slowmo_t -= real_dt
@@ -919,10 +1044,19 @@ func _process(dt: float) -> void:
 			fl.blue.emission_energy_multiplier = 0.3 if on else 6.0
 	if phase == "brief":
 		cine_t += dt
-		var c: Vector3 = city.door_pos
-		var a := cine_t * 0.08 + 0.6
-		cine_cam.global_position = c + Vector3(sin(a) * 30.0 - 10.0, 26.0 + sin(cine_t * 0.2) * 3.0, 38.0 + cos(a) * 8.0)
-		cine_cam.look_at(c + Vector3(0, 4, 0))
+		if city.hq_pos != Vector3.INF:
+			# slow drift inside the duty room; the short far plane keeps the city out of the picture
+			var hp: Vector3 = city.hq_pos
+			cine_cam.far = 60.0
+			cine_cam.fov = 50.0
+			cine_cam.global_position = hp + Vector3(4.9 + sin(cine_t * 0.12) * 0.5, 1.75, -3.3 + cos(cine_t * 0.1) * 0.4)
+			cine_cam.look_at(hp + Vector3(1.6, 1.1, -0.5))
+			cine_cam.h_offset = 1.15      # keeps the team in the left half, clear of the menu panel
+		else:
+			var c: Vector3 = city.door_pos
+			var a := cine_t * 0.08 + 0.6
+			cine_cam.global_position = c + Vector3(sin(a) * 30.0 - 10.0, 26.0 + sin(cine_t * 0.2) * 3.0, 38.0 + cos(a) * 8.0)
+			cine_cam.look_at(c + Vector3(0, 4, 0))
 		return
 	if phase == "intro":
 		intro_t += dt
@@ -930,6 +1064,9 @@ func _process(dt: float) -> void:
 		var k := clampf(intro_t / sh[3], 0.0, 1.0)
 		k = k * k * (3.0 - 2.0 * k)
 		cine_cam.current = true
+		cine_cam.h_offset = 0.0
+		cine_cam.far = 60.0 if (intro_i == 0 and city.hq_pos != Vector3.INF) else 1500.0
+		cine_cam.fov = 50.0 if intro_i == 0 else 55.0
 		cine_cam.global_position = (sh[0] as Vector3).lerp(sh[1], k)
 		cine_cam.look_at(sh[2])
 		hud.set_prompt("اضغط للتخطّي")
@@ -1681,11 +1818,15 @@ func _capture_mouse(on: bool) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if on else Input.MOUSE_MODE_VISIBLE
 
 func _notification(what: int) -> void:
+	if not loaded:
+		return
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		if phase not in ["brief", "result"] and hud and not get_tree().paused:
 			hud.toggle_pause()
 
 func _unhandled_input(e: InputEvent) -> void:
+	if not loaded:
+		return
 	if cutscene_t > 0.0 and ((e is InputEventKey and e.pressed and not e.echo) or (e is InputEventScreenTouch and e.pressed) or (e is InputEventMouseButton and e.pressed)):
 		get_viewport().set_input_as_handled()
 		hud.clear_radio()

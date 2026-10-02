@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c4mk4qaja0i8j"
-path="res://.godot/imported/sedan_bmw_0.webp-c2786965f738a1732384c90d8b1f6bce.ctex"
+uid="uid://d20j0e83r4fya"
+path="res://.godot/imported/sedan_bmw_0.png-6709bbd28ac60eff20375ad4794d717f.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "1056ad2b6381ea9deb09d334df1c88c3"
+"md5": "851950efa1a0db1610ecca2cd71219bb"
 }
 
 [deps]
 
-source_file="res://assets/cars/sedan_bmw_0.webp"
-dest_files=["res://.godot/imported/sedan_bmw_0.webp-c2786965f738a1732384c90d8b1f6bce.ctex"]
+source_file="res://assets/cars/sedan_bmw_0.png"
+dest_files=["res://.godot/imported/sedan_bmw_0.png-6709bbd28ac60eff20375ad4794d717f.ctex"]
 
 [params]
 

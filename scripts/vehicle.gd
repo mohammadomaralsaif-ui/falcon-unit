@@ -99,11 +99,11 @@ func _ready() -> void:
 			sl.rotation.y = PI
 			sl.rotation.x = -0.08
 			add_child(sl)
-	engine_snd = AudioStreamPlayer3D.new(); engine_snd.stream = Sfx.streams["engine"]; engine_snd.unit_size = 8.0
-	siren_snd = AudioStreamPlayer3D.new(); siren_snd.stream = Sfx.streams["siren"]; siren_snd.unit_size = 14.0; siren_snd.volume_db = -6.0
+	engine_snd = AudioStreamPlayer3D.new(); engine_snd.stream = Sfx.streams["engine"]; engine_snd.unit_size = 8.0; engine_snd.bus = "SFX"
+	siren_snd = AudioStreamPlayer3D.new(); siren_snd.stream = Sfx.streams["siren"]; siren_snd.unit_size = 14.0; siren_snd.volume_db = -15.0; siren_snd.bus = "SFX"
 	add_child(engine_snd); add_child(siren_snd)
 	engine_snd.play(); siren_snd.play()
-	screech_snd = AudioStreamPlayer3D.new(); screech_snd.stream = Sfx.streams["screech"]; screech_snd.unit_size = 10.0; screech_snd.volume_db = -60.0
+	screech_snd = AudioStreamPlayer3D.new(); screech_snd.stream = Sfx.streams["screech"]; screech_snd.unit_size = 10.0; screech_snd.volume_db = -60.0; screech_snd.bus = "SFX"
 	add_child(screech_snd)
 	screech_snd.play()
 	cam = Camera3D.new()
@@ -191,7 +191,7 @@ func _physics_process(dt: float) -> void:
 	# --- engine: pitch follows speed, louder under throttle
 	var eng_load := absf(engine_force) / MAX_FORCE if driving else 0.0
 	engine_snd.pitch_scale = 0.55 + clampf(speed_kmh / 90.0, 0.0, 1.4) + eng_load * 0.2
-	engine_snd.volume_db = (-4.0 + eng_load * 5.0) if driving else -18.0
+	engine_snd.volume_db = (-10.0 + eng_load * 5.0) if driving else -20.0
 	if broken:
 		engine_snd.volume_db = -80.0
 		if fire_light:
@@ -299,6 +299,8 @@ func _process(dt: float) -> void:
 	cam.fov = lerpf(cam.fov, 68.0 + clampf(speed_kmh / 110.0, 0.0, 1.0) * 14.0, 1.0 - exp(-dt * 3.0))
 
 ## Teammate at the wheel: steer along the route, keep ~45 km/h, slow for corners and anything in the way.
+var dodge_side := -1.0
+
 func _auto_input() -> Vector2:
 	if route_i >= route.size():
 		return Vector2(0, -1.0 if speed_kmh > 4.0 else 0.0)
@@ -316,6 +318,7 @@ func _auto_input() -> Vector2:
 			stuck_t = 0.0
 			unstick_t = 1.4
 			dodge_t = 7.0
+			dodge_side = -dodge_side
 			Sfx.play_3d("horn", global_position, 2.0)
 	else:
 		stuck_t = 0.0
@@ -329,7 +332,7 @@ func _auto_input() -> Vector2:
 		# aim at a point ahead and one lane to the left of the route to get around whatever blocked us
 		dodge_t -= dtp
 		var along := to.normalized()
-		to = along * 9.0 + Vector3.UP.cross(along) * 3.4
+		to = along * 9.0 + Vector3.UP.cross(along) * 3.4 * dodge_side
 	var ang := atan2(to.normalized().dot(right), to.normalized().dot(fwd))
 	var steer := clampf(-ang * 1.6, -1.0, 1.0)
 	var want := 12.5
@@ -365,11 +368,16 @@ func _on_body_entered(b: Node) -> void:
 	if rel < 3.0:
 		return
 	crash_cd = 0.35
-	_crash(rel * 0.85)
-	if b is AnimatableBody3D and main and main.traffic:
-		main.traffic.on_hit(b, rel)
+	var hit_dir := prev_vel.normalized()
+	if b is AnimatableBody3D and main and main.traffic and b.has_meta("traffic_speed"):
+		# an armoured truck against a family car: the car flies, the truck barely slows
+		_crash(rel * 0.85, 0.45)
+		main.traffic.on_hit(b, rel, hit_dir)
+		linear_velocity = prev_vel * 0.82
+	else:
+		_crash(rel * 0.85)
 
-func _crash(dv: float) -> void:
+func _crash(dv: float, dmg_scale := 1.0) -> void:
 	var power := clampf(dv / 14.0, 0.15, 1.0)
 	Sfx.play_3d("crash" if power > 0.45 else "crash_small", global_position, lerpf(0.0, 10.0, power), randf_range(0.9, 1.1))
 	if power > 0.35:
@@ -379,7 +387,7 @@ func _crash(dv: float) -> void:
 	if power > 0.4:
 		Fx.particles(get_parent(), p, Vector3.UP, "dust", 6)
 	var before := health
-	health = maxf(health - dv * 1.9, 0.0)
+	health = maxf(health - dv * 1.25 * dmg_scale, 0.0)
 	# heavy hits bend the steering a little
 	if power > 0.5:
 		pull = clampf(pull + randf_range(-0.05, 0.05), -0.08, 0.08)

@@ -65,21 +65,27 @@ func build(seed_val := 7, m: Dictionary = {}) -> void:
 		imap = BANK_MAP
 	font = load("res://assets/fonts/Tajawal-Bold.ttf")
 	size_total = N * P + R
+	var _t := Time.get_ticks_msec()
 	_ground()
 	_roads()
+	if OS.has_environment("FALCON_PROFILE"): print("  city ground+roads ", Time.get_ticks_msec() - _t); _t = Time.get_ticks_msec()
 	for bi in N:
 		for bj in N:
 			if Vector2i(bi, bj) == bank_block:
 				_bank_block(bi, bj)
 			else:
 				_block(bi, bj)
+	if OS.has_environment("FALCON_PROFILE"): print("  city blocks ", Time.get_ticks_msec() - _t); _t = Time.get_ticks_msec()
 	var sx := road_center(1)
 	var sz := road_center(N) - 10.0
 	spawn_point = Transform3D(Basis(Vector3.UP, PI), Vector3(sx + 2.2, 0.8, sz))
 	_hills()
+	if OS.has_environment("FALCON_PROFILE"): print("  city hills ", Time.get_ticks_msec() - _t); _t = Time.get_ticks_msec()
 	_parked_cars()
+	if OS.has_environment("FALCON_PROFILE"): print("  city parked ", Time.get_ticks_msec() - _t); _t = Time.get_ticks_msec()
 	build_hq()
 	_build_trees()
+	if OS.has_environment("FALCON_PROFILE"): print("  city hq+trees ", Time.get_ticks_msec() - _t); _t = Time.get_ticks_msec()
 
 func road_center(k: int) -> float:
 	return k * P + R * 0.5
@@ -313,7 +319,7 @@ func _facade_v2(v: int) -> Array:
 			img.fill_rect(Rect2i(maxi(x, 0), y, mini(bw, W - maxi(x, 0)), ch), col)
 			# chisel texture
 			for k in 60:
-				var px := r.randi_range(maxi(x, 0), mini(x + bw, W - 1)); var py := r.randi_range(y, mini(y + ch, H - 1))
+				var px := r.randi_range(maxi(x, 0), maxi(mini(x + bw, W - 1), 0)); var py := r.randi_range(y, mini(y + ch, H - 1))
 				var d := r.randf_range(-0.08, 0.06)
 				img.set_pixel(px, py, Color(col.r + d, col.g + d, col.b + d))
 				hgt.set_pixel(px, py, Color(0.62 + d, 0.62 + d, 0.62 + d))
@@ -912,9 +918,8 @@ func _hills() -> void:
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 # ---------------------------------------------------------------- parked cars
-func bake(node: Node3D) -> ArrayMesh:
+func bake(node: Node3D, lods := true) -> ArrayMesh:
 	var groups := {}
-	var paint = node.get_meta("paint") if node.has_meta("paint") else null
 	var stack := [[node, Transform3D.IDENTITY]]
 	while stack.size():
 		var it: Array = stack.pop_back()
@@ -935,20 +940,6 @@ func bake(node: Node3D) -> ArrayMesh:
 							groups[m] = s
 						var src: Mesh = ch.mesh
 						var ssi: int = si
-						if paint != null:
-							# vertices flagged as body paint (alpha 0.5) take this car's colour
-							var arr: Array = ch.mesh.surface_get_arrays(si)
-							var cols = arr[Mesh.ARRAY_COLOR]
-							if cols is PackedColorArray and cols.size() > 0:
-								var pc: Color = (paint as Color).srgb_to_linear()
-								for k in cols.size():
-									if cols[k].a < 0.75:
-										cols[k] = Color(pc.r, pc.g, pc.b, 1.0)
-								arr[Mesh.ARRAY_COLOR] = cols
-								var tmp := ArrayMesh.new()
-								tmp.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-								src = tmp
-								ssi = 0
 						groups[m].append_from(src, ssi, cxf)
 				stack.append([ch, cxf])
 	# ImporterMesh builds automatic LODs, so far-away cars cost a fraction of the triangles
@@ -958,21 +949,119 @@ func bake(node: Node3D) -> ArrayMesh:
 		groups[m].commit(one)
 		if one.get_surface_count() > 0:
 			im.add_surface(Mesh.PRIMITIVE_TRIANGLES, one.surface_get_arrays(0), [], {}, m)
-	im.generate_lods(25.0, 60.0, [])
+	if lods:
+		im.generate_lods(25.0, 60.0, [])
 	return im.get_mesh()
 
-func baked_car(kind: String, color: Color) -> ArrayMesh:
-	var key := kind + color.to_html() + str(rng.randi() % 2)
-	if not baked.has(key):
-		baked[key] = bake(CarMesh.build(kind, color))
-	return baked[key]
+## Cars are baked ONCE per model (geometry + automatic LODs). The body colour is not baked in:
+## painted vertices carry a mask in their vertex alpha and a tiny shader tints them, so twenty
+## differently coloured cars share one mesh and cost nothing extra to load.
+var _car_base := {}
+var _paint_mats := {}
+var _paint_shader: Shader
 
-const CAR_COLORS := [Color(0.92, 0.92, 0.92), Color(0.6, 0.62, 0.65), Color(0.12, 0.13, 0.15), Color(0.45, 0.08, 0.08), Color(0.15, 0.25, 0.42), Color(0.75, 0.72, 0.65), Color(0.85, 0.85, 0.87), Color(0.3, 0.32, 0.34), Color(0.1, 0.28, 0.2), Color(0.55, 0.42, 0.25)]
+const PAINT_SHADER := """shader_type spatial;
+uniform vec3 paint : source_color = vec3(0.8);
+uniform float ref = 0.5;
+void vertex() {
+	if (COLOR.a < 0.75) {
+		float sh = clamp(max(COLOR.r, max(COLOR.g, COLOR.b)) / max(ref, 0.01), 0.35, 1.4);
+		COLOR.rgb = paint * sh;
+	}
+}
+void fragment() {
+	ALBEDO = COLOR.rgb;
+	ROUGHNESS = 0.3;
+	METALLIC = 0.15;
+}
+"""
 
-func random_car_mesh() -> ArrayMesh:
+var CAR_LOD_DIST: float:
+	get: return [20.0, 26.0, 34.0][Settings.quality]
+
+func _car_model(kind: String, variant: int) -> Array:
+	var key := kind + str(variant)
+	if not _car_base.has(key):
+		# a hand-reduced far model (assets/cars/lod/<same file>) takes over beyond CAR_LOD_DIST;
+		# the full model then never needs runtime LOD generation (slow to build, ugly on these meshes)
+		var far_mesh: ArrayMesh = null
+		var files: Array = CustomModels.files_for("res://assets/cars", kind)
+		if files.size() > 0:
+			var lp := "res://assets/cars/lod/" + String(files[variant % files.size()])
+			if ResourceLoader.exists(lp):
+				var fn := CustomModels.car_from(lp, float(CarMesh.SPECS["sedan"].L))
+				if fn:
+					far_mesh = bake(fn, false)
+					fn.free()
+		var node := CarMesh.build(kind, Color.WHITE, true, variant)
+		var painted := node.has_meta("paint")
+		var mesh := bake(node, far_mesh == null)
+		node.free()
+		var ref := _paint_ref(mesh) if painted else 0.0
+		var far_ref := _paint_ref(far_mesh) if (painted and far_mesh) else ref
+		_car_base[key] = [mesh, ref, painted, far_mesh, far_ref]
+	return _car_base[key]
+
+## Average brightness of the paint-masked vertices (the shader keeps each vertex's shade relative to it).
+func _paint_ref(mesh: ArrayMesh) -> float:
+	var ref := 0.0
+	var cnt := 0
+	for si in mesh.get_surface_count():
+		var cols = mesh.surface_get_arrays(si)[Mesh.ARRAY_COLOR]
+		if cols is PackedColorArray:
+			for k in range(0, cols.size(), 5):
+				var c: Color = cols[k]
+				if c.a < 0.75:
+					ref += maxf(c.r, maxf(c.g, c.b)); cnt += 1
+	return ref / maxf(cnt, 1.0)
+
+func _paint_mat(color: Color, ref: float) -> ShaderMaterial:
+	var key := color.to_html() + str(snappedf(ref, 0.001))
+	if not _paint_mats.has(key):
+		if not _paint_shader:
+			_paint_shader = Shader.new()
+			_paint_shader.code = PAINT_SHADER
+		var m := ShaderMaterial.new()
+		m.shader = _paint_shader
+		m.set_shader_parameter("paint", color)
+		m.set_shader_parameter("ref", ref)
+		_paint_mats[key] = m
+	return _paint_mats[key]
+
+## Give a MeshInstance3D a car body of this kind and colour. `far_end` > 0 hides it past that distance.
+func dress_car(mi: MeshInstance3D, kind: String, color: Color, far_end := 0.0) -> void:
+	var b: Array = _car_model(kind, CustomModels.weighted_pick("res://assets/cars", kind, rng))
+	mi.mesh = b[0]
+	var pm: ShaderMaterial = _paint_mat(color, b[1]) if b[2] else null
+	_paint_surfaces(mi, pm)
+	if b[3]:
+		mi.visibility_range_end = CAR_LOD_DIST
+		var far := MeshInstance3D.new()
+		far.mesh = b[3]
+		far.visibility_range_begin = CAR_LOD_DIST
+		far.visibility_range_end = far_end
+		if Settings.quality < 2:
+			far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_paint_surfaces(far, _paint_mat(color, b[4]) if b[2] else null)
+		mi.add_child(far)
+	elif far_end > 0.0:
+		mi.visibility_range_end = far_end
+
+func _paint_surfaces(mi: MeshInstance3D, pm: ShaderMaterial) -> void:
+	if not pm:
+		return
+	for si in mi.mesh.get_surface_count():
+		var sm := mi.mesh.surface_get_material(si) as StandardMaterial3D
+		if sm and sm.vertex_color_use_as_albedo and sm.albedo_color.v > 0.5:      # not the dark glass
+			mi.set_surface_override_material(si, pm)
+
+const CAR_COLORS := [Color(0.95, 0.95, 0.95), Color(0.76, 0.77, 0.8), Color(0.08, 0.08, 0.09), Color(0.72, 0.08, 0.08), Color(0.16, 0.36, 0.78), Color(0.86, 0.8, 0.64), Color(0.9, 0.9, 0.92), Color(0.33, 0.35, 0.38), Color(0.12, 0.42, 0.28), Color(0.7, 0.52, 0.26)]
+
+func dress_random_car(mi: MeshInstance3D, far_end := 0.0) -> void:
 	if rng.randf() < 0.18:
-		return baked_car("taxi", Color.YELLOW)
-	return baked_car("sedan", CAR_COLORS[rng.randi() % CAR_COLORS.size()])
+		dress_car(mi, "taxi", Color.YELLOW, far_end)
+	else:
+		dress_car(mi, "sedan", CAR_COLORS[rng.randi() % CAR_COLORS.size()], far_end)
 
 func _parked_cars() -> void:
 	var n := 16      # few parked cars: most of what you see on the street should be moving
@@ -989,10 +1078,12 @@ func _parked_cars() -> void:
 		var ry := 0.0 if vertical else PI / 2
 		if side < 0:
 			ry += PI
-		var mi := _mi(random_car_mesh(), null, pos)
+		var mi := MeshInstance3D.new()
+		dress_random_car(mi, 140.0)
+		mi.position = pos
+		add_child(mi)
 		mi.rotation.y = ry
 		mi.set_meta("no_merge", true)
-		mi.visibility_range_end = 140.0
 		_static_box(Vector3(1.8, 1.4, 4.5), pos + Vector3(0, 0.7, 0), ry)
 
 # ---------------------------------------------------------------- bank compound (mission target)
@@ -1159,12 +1250,14 @@ func _bank_block(bi: int, bj: int) -> void:
 		for c in range(1, cols - 1, 2):
 			if imap[r][c] != "#":
 				_mi(_box_mesh(Vector3(1.2, 0.04, 1.2)), mat("ceilinglight"), bank_origin + Vector3(c * CELL + CELL * 0.5, wh - 0.03, r * CELL + CELL * 0.5), false)
-	for i in 4:
+	# six soft lights in a 3 x 2 grid light the whole floor evenly (no shadows: cheap on phones)
+	for i in 6:
 		var ol := OmniLight3D.new()
-		ol.light_color = {"bank": Color(1, 0.92, 0.8), "apartment": Color(1, 0.75, 0.5), "mall": Color(0.95, 0.97, 1.0)}[style]
-		ol.light_energy = {"bank": 1.6, "apartment": 1.1, "mall": 2.0}[style]
-		ol.omni_range = 14.0
-		ol.position = bank_origin + Vector3(cols * CELL * (0.15 + i * 0.235), 3.7, rows * CELL * (0.3 if i % 2 == 0 else 0.7))
+		ol.light_color = {"bank": Color(1, 0.93, 0.82), "apartment": Color(1, 0.8, 0.58), "mall": Color(0.95, 0.97, 1.0)}[style]
+		ol.light_energy = {"bank": 2.3, "apartment": 1.7, "mall": 2.6}[style]
+		ol.omni_range = 17.0
+		ol.omni_attenuation = 0.7
+		ol.position = bank_origin + Vector3(cols * CELL * (0.18 + (i % 3) * 0.32), 3.6, rows * CELL * (0.28 if i < 3 else 0.72))
 		add_child(ol)
 	var rp := ReflectionProbe.new()
 	rp.size = Vector3(cols * CELL, wh, rows * CELL)
@@ -1172,7 +1265,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	rp.interior = true
 	rp.ambient_mode = ReflectionProbe.AMBIENT_COLOR
 	rp.ambient_color = Color(0.55, 0.5, 0.44)
-	rp.ambient_color_energy = 0.9
+	rp.ambient_color_energy = 1.5
 	rp.update_mode = ReflectionProbe.UPDATE_ONCE
 	add_child(rp)
 	cordon_point = door_pos + Vector3(0, 0, 14.0)
@@ -1314,7 +1407,7 @@ func build_cordon() -> void:
 	var lm := _mi(lens, mat("black"), tri + Vector3(-0.36, 1.45, 0))
 	lm.rotation.z = PI / 2
 	var van := MeshInstance3D.new()
-	van.mesh = baked_car("sedan", Color(0.9, 0.9, 0.92))
+	dress_car(van, "sedan", Color(0.9, 0.9, 0.92))
 	van.position = Vector3(ex - 4.0, 0, zc + 3.7)
 	van.rotation.y = PI / 2
 	van.set_meta("no_merge", true)
@@ -1326,7 +1419,7 @@ func build_cordon() -> void:
 	_label("قناة الإخبارية · بث مباشر", van.position + Vector3(0, 1.0, -0.98), PI, 34, Color(0.85, 0.1, 0.1), 0.006)
 	# --- command post beside the colonel: unmarked black car + folding table with the building plans
 	var cmd := MeshInstance3D.new()
-	cmd.mesh = baked_car("sedan", Color(0.05, 0.05, 0.06))
+	dress_car(cmd, "sedan", Color(0.05, 0.05, 0.06))
 	cmd.position = cp + Vector3(9.5, 0, 2.6)
 	cmd.rotation.y = -PI / 2
 	cmd.set_meta("no_merge", true)
@@ -1347,7 +1440,9 @@ func build_hq() -> void:
 		return
 	var sz: Vector3 = b.get_meta("size")
 	hq_scale = 1.0
-	hq_pos = Vector3(spawn_point.origin.x + 1.0, 0.0, size_total + 3.5 + sz.z * 0.5)
+	hq_pos = Vector3(road_center(1) + 3.2, 0.0, size_total + 3.5 + sz.z * 0.5)
+	# the unit's truck waits right outside the door, nose toward the street it will take
+	spawn_point = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(hq_pos.x + 8.5, 0.8, size_total - 1.2))
 	b.position = hq_pos
 	b.set_meta("no_merge", true)
 	add_child(b)

@@ -37,14 +37,17 @@ static func setup(host: Node) -> void:
 		var lp := AudioEffectLowPassFilter.new(); lp.cutoff_hz = 3300.0
 		var ds := AudioEffectDistortion.new(); ds.mode = AudioEffectDistortion.MODE_OVERDRIVE; ds.drive = 0.22; ds.post_gain = -2.0
 		AudioServer.add_bus_effect(i, hp); AudioServer.add_bus_effect(i, lp); AudioServer.add_bus_effect(i, ds)
-		AudioServer.set_bus_volume_db(i, 4.0)
+		AudioServer.set_bus_volume_db(i, 6.0)
 		AudioServer.add_bus(i + 1)
 		AudioServer.set_bus_name(i + 1, "Voice")
 		AudioServer.set_bus_send(i + 1, "Master")
-		AudioServer.set_bus_volume_db(i + 1, 5.0)
+		AudioServer.set_bus_volume_db(i + 1, 6.0)
 	_player = AudioStreamPlayer.new()
 	_player.process_mode = Node.PROCESS_MODE_ALWAYS
 	host.add_child(_player)
+
+static func speaking() -> bool:
+	return _player != null and is_instance_valid(_player) and _player.playing
 
 static func clip_path(who: String, text: String) -> String:
 	return "res://assets/voice/%s.ogg" % (who + "|" + text).md5_text()

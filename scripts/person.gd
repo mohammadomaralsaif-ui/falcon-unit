@@ -151,6 +151,10 @@ func set_weapon(kind: String) -> void:
 	gun.visible = pose.mode == "rifle"
 	set_aim(aim_pitch)
 
+## 0 = standing, 1 = seated (the caller puts the person where the seat is).
+func set_sit(k: float) -> void:
+	pose.sit = k
+
 ## 0 = standing, 1 = crouched (legs bent by IK, weapon lowered with the body).
 func set_crouch(k: float) -> void:
 	crouch = k

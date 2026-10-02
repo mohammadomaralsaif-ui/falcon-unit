@@ -313,6 +313,15 @@ func show_banner(text: String, sub := "", dur := 3.0) -> void:
 
 func set_prompt(text: String) -> void:
 	prompt.text = _touchify(text)
+	# the "tap to skip" hint sits down in the letterbox bar, clear of the subtitles
+	var skip := text.contains("للتخطّي")
+	var top := 312.0 if skip else 70.0
+	if absf(prompt.offset_top - top) > 0.5:
+		var h := prompt.offset_bottom - prompt.offset_top
+		prompt.offset_top = top
+		prompt.offset_bottom = top + h
+		prompt.add_theme_font_size_override("font_size", 20 if skip else 28)
+		prompt.modulate.a = 0.7 if skip else 1.0
 
 func hit_marker(kill: bool) -> void:
 	hit_t = 0.3
@@ -360,6 +369,7 @@ func show_countdown(t: String) -> void:
 # ------------------------------------------------------------------ per-frame
 func _process(dt: float) -> void:
 	var udt: float = dt / maxf(Engine.time_scale, 0.05)
+	Sfx.duck(Voice.speaking(), udt)
 	# radio
 	if radio_t > 0.0:
 		radio_t -= udt

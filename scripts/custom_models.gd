@@ -52,6 +52,26 @@ static func _rotation_for(file: String) -> float:
 	var e = _setup.get(file.get_file(), {})
 	return deg_to_rad(float(e.get("rotate", 0.0))) if e is Dictionary else 0.0
 
+## Index of one of the model files for `prefix`, honouring an optional "weight" in setup.json
+## (so the everyday family car shows up more often than the muscle car).
+static func weighted_pick(dir: String, prefix: String, rng: RandomNumberGenerator) -> int:
+	var fs := files_for(dir, prefix)
+	if fs.size() <= 1:
+		return 0
+	_rotation_for("")
+	var total := 0.0
+	var ws: Array = []
+	for f in fs:
+		var e = _setup.get(f, {})
+		var w: float = float(e.get("weight", 1.0)) if e is Dictionary else 1.0
+		ws.append(w); total += w
+	var r := rng.randf() * total
+	for i in ws.size():
+		r -= ws[i]
+		if r <= 0.0:
+			return i
+	return fs.size() - 1
+
 static func _opt(file: String, key: String) -> bool:
 	_rotation_for(file)
 	var e = _setup.get(file.get_file(), {})
@@ -70,7 +90,10 @@ static func _aabb(n: Node, xf: Transform3D, acc: Array) -> void:
 
 ## A real car model scaled to `length` metres, wheels on y = 0, facing +Z. null if none provided.
 static func car(kind: String, length: float, seed_val: int) -> Node3D:
-	var path := pick("res://assets/cars", kind, seed_val)
+	return car_from(pick("res://assets/cars", kind, seed_val), length)
+
+## The same normalisation (orientation, size, centred on the ground) for one specific model file.
+static func car_from(path: String, length: float) -> Node3D:
 	if path == "":
 		return null
 	var ps := scene(path)

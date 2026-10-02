@@ -1,11 +1,18 @@
 {
  "sedan_mustang.glb": {
-  "rotate": 180
+  "rotate": 180,
+  "weight": 0.35
  },
  "cashvan_md84.glb": {
   "rotate": 180
  },
  "swat_vehicle.glb": {
   "keep_skinned": true
+ },
+ "sedan_kuga.glb": {
+  "weight": 1.6
+ },
+ "sedan_bmw.glb": {
+  "weight": 1.0
  }
 }
