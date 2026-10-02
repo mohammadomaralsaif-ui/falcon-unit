@@ -286,7 +286,7 @@ func mat(key: String) -> StandardMaterial3D:
 		"dish":
 			m.albedo_color = Color(0.85, 0.85, 0.83); m.roughness = 0.4; m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		"litwindow":
-			m.albedo_color = Color(0.9, 0.75, 0.45); m.emission_enabled = true; m.emission = Color(1.0, 0.8, 0.45); m.emission_energy_multiplier = 1.6
+			m.albedo_color = Color(0.55, 0.45, 0.28); m.emission_enabled = true; m.emission = Color(1.0, 0.78, 0.42); m.emission_energy_multiplier = 0.75
 		"cone":
 			m.albedo_color = Color(0.95, 0.4, 0.05); m.roughness = 0.6
 		"tape":
@@ -1512,13 +1512,25 @@ func build_cordon() -> void:
 				_mi(cone, mat("cone"), Vector3(tx, 0.25, cz))
 		# onlookers stand behind the tape, looking toward the target
 		for k in 9:
-			var px: float = tx + sd * rng.randf_range(0.8, 3.0)
-			var pz: float = zc + rng.randf_range(-6.2, 0.0 if sd < 0 else 6.2)
-			crowd_spots.append([Vector3(px, 0.0, pz), atan2(-sd, rng.randf_range(-0.4, 0.4))])
+			var px := 0.0
+			var pz := 0.0
+			# nobody stands inside somebody else
+			for attempt in 24:
+				px = tx + sd * rng.randf_range(0.8, 3.0)
+				pz = zc + rng.randf_range(-6.2, 0.0 if sd < 0 else 6.2)
+				var free := true
+				for other in crowd_spots:
+					if (other[0] as Vector3).distance_to(Vector3(px, 0.0, pz)) < 1.0:
+						free = false
+						break
+				if free:
+					break
+			# [where, facing (yaw 0 looks down -Z), how far along the tape they may wander, tape x, side]
+			crowd_spots.append([Vector3(px, 0.0, pz), atan2(sd, rng.randf_range(-0.4, 0.4)), Vector2(zc - 6.2, zc + (0.0 if sd < 0 else 6.2)), tx, sd])
 	# --- press: reporter + camera on a tripod just behind the east tape, news car parked behind them
 	# press pen inside the cordon on the south pavement, by the east barrier
 	var ex: float = blk_x0 + B - 7.2 - 9.5
-	press_spots = [[Vector3(ex + 1.6, 0.16, zc + 5.8), PI * 0.5, "reporter"], [Vector3(ex + 4.4, 0.16, zc + 6.0), -PI * 0.5, "camera"]]
+	press_spots = [[Vector3(ex + 1.6, 0.16, zc + 5.8), -PI * 0.5, "reporter"], [Vector3(ex + 4.4, 0.16, zc + 6.0), PI * 0.5, "camera"]]
 	var tri := Vector3(ex + 3.9, 0.16, zc + 6.0)
 	for a3 in 3:
 		var leg := _mi(_box_mesh(Vector3(0.03, 1.35, 0.03)), mat("black"), tri + Vector3(cos(a3 * TAU / 3.0) * 0.22, 0.66, sin(a3 * TAU / 3.0) * 0.22))

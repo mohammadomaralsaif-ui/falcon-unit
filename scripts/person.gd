@@ -27,7 +27,8 @@ var model_path := "res://assets/models/civilian.glb"
 var custom := false
 static var _mats := {}
 
-func _init(_role := "swat", seed_val := 0) -> void:
+## `_model`: a specific file from assets/characters/ ("" = any character that fits the role).
+func _init(_role := "swat", seed_val := 0, _model := "") -> void:
 	role = _role
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_val if seed_val != 0 else randi()
@@ -44,6 +45,8 @@ func _init(_role := "swat", seed_val := 0) -> void:
 	else:
 		# a real Mixamo character dropped into assets/characters/ wins over the built-in body
 		var real := CustomModels.character(role, rng.randi())
+		if _model != "" and ResourceLoader.exists("res://assets/characters/" + _model):
+			real = "res://assets/characters/" + _model
 		if real != "" and CustomModels.scene(real):
 			model = CustomModels.scene(real).instantiate()
 			model_path = real
@@ -103,21 +106,43 @@ func _init(_role := "swat", seed_val := 0) -> void:
 				c.visibility_range_end = [55.0, 75.0, 110.0][Settings.quality]
 
 func _ready() -> void:
-	play("Idle")
+	play(idle_clip)
 	anim.seek(randf() * 1.5)
 
 var _lock := 0.0          # a one-shot clip (hit, throw, death) is playing: locomotion waits
 var crouch_anim := false  # crouched = the real crouch clips (not just bent legs)
 
+const GESTURES := ["talk", "point", "salute", "radio", "mic", "camera"]
+const IDLES := ["Idle", "IdleCiv", "IdleArms", "Listen", "Talking", "Phone"]
+var idle_clip := "Idle"   # what this person does when standing around
+var relaxed := false      # bystander / officer: stands upright with the feet together, not in a ready stance
+var _gest_to := 1.0
+
 func _process(dt: float) -> void:
 	if _lock > 0.0:
 		_lock -= dt
+	if not pose:
+		return
+	# hand gestures come up and go down smoothly
+	if pose.mode in GESTURES:
+		pose.gw = move_toward(pose.gw, _gest_to, dt * 4.0)
+		if _gest_to <= 0.0 and pose.gw <= 0.0:
+			pose.mode = "none"
+			pose.gw = 1.0
+			_gest_to = 1.0
+	if relaxed:
+		var st := 1.0 if (crouch < 0.05 and cur in IDLES) else 0.0
+		pose.stand = move_toward(pose.stand, st, dt * 4.0)
+
+## Back to standing around (whatever "standing around" is for this person).
+func rest() -> void:
+	play(idle_clip)
 
 func play(n: String, speed := 1.0) -> void:
 	if _lock > 0.0:
 		return
 	if crouch_anim and crouch > 0.5:
-		n = "CrouchIdle" if n == "Idle" else "CrouchWalk"
+		n = "CrouchIdle" if n in IDLES else "CrouchWalk"
 		speed = clampf(absf(speed), 0.6, 1.2) * signf(speed) if n == "CrouchWalk" else 1.0
 	if n != cur:
 		anim.play(n, 0.22)
@@ -239,7 +264,7 @@ func fallen_center() -> Vector3:
 
 ## Shot dead: the knees give way first, then the body goes over and settles — not a falling plank.
 func collapse(side := 0.0) -> void:
-	set_mode("none")
+	set_mode("none", true)
 	set_leg_yaw(0.0)
 	crouch = 0.0
 	pose.crouch = 0.0
@@ -262,12 +287,22 @@ func collapse(side := 0.0) -> void:
 	tw.tween_property(self, "rotation:x", -PI / 2 * side, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(self, "position:y", 0.15, 0.5)
 
-func set_mode(m: String) -> void:
+func set_mode(m: String, snap := false) -> void:
+	if m == "none" and pose.mode in GESTURES and not snap:
+		_gest_to = 0.0          # the arm goes back down, then the mode clears itself
+		return
+	if m in GESTURES:
+		if not (pose.mode in GESTURES):
+			pose.gw = 1.0 if snap else 0.0
+		_gest_to = 1.0
+	else:
+		pose.gw = 1.0
+		_gest_to = 1.0
 	pose.mode = m
 	if gun:
 		gun.visible = m == "rifle"
-	if m.begins_with("kneel") or m in ["hands_up", "talk", "point", "salute", "radio", "mic", "camera"]:
-		play("Idle")
+	if m.begins_with("kneel") or m == "hands_up" or (m in GESTURES and not (cur in IDLES)):
+		play(idle_clip)
 
 func set_aim(p: float) -> void:
 	aim_pitch = p

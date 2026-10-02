@@ -93,7 +93,10 @@ var crowd_t := 0.0
 var hq_set: Array = []            # nodes of the ops-room intro (freed when the mission starts)
 var drive_started := false
 var gestures := {}                # dialogue line -> colonel gesture
-var colonel_talk_t := 0.0
+var colonel_talk_t := 0.0        # he is speaking: the "explaining" body animation runs this long
+var colonel_gest_t := 0.0        # a hand gesture (salute, point, handset) is up this long, then the arm comes down
+var colonel_saluted := false
+var crowd_ai: Array = []          # what each bystander is doing right now
 var shout_cd := 0.0
 var talk_cd := 0.0
 var duck_t := 0.0
@@ -238,9 +241,11 @@ func _load_world() -> void:
 		h.rotation.y = randf() * TAU
 		hostages.append(h)
 	colonel = Person.new("officer", 77)
+	colonel.idle_clip = "IdleCiv"
+	colonel.relaxed = true
 	add_child(colonel)
 	colonel.global_position = city.cordon_point + Vector3(3.0, 0, 1.5)
-	colonel.rotation.y = PI
+	colonel.rotation.y = PI / 2        # watching the street the truck comes in on
 	var tag := Label3D.new()
 	tag.text = COLONEL
 	tag.font = load("res://assets/fonts/Tajawal-Bold.ttf")
@@ -600,6 +605,8 @@ func _build_ops_room() -> void:
 		fill.global_position = hp + lp
 		hq_set.append(fill)
 	ops_officer = Person.new("officer", 300)
+	ops_officer.idle_clip = "IdleCiv"
+	ops_officer.relaxed = true
 	add_child(ops_officer)
 	ops_officer.global_position = hp + Vector3(4.3, fl, 1.2)
 	ops_officer.rotation.y = PI / 2
@@ -815,41 +822,64 @@ func _talk_colonel() -> void:
 	hud.set_objectives(["◆ تقدّم إلى الباب الرئيسي – الفريق رح يصطف معك على الجنبين", "◆ ازرع عبوة الاقتحام [E] — أو [T] ليزرعها واحد من الفريق ويقتحموا", "◇ [V] كاميرا تحت الباب قبل ما تفجّره · [C] انحناء"])
 	_start_dialogue_cam()
 
+func _yaw_to(v: Vector3) -> float:
+	return atan2(-v.x, -v.z)       # people look down -Z at yaw 0
+
 func _update_colonel(dt: float) -> void:
 	if not colonel:
 		return
-	if colonel_talk_t > 0.0 and cutscene_t <= 0.0:
+	# gestures are moments, not a pose he holds: the arm comes down again once the point is made
+	if colonel_gest_t > 0.0:
+		colonel_gest_t -= dt
+		if colonel_gest_t <= 0.0:
+			colonel.set_mode("none")
+	if colonel_talk_t > 0.0:
 		colonel_talk_t -= dt
 		if colonel_talk_t <= 0.0:
-			colonel.set_mode("none")
-	# before the briefing he watches you come in and turns to face you
+			colonel.rest()
+	# before the briefing he watches you come in, turns to face you and salutes once
 	if phase == "arrive" and not talked:
 		var to: Vector3 = player.global_position - colonel.global_position
 		if in_vehicle:
 			to = vehicle.global_position - colonel.global_position
 		if to.length() < 22.0:
-			colonel.rotation.y = lerp_angle(colonel.rotation.y, atan2(to.x, to.z), 1.0 - exp(-dt * 4.0))
-			if to.length() < 9.0 and not in_vehicle and colonel.pose.mode != "salute":
+			colonel.rotation.y = lerp_angle(colonel.rotation.y, _yaw_to(to), 1.0 - exp(-dt * 4.0))
+			if to.length() < 7.5 and not in_vehicle and not colonel_saluted:
+				colonel_saluted = true
 				colonel.set_mode("salute")
+				colonel_gest_t = 1.7
 
-## Onlookers and the TV crew behind the tape: animated only when you are close, hidden when far.
+## Onlookers and the TV crew behind the tape. They are alive: they shuffle along the tape, film with
+## their phones, talk to each other, point at the building, watch you walk past, duck at gunfire.
+## Animated only when you are close, hidden when far.
 func _spawn_crowd() -> void:
 	var spots: Array = city.crowd_spots.duplicate()
 	spots.shuffle()
+	var idles := ["IdleCiv", "IdleArms", "Listen", "IdleCiv", "IdleArms"]
+	# a neighbourhood crowd: mostly ordinary people, one nurse on her way home from the hospital
+	var looks := ["civilian_1.glb", "civilian_woman.glb", "civilian_2.glb", "robber_2.glb", "civilian_woman.glb", "civilian_2.glb", "civilian_1.glb", "civilian_medic.glb"]
 	for i in mini(Settings.crowd_count(), spots.size()):
-		var p := Person.new("civilian", 2000 + i)
+		var sp: Array = spots[i]
+		var p := Person.new("civilian", 2000 + i, looks[i % looks.size()])
+		p.idle_clip = idles[i % idles.size()]
+		p.relaxed = true
 		add_child(p)
-		p.global_position = spots[i][0] + Vector3(0, 0.16 if false else 0.0, 0)
-		p.rotation.y = float(spots[i][1])
+		p.global_position = sp[0]
+		p.rotation.y = float(sp[1])
 		crowd.append(p)
+		crowd_ai.append({"yaw": float(sp[1]), "t": randf_range(0.5, 5.0), "act": "", "busy": false, "press": "",
+			"zr": sp[2], "tx": float(sp[3]), "sd": float(sp[4]), "dest": sp[0], "phone": null})
 	for ps in city.press_spots:
 		var role: String = "hostage" if ps[2] == "reporter" else "civilian"
-		var p := Person.new(role, 2100 + crowd.size())
+		var p := Person.new(role, 2100 + crowd.size(), "civilian_woman.glb" if ps[2] == "reporter" else "civilian_2.glb")
+		p.idle_clip = "IdleCiv"
+		p.relaxed = true
 		add_child(p)
 		p.global_position = ps[0]
 		p.rotation.y = float(ps[1])
-		p.set_mode("mic" if ps[2] == "reporter" else "camera")
+		p.set_mode("mic" if ps[2] == "reporter" else "camera", true)
 		crowd.append(p)
+		crowd_ai.append({"yaw": float(ps[1]), "t": randf_range(4.0, 9.0), "act": "", "busy": false, "press": ps[2], "dest": ps[0], "phone": null})
 
 func _update_crowd(dt: float) -> void:
 	crowd_t -= dt
@@ -860,22 +890,214 @@ func _update_crowd(dt: float) -> void:
 	shout_cd -= 0.25
 	talk_cd -= 0.25
 	var ref: Vector3 = listener_pos()
-	for p in crowd:
+	var ducking := duck_t > 0.0
+	for i in crowd.size():
+		var p = crowd[i]
+		var a: Dictionary = crowd_ai[i]
 		var d: float = p.global_position.distance_to(ref)
 		p.visible = d < 95.0
-		p.anim.speed_scale = 1.0 if d < 30.0 else 0.0
-		p.set_crouch(move_toward(p.crouch, 1.0 if duck_t > 0.0 else 0.0, 0.35))
+		p.pose.active = p.visible
+		if a.busy:
+			continue                   # walking to a new spot: the tween finishes the move
+		var live: bool = d < 48.0
+		p.anim.speed_scale = 1.0 if live else 0.0
+		var cr: float = move_toward(p.crouch, 1.0 if ducking else 0.0, 0.35)
+		if cr != p.crouch:
+			if ducking and a.act != "":
+				_crowd_rest(i, false)
+			p.set_crouch(cr)
+			p.rest()
+		if ducking or not live:
+			continue
+		a.t -= 0.25
+		if a.t > 0.0:
+			continue
+		if a.act != "":
+			_crowd_rest(i)
+			a.t = randf_range(1.5, 5.0)
+		else:
+			_crowd_act(i)
+
+## Turn on the spot; a big turn is taken in a few steps, not by spinning like a statue on a plinth.
+func _crowd_turn(p: Node3D, yaw: float, after := "") -> void:
+	var from: float = p.rotation.y
+	var delta: float = wrapf(yaw - from, -PI, PI)
+	if after == "":
+		after = p.cur if p.cur in p.IDLES else p.idle_clip
+	var dur: float = 0.3 + absf(delta) * 0.35
+	if absf(delta) > 0.7:
+		p.play("WalkCiv", 1.1)
+	else:
+		p.play(after)
+	var tw := p.create_tween()
+	tw.tween_property(p, "rotation:y", from + delta, dur).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func():
+		if p.cur == "WalkCiv":
+			p.play(after))
+
+func _crowd_phone(i: int, on: bool) -> void:
+	var a: Dictionary = crowd_ai[i]
+	if on and a.phone == null:
+		var m := MeshInstance3D.new()
+		var b := BoxMesh.new()
+		b.size = Vector3(0.15, 0.075, 0.009)
+		m.mesh = b
+		var mt := StandardMaterial3D.new()
+		mt.albedo_color = Color(0.03, 0.03, 0.035)
+		mt.roughness = 0.25
+		m.material_override = mt
+		m.position = Vector3(0.0, 1.47, -0.36)
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		crowd[i].add_child(m)
+		a.phone = m
+	if a.phone != null:
+		a.phone.visible = on
+
+func _crowd_act(i: int) -> void:
+	var p = crowd[i]
+	var a: Dictionary = crowd_ai[i]
+	var here: Vector3 = p.global_position
+	var door: Vector3 = city.door_pos
+	if a.press != "":
+		# the reporter glances back at the building between takes; the camera stays on its tripod
+		if a.press == "reporter":
+			a.act = "look"
+			_crowd_turn(p, _yaw_to(door - here))
+			a.t = randf_range(2.0, 3.5)
+		else:
+			a.t = randf_range(4.0, 8.0)
+		return
+	var r := randf()
+	if r < 0.3:
+		_crowd_stroll(i)
+	elif r < 0.48:
+		a.act = "film"                       # phone up, filming the building
+		_crowd_turn(p, _yaw_to(door - here))
+		p.set_mode("camera")
+		_crowd_phone(i, true)
+		a.t = randf_range(3.5, 7.0)
+	elif r < 0.68:
+		var j := _crowd_neighbour(i)
+		if j < 0:
+			a.t = 1.0
+			return
+		var q = crowd[j]
+		var b: Dictionary = crowd_ai[j]
+		a.act = "chat"
+		b.act = "chat"
+		_crowd_turn(p, _yaw_to(q.global_position - here), "Talking")
+		_crowd_turn(q, _yaw_to(here - q.global_position), "Listen")
+		a.t = randf_range(3.5, 6.0)
+		b.t = a.t + 0.25
+	elif r < 0.8:
+		a.act = "phone"                      # on a call: "you won't believe what's going on here"
+		p.play("Phone")
+		a.t = randf_range(4.0, 8.0)
+	elif r < 0.9:
+		a.act = "point"
+		p.pose.point_at = door + Vector3(0, 2.2, 0)
+		_crowd_turn(p, _yaw_to(door - here))
+		p.set_mode("point")
+		a.t = 1.8
+	else:
+		# watch whoever is moving about inside the cordon
+		var who: Vector3 = vehicle.global_position if in_vehicle else player.global_position
+		if who.distance_to(here) > 30.0:
+			a.t = 1.5
+			return
+		a.act = "look"
+		_crowd_turn(p, _yaw_to(who - here))
+		a.t = randf_range(2.0, 4.0)
+
+func _crowd_neighbour(i: int) -> int:
+	var best := -1
+	var bd := 2.6
+	for j in crowd.size():
+		var b: Dictionary = crowd_ai[j]
+		if j == i or b.press != "" or b.act != "" or b.busy:
+			continue
+		var d: float = crowd[j].global_position.distance_to(crowd[i].global_position)
+		if d < bd:
+			bd = d
+			best = j
+	return best
+
+## Whatever they were doing is over: arms down, phone away, back to watching the building.
+func _crowd_rest(i: int, turn := true) -> void:
+	var p = crowd[i]
+	var a: Dictionary = crowd_ai[i]
+	if a.act in ["film", "point"]:
+		p.set_mode("none")
+	_crowd_phone(i, false)
+	a.act = ""
+	if turn:
+		_crowd_turn(p, a.yaw + randf_range(-0.3, 0.3), p.idle_clip)
+	else:
+		p.rest()
+
+## A few steps along the tape to get a better view, then turn back to the building.
+func _crowd_stroll(i: int) -> void:
+	var p = crowd[i]
+	var a: Dictionary = crowd_ai[i]
+	var here: Vector3 = p.global_position
+	var zr: Vector2 = a.zr
+	var tgt := Vector3(a.tx + a.sd * randf_range(0.8, 3.0), here.y,
+		clampf(here.z + randf_range(1.0, 2.6) * (1.0 if randf() < 0.5 else -1.0), zr.x, zr.y))
+	var dist: float = here.distance_to(tgt)
+	if dist < 0.7:
+		a.t = 1.0
+		return
+	for j in crowd.size():
+		if j != i and (crowd[j].global_position.distance_to(tgt) < 0.85 or (crowd_ai[j].dest as Vector3).distance_to(tgt) < 0.85):
+			a.t = 1.0
+			return
+	a.busy = true
+	a.dest = tgt
+	var from: float = p.rotation.y
+	var walk_yaw: float = from + wrapf(_yaw_to(tgt - here) - from, -PI, PI)
+	var back_yaw: float = walk_yaw + wrapf(a.yaw + randf_range(-0.3, 0.3) - walk_yaw, -PI, PI)
+	p.play("WalkCiv", 0.85)
+	var tw: Tween = p.create_tween()
+	tw.tween_property(p, "rotation:y", walk_yaw, 0.45).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(p, "global_position", tgt, dist / 1.1)
+	tw.tween_property(p, "rotation:y", back_yaw, 0.5).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func():
+		a.busy = false
+		a.t = randf_range(2.0, 6.0)
+		p.rest())
 
 ## The HUD calls this whenever a radio / dialogue line starts: cut the camera to whoever speaks
 ## and let the colonel act it out (salute, explain with his hands, point at the door, radio in hand).
-func on_radio_line(who: String, text: String) -> void:
+func on_radio_line(who: String, text: String, dur := 3.0) -> void:
 	if who == COLONEL:
 		var g: String = gestures.get(text, "talk" if cutscene_t > 0.0 else "radio")
+		if g == "salute" and colonel_saluted:
+			g = "talk"
 		colonel.pose.point_at = city.door_pos + Vector3(0, 1.5, 0)
-		colonel.set_mode(g)
-		colonel_talk_t = maxf(2.0, text.length() * 0.08)
+		if cutscene_t > 0.0:
+			# face to face: he explains with his body while the line lasts…
+			colonel.play("Talking")
+			colonel_talk_t = maxf(dur - 0.15, 1.0)
+		match g:
+			"talk":
+				colonel.set_mode("none")
+				colonel_gest_t = 0.0
+			"point":
+				# …points at the door for a moment, and the arm comes back down
+				colonel.set_mode("point")
+				colonel_gest_t = minf(dur * 0.6, 1.8)
+			"salute":
+				colonel_saluted = true
+				colonel.set_mode("salute")
+				colonel_gest_t = 1.6
+			_:
+				colonel.set_mode(g)       # handset up while he is on the air
+				colonel_gest_t = clampf(dur - 0.2, 1.2, 3.5)
 	elif cutscene_t > 0.0:
 		colonel.set_mode("none")
+		colonel.rest()
+		colonel_gest_t = 0.0
+		colonel_talk_t = 0.0
 	if cutscene_t > 0.0:
 		cut_i = 0 if who == COLONEL else (1 if who == "الصقر ١" else 2)
 		cut_k = 0.0
@@ -920,8 +1142,13 @@ func _update_dialogue_cam(dt: float) -> void:
 func _end_dialogue_cam() -> void:
 	cutscene_t = 0.0
 	colonel.set_mode("none")
+	colonel.rest()
+	colonel_gest_t = 0.0
+	colonel_talk_t = 0.0
+	# briefing over: he turns back to the building he is responsible for
 	var to_bank: Vector3 = city.door_pos - colonel.global_position
-	colonel.rotation.y = atan2(to_bank.x, to_bank.z)
+	var cy: float = colonel.rotation.y
+	colonel.create_tween().tween_property(colonel, "rotation:y", cy + wrapf(_yaw_to(to_bank) - cy, -PI, PI), 0.7).set_trans(Tween.TRANS_SINE)
 	hud.set_letterbox(false)
 	hud.set_prompt("")
 	cine_cam.fov = 55.0
@@ -1870,15 +2097,19 @@ func _talk_civilian(p: Node3D, kind: String) -> void:
 	talk_cd = 6.0
 	var to: Vector3 = player.global_position - p.global_position
 	p.rotation.y = atan2(-to.x, -to.z)
-	var prev: String = p.pose.mode
 	if peds:
 		for pd in peds.peds:
 			if pd.node == p:
 				pd.talk = 5.0
-	p.set_mode("talk")
-	get_tree().create_timer(4.0).timeout.connect(func():
-		if is_instance_valid(p) and p.pose.mode == "talk":
-			p.set_mode(prev))
+	var ci := crowd.find(p)
+	if ci >= 0:
+		# whatever they were doing, they drop it to talk to the officer
+		var a: Dictionary = crowd_ai[ci]
+		if a.press == "":
+			_crowd_rest(ci, false)
+		a.act = "look"
+		a.t = 4.5
+	p.play("Talking")
 	if kind == "reporter":
 		hud.radio("المراسلة", REPORTER_LINES.pick_random(), 3.5)
 		hud.radio("الصقر ١", "ما في تصريح هلأ. ارجعوا ورا الشريط.", 2.5)
@@ -1893,9 +2124,9 @@ func _near_civilian(pp: Vector3):
 	for i in crowd.size():
 		var p: Node3D = crowd[i]
 		var d := pp.distance_to(p.global_position)
-		if d < bd:
+		if d < bd and not crowd_ai[i].busy:
 			bd = d
-			best = [p, "reporter" if p.pose.mode in ["mic", "camera"] else "crowd"]
+			best = [p, "reporter" if crowd_ai[i].press != "" else "crowd"]
 	if peds:
 		for pd in peds.peds:
 			if pd.down > 0.0 or pd.flee > 0.0:

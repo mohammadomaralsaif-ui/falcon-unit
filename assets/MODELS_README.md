@@ -31,7 +31,7 @@
 ## Animations and extra props (CC0)
 
 - `assets/models/anim_base.glb`, `assets/models/anim_addon.glb` — crouch, strafes, walking backwards, hit
-  reactions, deaths and the grenade throw. Trimmed (tools/trim_anim.mjs) from the Mesh2Motion animation
+  reactions, deaths, the grenade throw, and the bystander set (relaxed idles, folded arms, talking,
+  phone call, listening, civilian walk). Trimmed (tools/trim_anim.mjs) from the Mesh2Motion animation
   library (https://github.com/Mesh2Motion/mesh2motion-app), which is CC0 1.0 — see `assets/models/ANIM_LICENSE-CC0.md`.
   They are retargeted at load time onto every character by `scripts/retarget.gd`.
-- `assets/weapons/shotgun.glb` — CC0 prop from the same repository.

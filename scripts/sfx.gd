@@ -273,50 +273,47 @@ func _reload() -> AudioStreamWAV:
 	return _wav(s)
 
 func _ambience(night := false) -> AudioStreamWAV:
-	## city bed: cars swishing past, distant horns, a dog, birds by day / crickets at night. 12 s loop.
+	## quiet city bed: a low steady hum of far-off traffic, the odd distant horn, a dog, birds by day /
+	## crickets at night. No hiss swells (they sounded like surf). 12 s seamless loop.
 	var n := RATE * 12
+	var fade := RATE / 2
 	var s := PackedFloat32Array()
-	s.resize(n)
+	s.resize(n + fade)
 	var lp := 0.0
-	var bp := 0.0
-	var bp2 := 0.0
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 3 if not night else 5
-	var passes := []
-	for k in (4 if night else 7):
-		passes.append([rng.randf_range(0.0, 12.0), rng.randf_range(2.5, 4.5), rng.randf_range(0.5, 1.0)])
-	var horns := [[2.3, 0.35, 380.0], [7.6, 0.22, 450.0], [9.1, 0.5, 410.0]]
-	for i in n:
+	var lp2 := 0.0
+	var horns := [[2.3, 0.4, 392.0], [7.6, 0.28, 440.0]]
+	for i in n + fade:
 		var t := float(i) / RATE
 		var noise := randf() * 2.0 - 1.0
-		lp += (noise - lp) * 0.06
-		bp += (noise - bp) * 0.35
-		bp2 += (bp - bp2) * 0.08
-		var band := bp - bp2          # 300 Hz – 3 kHz hiss: what tyres on asphalt sound like
-		var v := lp * 0.5
-		for ps in passes:
-			var dt: float = fposmod(t - ps[0], 12.0)
-			if dt < ps[1]:
-				var e: float = sin(PI * dt / ps[1])
-				v += band * e * e * 0.9 * ps[2]
+		lp += (noise - lp) * 0.012
+		lp2 += (lp - lp2) * 0.02            # two-pole low-pass: a soft rumble under ~100 Hz, level never moves
+		var v := lp2 * 2.2
+		# far traffic drone: three low partials that add up evenly over the loop
+		v += (sin(TAU * 55.0 * t) * 0.5 + sin(TAU * 82.5 * t) * 0.3 + sin(TAU * 110.0 * t) * 0.2) * 0.022
 		for h in (horns if not night else [horns[1]]):
 			var dh: float = t - h[0]
 			if dh > 0.0 and dh < h[1]:
-				v += (signf(sin(TAU * h[2] * t)) * 0.5 + signf(sin(TAU * h[2] * 1.25 * t)) * 0.5) * 0.05
+				var he: float = sin(PI * dh / h[1])
+				v += (sin(TAU * h[2] * t) * 0.6 + sin(TAU * h[2] * 1.26 * t) * 0.4) * 0.018 * he
 		if not night:
 			for b in [1.2, 1.45, 5.3, 5.5, 5.7, 10.4]:
 				var db: float = t - b
 				if db > 0.0 and db < 0.12:
-					v += sin(TAU * (3400.0 + 1600.0 * sin(TAU * 18.0 * db)) * db) * 0.05 * sin(PI * db / 0.12)
+					v += sin(TAU * (3400.0 + 1600.0 * sin(TAU * 18.0 * db)) * db) * 0.035 * sin(PI * db / 0.12)
 		else:
-			var cr := fmod(t * 3.1, 1.0)
+			var cr := fmod(t * 3.0, 1.0)
 			if cr < 0.35:
-				v += sin(TAU * 4300.0 * t) * 0.025 * (0.5 + 0.5 * sin(TAU * 32.0 * t))
+				v += sin(TAU * 4300.0 * t) * 0.014 * (0.5 + 0.5 * sin(TAU * 32.0 * t)) * sin(PI * cr / 0.35)
 		for d in [3.9, 4.25]:
 			var dd: float = t - d
 			if dd > 0.0 and dd < 0.18:
-				v += sin(TAU * (520.0 - dd * 900.0) * dd) * 0.07 * exp(-dd * 14.0) + band * 0.05 * exp(-dd * 20.0)
+				v += sin(TAU * (520.0 - dd * 900.0) * dd) * 0.045 * exp(-dd * 14.0)
 		s[i] = clampf(v * 1.6, -1.0, 1.0)
+	# fold the tail over the head so the rumble has no seam
+	for i in fade:
+		var k := float(i) / fade
+		s[i] = s[i] * k + s[n + i] * (1.0 - k)
+	s.resize(n)
 	return _wav(s, true)
 
 func _ring() -> AudioStreamWAV:

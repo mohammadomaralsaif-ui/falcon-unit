@@ -22,6 +22,8 @@ func _ready() -> void:
 	cs.shape = cap; cs.position = Vector3(0, 0.65, 0)
 	add_child(cs)
 	model = Person.new("hostage")
+	model.idle_clip = "IdleCiv"       # an office worker, not a soldier at the ready
+	model.relaxed = true
 	add_child(model)
 	model.set_mode("kneel_head")
 
@@ -43,7 +45,7 @@ func free_hostage(trail_size: int) -> void:
 		return
 	freed = true
 	model.set_mode("none")
-	model.play("Idle")
+	model.rest()
 	trail_idx = maxi(trail_size - 1, 0)
 
 func _physics_process(dt: float) -> void:
@@ -79,12 +81,12 @@ func _physics_process(dt: float) -> void:
 			freed = false
 			main.on_hostage_saved(self)
 	if goal == Vector3.INF:
-		model.play("Idle")
+		model.rest()
 		return
 	var d := goal - global_position
 	d.y = 0
 	if d.length() < 0.6:
-		model.play("Idle")
+		model.rest()
 		if rescued:
 			gone = true
 			var tw := create_tween()
@@ -94,7 +96,7 @@ func _physics_process(dt: float) -> void:
 	var step := d.normalized() * minf(spd * dt, d.length())
 	global_position += step
 	rotation.y = lerp_angle(rotation.y, atan2(-d.x, -d.z), 1.0 - exp(-dt * 10.0))
-	model.play("Run" if spd > 3.5 else "Walk", spd / (5.5 if spd > 3.5 else 1.6))
+	model.play("Run" if spd > 3.5 else "WalkCiv", spd / (5.5 if spd > 3.5 else 1.35))
 
 func _vanish() -> void:
 	visible = false

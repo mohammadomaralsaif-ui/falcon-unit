@@ -16,6 +16,8 @@ var sit := 0.0          # 0..1: seated on a chair / sofa (hips at seat height, t
 var crouch := 0.0       # 0..1: lower the hips and bend the legs (feet stay planted)
 var twist := 0.0        # radians: turn the chest about the vertical (legs strafe, sights stay on target)
 var reload := 0.0       # 0 = no; 0..1 = how far through a reload (the left hand goes for a magazine)
+var stand := 0.0        # 0..1: bystander stance — feet under the hips, legs almost straight (clips drive the upper body)
+var gw := 1.0           # 0..1: how far a hand gesture has come up (arms blend in and out instead of snapping)
 var K := Transform3D.IDENTITY   # "civilian space" (Y up, +Z forward, metres) -> skeleton space
 
 func _bone(n: String) -> int:
@@ -43,7 +45,7 @@ func _dirS(d: Vector3) -> Vector3:
 
 func _process_modification() -> void:
 	var sk := get_skeleton()
-	if not sk or (mode == "none" and sit <= 0.01 and crouch <= 0.01 and absf(twist) <= 0.01):
+	if not sk or (mode == "none" and sit <= 0.01 and crouch <= 0.01 and absf(twist) <= 0.01 and stand <= 0.01):
 		return
 	var inv := sk.global_transform.affine_inverse()
 	if body:
@@ -52,6 +54,8 @@ func _process_modification() -> void:
 		_sit(sk)
 	elif crouch > 0.01 and not mode.begins_with("kneel"):
 		_crouch(sk)
+	elif stand > 0.01 and not mode.begins_with("kneel"):
+		_stand(sk)
 	if absf(twist) > 0.01:
 		var up := _dirS(Vector3.UP)
 		for bn in ["Spine", "Spine1", "Spine2"]:
@@ -178,6 +182,35 @@ func _sit(sk: Skeleton3D) -> void:
 			var sx := 1.0 if s == "Left" else -1.0
 			_ik(s, _toS(knee + Vector3(sx * 0.02, 0.08, -0.04)), Vector3(sx, -0.4, -0.3))
 
+## Relaxed standing: the game-style idles stand wide with bent knees, which reads as a fighting
+## stance on a bystander. Bring the feet in under the hip joints and straighten the legs.
+func _stand(sk: Skeleton3D) -> void:
+	var hi := _bone("Hips")
+	var lu := _bone("LeftUpLeg")
+	var ll := _bone("LeftLeg")
+	var lf := _bone("LeftFoot")
+	var rf := _bone("RightFoot")
+	if hi < 0 or lu < 0 or ll < 0 or lf < 0 or rf < 0:
+		return
+	var hips := sk.get_bone_global_pose(hi)
+	var hc := _toC(hips.origin)
+	# everything in metres (body space): custom characters carry a scaled skeleton
+	var up := _toC(sk.get_bone_global_pose(lu).origin)
+	var kn := _toC(sk.get_bone_global_pose(ll).origin)
+	var ft := _toC(sk.get_bone_global_pose(lf).origin)
+	var leg := up.distance_to(kn) + kn.distance_to(ft)
+	var feet := {"Left": ft, "Right": _toC(sk.get_bone_global_pose(rf).origin)}
+	var ankle: float = minf(feet["Left"].y, feet["Right"].y)
+	var want_y: float = ankle + leg * 0.988 + (hc.y - up.y)
+	hc.y = lerpf(hc.y, want_y, stand)
+	hips.origin = _toS(hc)
+	sk.set_bone_global_pose(hi, hips)
+	for s in feet:
+		var sx := 1.0 if s == "Left" else -1.0
+		var j := _toC(sk.get_bone_global_pose(_bone(s + "UpLeg")).origin)
+		var tgt := Vector3(j.x + sx * 0.02, ankle, hc.z + (0.05 if s == "Left" else -0.03))
+		_leg_ik(s, _toS((feet[s] as Vector3).lerp(tgt, stand)), _dirS(Vector3(sx * 0.12, 0.0, 1.0)))
+
 func _crouch(sk: Skeleton3D) -> void:
 	var hi := _bone("Hips")
 	if hi < 0:
@@ -277,11 +310,15 @@ func _ik(side: String, target: Vector3, pole: Vector3) -> void:
 	var T := S + dir * d
 	# upper arm
 	var q1 := _arc((gf.origin - S).normalized(), (E - S).normalized())
+	if gw < 0.999:
+		q1 = Quaternion.IDENTITY.slerp(q1, gw)
 	gu.basis = Basis(q1) * gu.basis
 	sk.set_bone_global_pose(ua, gu)
 	# forearm (re-read after parent change)
 	gf = sk.get_bone_global_pose(fa)
 	gh = sk.get_bone_global_pose(ha)
 	var q2 := _arc((gh.origin - gf.origin).normalized(), (T - gf.origin).normalized())
+	if gw < 0.999:
+		q2 = Quaternion.IDENTITY.slerp(q2, gw)
 	gf.basis = Basis(q2) * gf.basis
 	sk.set_bone_global_pose(fa, gf)

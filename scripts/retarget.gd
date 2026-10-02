@@ -49,8 +49,12 @@ const UE := {
 ## game clip name -> [clip in the source file, loops?]
 const SOLDIER_CLIPS := {"Idle": ["Idle", true], "Walk": ["Walk", true], "Run": ["Run", true]}
 const BASE_CLIPS := {"CrouchIdle": ["Crouch_Idle", true], "CrouchWalk": ["Crouch_Walk", true], "DeathD": ["Death_D", false],
-	"HitChest": ["Hit_Chest", false], "HitHead": ["Hit_Head", false], "Throw": ["OverhandThrow", false]}
-const ADDON_CLIPS := {"DeathB": ["Death_B", false], "StrafeL": ["Strafe_left", true], "StrafeR": ["Strafe_right", true], "WalkBack": ["Walk_Backwards", true]}
+	"HitChest": ["Hit_Chest", false], "HitHead": ["Hit_Head", false], "Throw": ["OverhandThrow", false],
+	# relaxed, unarmed people: bystanders, the press, the colonel
+	"IdleCiv": ["Idle_A", true], "IdleArms": ["Idle_FoldArms", true], "Talking": ["Idle_Talking", true],
+	"Phone": ["Idle_TalkingPhone", true], "WalkCiv": ["Walk", true]}
+const ADDON_CLIPS := {"DeathB": ["Death_B", false], "StrafeL": ["Strafe_left", true], "StrafeR": ["Strafe_right", true], "WalkBack": ["Walk_Backwards", true],
+	"Listen": ["Idle Listening", true]}
 
 ## path: target model (any Mixamo / Ready Player Me compatible rig facing +Z).
 ## Idle / Walk / Run come from the Mixamo soldier; crouch, strafes, backpedal, hit reactions, deaths,

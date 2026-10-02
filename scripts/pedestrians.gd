@@ -27,6 +27,8 @@ func setup(_main: Node) -> void:
 	for i in Settings.ped_count():
 		var p := Ped.new()
 		p.node = Person.new("civilian", 1000 + i)
+		p.node.idle_clip = "IdleCiv"
+		p.node.relaxed = true
 		add_child(p.node)
 		_respawn(p, true)
 		peds.append(p)
@@ -118,7 +120,7 @@ func _physics_process(dt: float) -> void:
 				continue
 		if p.talk > 0.0:
 			p.talk -= dt
-			p.node.play("Idle")
+			p.node.play("Talking")
 			if p.talk <= 0.0:
 				p.node.set_mode("none")
 				_apply(p, dt)
@@ -141,7 +143,7 @@ func _physics_process(dt: float) -> void:
 		if spd > 3.0:
 			p.node.play("Run", spd / 5.5)
 		else:
-			p.node.play("Walk", spd / 1.5)
+			p.node.play("WalkCiv", spd / 1.35)
 
 func _knock(p: Ped, vel: Vector3) -> void:
 	p.down = 25.0

@@ -491,13 +491,13 @@ func _process(dt: float) -> void:
 		radio_t = m[2]
 		radio_box.visible = true
 		Sfx.play("radio", -8.0)
-		if main and main.has_method("on_radio_line"):
-			main.on_radio_line(m[0], m[1])
 		# people next to you are heard directly; everyone else comes over the radio
 		var near: bool = main and (main.cutscene_t > 0.0 or m[0] in ["الصقر ١", "مواطن", "رهينة", "المراسلة", "مسلّح", main.LEADER])
 		var vdur := Voice.say(m[0], m[1], near)
 		if vdur > 0.0:
 			radio_t = maxf(m[2], vdur + 0.3)
+		if main and main.has_method("on_radio_line"):
+			main.on_radio_line(m[0], m[1], radio_t)
 	# banner
 	if banner_t > 0.0:
 		banner_t -= udt
