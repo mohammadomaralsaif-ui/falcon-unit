@@ -20,6 +20,7 @@ var flip_t := 0.0
 var speed_kmh := 0.0
 var _flash_t := 0.0
 var prev_vel := Vector3.ZERO
+var prev_ang := Vector3.ZERO
 var crash_cd := 0.0
 var health := 100.0
 var smoke_t := 0.0
@@ -166,11 +167,25 @@ func _physics_process(dt: float) -> void:
 			siren_snd.stop()
 	# --- crashes: sudden change of velocity while touching something
 	var dv := (prev_vel - v).length()
+	var vs_car := false
+	for cb in get_colliding_bodies():
+		if cb.has_meta("traffic_speed"):
+			vs_car = true
+			if main and main.traffic:
+				main.traffic.shove(cb, global_position, prev_vel)      # keep bulldozing it out of the way
+	if vs_car:
+		# eight tonnes of armour against a family car: contact with it hardly changes our motion
+		# (traffic cars are kinematic, so without this they would shove the truck like a bulldozer)
+		var keep := prev_vel.lerp(v, 0.06)
+		linear_velocity = Vector3(keep.x, v.y, keep.z)
+		angular_velocity = prev_ang.lerp(angular_velocity, 0.12)
+		v = linear_velocity
 	prev_vel = v
+	prev_ang = angular_velocity
 	crash_cd -= dt
 	if dv > 3.2 and crash_cd <= 0.0 and get_contact_count() > 0:
 		crash_cd = 0.35
-		_crash(dv)
+		_crash(minf(dv, 7.0) if vs_car else dv, 0.12 if vs_car else 1.0)
 	# --- damage smoke
 	if health < 70.0:
 		smoke_t -= dt
@@ -299,7 +314,8 @@ func _process(dt: float) -> void:
 	cam.fov = lerpf(cam.fov, 68.0 + clampf(speed_kmh / 110.0, 0.0, 1.0) * 14.0, 1.0 - exp(-dt * 3.0))
 
 ## Teammate at the wheel: steer along the route, keep ~45 km/h, slow for corners and anything in the way.
-var dodge_side := -1.0
+var dodge_side := 1.0
+var last_stuck := -100.0
 
 func _auto_input() -> Vector2:
 	if route_i >= route.size():
@@ -318,7 +334,10 @@ func _auto_input() -> Vector2:
 			stuck_t = 0.0
 			unstick_t = 1.4
 			dodge_t = 7.0
-			dodge_side = -dodge_side
+			# go round on the road-centre side; only try the kerb side if that failed a moment ago
+			var now := Time.get_ticks_msec() * 0.001
+			dodge_side = -dodge_side if now - last_stuck < 14.0 else 1.0
+			last_stuck = now
 			Sfx.play_3d("horn", global_position, 2.0)
 	else:
 		stuck_t = 0.0
@@ -359,25 +378,37 @@ func _auto_input() -> Vector2:
 
 func _on_body_entered(b: Node) -> void:
 	# hitting a moving civilian car (kinematic) or a lamp post: judge by our own speed
+	if b is AnimatableBody3D and b.has_meta("traffic_speed") and main and main.traffic:
+		# an armoured truck against a family car: whoever ran into whom, the car comes off worse —
+		# it is thrown aside, we keep rolling and take a scratch
+		var car_v: Vector3 = b.global_transform.basis.z * float(b.get_meta("traffic_speed"))
+		var rel_t := (prev_vel - car_v).length()
+		if rel_t < 1.5:
+			return
+		var mine := prev_vel.length() > 2.5
+		var away: Vector3 = b.global_position - global_position
+		away.y = 0
+		main.traffic.on_hit(b, maxf(rel_t, 3.0), prev_vel.normalized() if mine else away.normalized(), not mine)
+		linear_velocity = prev_vel * (0.9 if mine else 1.0)
+		angular_velocity = prev_ang
+		if crash_cd <= 0.0 and rel_t > 3.0:
+			crash_cd = 0.35
+			_crash(rel_t * 0.85, 0.35 if mine else 0.12)
+		return
 	if crash_cd > 0.0 or speed_kmh < 9.0:
 		return
-	var other_v := Vector3.ZERO
-	if b is AnimatableBody3D and b.has_meta("traffic_speed"):
-		other_v = b.global_transform.basis.z * float(b.get_meta("traffic_speed"))
-	var rel := (linear_velocity - other_v).length()
+	var rel := linear_velocity.length()
 	if rel < 3.0:
 		return
 	crash_cd = 0.35
-	var hit_dir := prev_vel.normalized()
-	if b is AnimatableBody3D and main and main.traffic and b.has_meta("traffic_speed"):
-		# an armoured truck against a family car: the car flies, the truck barely slows
-		_crash(rel * 0.85, 0.45)
-		main.traffic.on_hit(b, rel, hit_dir)
-		linear_velocity = prev_vel * 0.82
-	else:
-		_crash(rel * 0.85)
+	_crash(rel * 0.85)
 
 func _crash(dv: float, dmg_scale := 1.0) -> void:
+	if OS.has_environment("FALCON_PROFILE"):
+		var names := []
+		for cb in get_colliding_bodies():
+			names.append(cb.name if not cb.has_meta("traffic_speed") else "TRAFFIC")
+		print("CRASH dv=", snappedf(dv, 0.1), " scale=", dmg_scale, " at ", global_position.snapped(Vector3.ONE), " with ", names)
 	var power := clampf(dv / 14.0, 0.15, 1.0)
 	Sfx.play_3d("crash" if power > 0.45 else "crash_small", global_position, lerpf(0.0, 10.0, power), randf_range(0.9, 1.1))
 	if power > 0.35:

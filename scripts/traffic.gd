@@ -8,6 +8,7 @@ var cars: Array = []
 var blocked := {}  # "i,j>i2,j2" road segments closed by the police cordon
 
 const LANE := 2.3
+const PULL := 1.5        # how far a car moves toward the kerb when it pulls over
 const SPEED := 10.0
 
 class Car:
@@ -23,13 +24,15 @@ class Car:
 	var snd: AudioStreamPlayer3D
 	var honk_cd := 0.0
 	var hit_t := 0.0
-	var yield_k := 0.0
 	var push := Vector3.ZERO     # shoved by an impact: slides, spins, may end up wrecked
 	var spin := 0.0
 	var wrecked := 0.0           # >0: knocked out (seconds left before it is towed / recycled)
 	var smoke_t := 0.0
 	var off := Vector3.ZERO      # how far the crash knocked it out of its lane (steered back once it drives on)
 	var off_yaw := 0.0
+	var pull := 0.0              # 0..1: moved over to the kerb to let the siren through
+	var pull_yaw := 0.0
+	var hold := false            # waiting at the stop line for the unit's truck to cross
 
 func setup(_city: Node, count: int) -> void:
 	city = _city
@@ -78,12 +81,14 @@ func setup(_city: Node, count: int) -> void:
 		cars.append(c)
 
 var main: Node
+var siren_idle := 0.0
 
 ## The player's truck rammed this civilian car: it is shoved along the impact, spins, and a hard
 ## hit leaves it wrecked and smoking in the road.
-func on_hit(body: Node, rel_speed: float, dir := Vector3.ZERO) -> void:
+func on_hit(body: Node, rel_speed: float, dir := Vector3.ZERO, bounce := false) -> void:
 	for c: Car in cars:
 		if c.body == body:
+			var car_speed: float = c.speed
 			c.hit_t = clampf(rel_speed * 0.6, 3.0, 9.0)
 			c.speed = 0.0
 			c.stuck = 0.0
@@ -98,15 +103,47 @@ func on_hit(body: Node, rel_speed: float, dir := Vector3.ZERO) -> void:
 			var side := away - d * away.dot(d)
 			if side.length() < 0.25:
 				side = Vector3.UP.cross(d) * (1.0 if randf() < 0.5 else -1.0)
-			d = (d * 0.55 + side.normalized() * 0.85).normalized()
+			if bounce:
+				# it drove into the truck: thrown straight back off it, clear of the bodywork at once
+				d = away.normalized()
+				c.off += d * 0.7
+				_place(c)
+			else:
+				d = (d * 0.55 + side.normalized() * 0.85).normalized()
 			c.push = d * clampf(rel_speed * 0.75, 2.5, 13.0)
 			c.spin = randf_range(-1.0, 1.0) * clampf(rel_speed * 0.18, 0.4, 2.4)
 			var own: float = maxf(main.vehicle.linear_velocity.length(), main.vehicle.prev_vel.length())
-			if rel_speed > 9.5 and own > 8.5:
+			if rel_speed > 9.5 and (own > 8.5 or car_speed > 7.5):
 				c.wrecked = 40.0
 				c.snd.stop()
 			Fx.particles(main, c.body.global_position + Vector3(0, 0.9, 0), Vector3.UP, "dust", 6)
 			Fx.particles(main, c.body.global_position + Vector3(0, 0.7, 0), -d.normalized() + Vector3.UP * 0.4, "spark", int(clampf(rel_speed * 2.0, 8, 30)))
+			return
+
+## The truck is still pressing against this car: it keeps sliding away, a little faster than the
+## truck is coming and off to whichever side it already is.
+func shove(body: Node, from: Vector3, vel: Vector3) -> void:
+	for c: Car in cars:
+		if c.body == body:
+			var away: Vector3 = c.body.global_position - from
+			away.y = 0
+			if away.length() < 0.01:
+				return
+			vel.y = 0
+			var n := away.normalized()
+			var along := vel.dot(n)
+			if along < 0.6:
+				return
+			var fwd := vel.normalized()
+			var side := away - fwd * away.dot(fwd)
+			if side.length() < 0.2:
+				side = Vector3.UP.cross(fwd)
+			side.y = 0
+			var want := n * (along + 1.0) + side.normalized() * maxf(4.0, along * 0.6)
+			if c.push.dot(n) < along + 1.0:
+				c.push = want
+			c.speed = 0.0
+			c.hit_t = maxf(c.hit_t, 3.0)
 			return
 
 func _far_from_player(p: Vector3, d: float) -> bool:
@@ -143,7 +180,8 @@ func _lane_pos(c: Car) -> Vector3:
 	var b := _node_pos(c.to)
 	var d := (b - a).normalized()
 	var right := Vector3(-d.z, 0, d.x)
-	return a.lerp(b, c.t) + right * LANE
+	var k := c.pull * c.pull * (3.0 - 2.0 * c.pull)
+	return a.lerp(b, c.t) + right * (LANE + PULL * k)
 
 func _place(c: Car) -> void:
 	var a := _node_pos(c.from)
@@ -151,15 +189,42 @@ func _place(c: Car) -> void:
 	var d := (b - a).normalized()
 	var p := _lane_pos(c)
 	var yaw := atan2(d.x, d.z)
-	c.body.global_transform = Transform3D(Basis(Vector3.UP, yaw + c.off_yaw), p + c.off)
+	c.body.global_transform = Transform3D(Basis(Vector3.UP, yaw + c.off_yaw + c.pull_yaw), p + c.off)
 
 func _physics_process(dt: float) -> void:
 	var space := get_world_3d().direct_space_state
+	# the unit's truck: everyone brakes for it; with the siren on they pull over or wait at the junction
+	var truck: Node3D = main.vehicle if (main and main.vehicle and is_instance_valid(main.vehicle)) else null
+	var tpos := Vector3.ZERO
+	var tfwd := Vector3.FORWARD
+	var siren := false
+	if truck:
+		tpos = truck.global_position
+		tfwd = truck.global_transform.basis.z
+		tfwd.y = 0
+		tfwd = tfwd.normalized()
+		siren = main.in_vehicle and truck.siren_on and not truck.broken
+		if siren and truck.linear_velocity.length() < 1.0:
+			siren_idle += dt
+		else:
+			siren_idle = 0.0
+		if siren_idle > 8.0:
+			siren = false          # parked with the siren on: traffic carefully carries on
 	for c: Car in cars:
 		# knocked about by a crash: slide and spin to a stop; wrecks sit there smoking
 		if c.push.length() > 0.15 or c.wrecked > 0.0:
 			c.off += c.push * dt
 			c.off_yaw += c.spin * dt
+			# it can be thrown onto the pavement, not through the shop fronts
+			var pa := _node_pos(c.from)
+			var pd := (_node_pos(c.to) - pa).normalized()
+			var pr := Vector3(-pd.z, 0, pd.x)
+			var lat := LANE + PULL * c.pull + c.off.dot(pr)
+			if absf(lat) > 5.7:
+				c.off -= pr * (lat - signf(lat) * 5.7)
+				c.push -= pr * c.push.dot(pr)
+				c.push *= 0.6
+				c.spin *= 0.5
 			_place(c)
 			c.push = c.push.move_toward(Vector3.ZERO, dt * 11.0)
 			c.spin = move_toward(c.spin, 0.0, dt * 2.2)
@@ -195,17 +260,42 @@ func _physics_process(dt: float) -> void:
 				var dist: float = (hit.position - p).length()
 				c.want = clampf((dist - 4.5) * 1.4, 0.0, c.max_speed)
 		var want: float = c.want
-		# siren behind them: drivers in the truck's lane speed up and clear the road (nobody ever
-		# stops dead for the siren — that only jams the junctions)
-		c.yield_k = 0.0
-		if main and main.in_vehicle and main.vehicle.siren_on:
-			var rel: Vector3 = c.body.global_position - main.vehicle.global_position
-			if rel.length() < 34.0:
-				var vf: Vector3 = main.vehicle.global_transform.basis.z
-				if vf.dot(rel.normalized()) > 0.6 and vf.dot(d) > 0.5:
-					c.yield_k = -1.0
-		if c.yield_k < 0.0:
-			want = maxf(want, minf(c.max_speed * 1.7, 19.0)) if c.want > 2.0 else want
+		var remain := (1.0 - c.t) * seg
+		var target_pull := 0.0
+		c.hold = false
+		if truck:
+			# never drive into the truck: brake if any part of it is in our path
+			var inv: Transform3D = c.body.global_transform.affine_inverse()
+			for k in [-2.2, 0.0, 2.2]:
+				var lp: Vector3 = inv * (tpos + tfwd * k)
+				if lp.z > 1.0 and lp.z < 13.0 and absf(lp.x) < 2.1:
+					want = minf(want, clampf((lp.z - 4.2) * 1.5, 0.0, c.max_speed))
+			if siren:
+				var rel: Vector3 = c.body.global_position - tpos
+				rel.y = 0
+				if rel.length() < 58.0:
+					var ahead := tfwd.dot(rel)
+					var side := absf(tfwd.x * rel.z - tfwd.z * rel.x)
+					if absf(tfwd.dot(d)) > 0.7:
+						# same street (either direction): over to the kerb and stop until it has passed
+						if side < 7.5 and ahead > -5.0:
+							target_pull = 1.0
+					elif ahead > 0.0:
+						# cross street: wait at the stop line if our junction is on the truck's way
+						var nrel := b - tpos
+						nrel.y = 0
+						var n_ahead := tfwd.dot(nrel)
+						var n_side := absf(tfwd.x * nrel.z - tfwd.z * nrel.x)
+						if n_side < 5.0 and n_ahead > -4.0 and n_ahead < 58.0 and remain > 9.5:
+							c.hold = true
+		if c.hold:
+			want = minf(want, clampf((remain - 10.5) * 1.2, 0.0, c.max_speed))
+		if target_pull > 0.5:
+			want = minf(want, 4.5) if c.pull < 0.98 else 0.0
+		var pull_before := c.pull
+		c.pull = move_toward(c.pull, target_pull, dt * (0.12 + c.speed / 7.0))
+		var lat := (c.pull - pull_before) / maxf(dt, 0.001) * PULL * 1.5
+		c.pull_yaw = lerpf(c.pull_yaw, -atan2(lat, maxf(c.speed, 2.0)), 1.0 - exp(-dt * 6.0))
 		if c.hit_t > 0.0:
 			# just got rammed: the driver stops, hazards on, leans on the horn
 			c.hit_t -= dt
@@ -214,7 +304,6 @@ func _physics_process(dt: float) -> void:
 				c.honk_cd = randf_range(1.2, 2.5)
 				Sfx.play_3d("horn", c.body.global_position, 0.0, randf_range(0.85, 1.1))
 		# slow for turns near the junction
-		var remain := (1.0 - c.t) * seg
 		if remain < 9.0:
 			want = minf(want, 6.0)
 		c.speed = move_toward(c.speed, want, dt * (30.0 if c.hit_t > 0.0 else (9.0 if want < c.speed else 3.0)))
@@ -223,7 +312,9 @@ func _physics_process(dt: float) -> void:
 			var k: float = clampf(c.speed / 4.0, 0.0, 1.0)
 			c.off = c.off.move_toward(Vector3.ZERO, dt * 1.6 * k)
 			c.off_yaw = move_toward(wrapf(c.off_yaw, -PI, PI), 0.0, dt * 0.9 * k)
-		if c.speed < 0.3:
+		if c.hold or target_pull > 0.5:
+			c.stuck = 0.0          # waiting on purpose, not jammed
+		elif c.speed < 0.3:
 			c.stuck += dt
 		else:
 			c.stuck = 0.0
@@ -250,6 +341,7 @@ func _physics_process(dt: float) -> void:
 			c.speed = 0.0
 			c.off = Vector3.ZERO
 			c.off_yaw = 0.0
+			c.pull = 0.0
 			_place(c)
 			continue
 		c.t += c.speed * dt / seg

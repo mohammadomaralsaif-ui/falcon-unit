@@ -116,26 +116,43 @@ func _kneel(sk: Skeleton3D) -> void:
 	hips.origin = _toS(hc)
 	sk.set_bone_global_pose(_bone("Hips"), hips)
 
-## Seated: hips drop to seat height, thighs point forward, shins hang down, hands rest on the knees.
+## Seated: the pelvis drops to `sit_h` above the floor, the feet stay planted on the floor in front
+## (two-bone leg IK, so nothing sinks through it), the back leans in, hands rest on the knees.
+var sit_h := 0.6        # pelvis height above the floor: 0.6 for a chair, ~0.45 for a low lounge sofa
+
 func _sit(sk: Skeleton3D) -> void:
 	var hi := _bone("Hips")
 	if hi < 0:
 		return
+	var feet := {}
+	for s in ["Left", "Right"]:
+		var f := _bone(s + "Foot")
+		if f >= 0:
+			feet[s] = _toC(sk.get_bone_global_pose(f).origin)
 	var hips := sk.get_bone_global_pose(hi)
 	var hc := _toC(hips.origin)
-	hc.y = lerpf(hc.y, 0.56, sit)
+	hc.y = lerpf(hc.y, sit_h, sit)
 	hc.z -= 0.1 * sit
 	hips.origin = _toS(hc)
 	sk.set_bone_global_pose(hi, hips)
-	for s in ["Left", "Right"]:
-		var x := 0.14 if s == "Left" else -0.14
-		_point(_bone(s + "UpLeg"), _bone(s + "Leg"), Vector3(x * sit, -1.0 + 0.92 * sit, 0.05 + 0.95 * sit))
-		_point(_bone(s + "Leg"), _bone(s + "Foot"), Vector3(0, -1, 0.1 * sit))
-		_point(_bone(s + "Foot"), _bone(s + "ToeBase"), Vector3(0, -0.25, 1))
+	var sp := _bone("Spine")
+	if sp >= 0:
+		var g := sk.get_bone_global_pose(sp)
+		g.basis = Basis(_dirS(Vector3(1, 0, 0)), 0.2 * sit) * g.basis
+		sk.set_bone_global_pose(sp, g)
+	for s in feet:
+		var x := 0.13 if s == "Left" else -0.13
+		var stand: Vector3 = feet[s]
+		var seated := Vector3(x, maxf(stand.y, 0.07), hc.z + 0.56)
+		_leg_ik(s, _toS(stand.lerp(seated, sit)), _dirS(Vector3(x * 0.5, 0.8, 1.0)))
 	if mode == "none" and sit > 0.6:
-		var hip := _toC(sk.get_bone_global_pose(hi).origin)
-		_ik("Right", _toS(hip + Vector3(-0.16, 0.14, 0.36)), Vector3(-1, -0.4, -0.3))
-		_ik("Left", _toS(hip + Vector3(0.16, 0.14, 0.36)), Vector3(1, -0.4, -0.3))
+		for s in ["Left", "Right"]:
+			var kb := _bone(s + "Leg")
+			if kb < 0:
+				continue
+			var knee := _toC(sk.get_bone_global_pose(kb).origin)
+			var sx := 1.0 if s == "Left" else -1.0
+			_ik(s, _toS(knee + Vector3(sx * 0.02, 0.08, -0.04)), Vector3(sx, -0.4, -0.3))
 
 func _crouch(sk: Skeleton3D) -> void:
 	var hi := _bone("Hips")

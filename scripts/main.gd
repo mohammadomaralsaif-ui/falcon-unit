@@ -403,7 +403,7 @@ func _environment() -> void:
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()
 	var sky_kind: String = M.get("sky", "golden")
-	sm.sky_top_color = {"golden": Color(0.24, 0.42, 0.68), "night": Color(0.01, 0.015, 0.05), "morning": Color(0.3, 0.52, 0.85)}[sky_kind]
+	sm.sky_top_color = {"golden": Color(0.24, 0.42, 0.68), "night": Color(0.02, 0.03, 0.09), "morning": Color(0.3, 0.52, 0.85)}[sky_kind]
 	sm.sky_horizon_color = {"golden": Color(0.93, 0.76, 0.56), "night": Color(0.12, 0.1, 0.16), "morning": Color(0.78, 0.84, 0.9)}[sky_kind]
 	sm.ground_horizon_color = Color(0.75, 0.62, 0.5) if sky_kind != "night" else Color(0.08, 0.07, 0.08)
 	sm.ground_bottom_color = Color(0.3, 0.26, 0.22) if sky_kind != "night" else Color(0.02, 0.02, 0.03)
@@ -412,8 +412,11 @@ func _environment() -> void:
 	sky.sky_material = sm
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = {"golden": 0.7, "night": 0.45, "morning": 0.8}[sky_kind]
+	# a neutral fill colour instead of the raw sky: shaded streets stay readable (the sky alone turned
+	# every shadow deep blue by day and pitch black at night)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = {"golden": Color(0.78, 0.72, 0.68), "night": Color(0.34, 0.4, 0.6), "morning": Color(0.74, 0.77, 0.84)}[sky_kind]
+	env.ambient_light_energy = {"golden": 0.8, "night": 1.0, "morning": 0.85}[sky_kind]
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 1.05
@@ -428,7 +431,7 @@ func _environment() -> void:
 	env.fog_aerial_perspective = 0.4
 	env.fog_sky_affect = 0.25
 	env.adjustment_enabled = true
-	env.adjustment_contrast = 1.08
+	env.adjustment_contrast = 1.03
 	env.adjustment_saturation = 1.05
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -436,11 +439,12 @@ func _environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = {"golden": Vector3(-24, -128, 0), "night": Vector3(-55, 40, 0), "morning": Vector3(-42, 70, 0)}[sky_kind]
 	sun.light_color = {"golden": Color(1.0, 0.84, 0.64), "night": Color(0.55, 0.65, 1.0), "morning": Color(1.0, 0.96, 0.88)}[sky_kind]
-	sun.light_energy = {"golden": 1.5, "night": 0.22, "morning": 1.35}[sky_kind]
+	sun.light_energy = {"golden": 1.5, "night": 0.5, "morning": 1.35}[sky_kind]
+	sun.shadow_opacity = 0.82
 	if sky_kind == "night":
 		env.glow_intensity = 0.9
 		env.glow_hdr_threshold = 0.9
-		env.tonemap_exposure = 1.25
+		env.tonemap_exposure = 1.15
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 70.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
@@ -506,7 +510,7 @@ func _start_intro() -> void:
 	if city.hq_pos != Vector3.INF:
 		_build_ops_room()
 		var hp: Vector3 = city.hq_pos
-		intro_shots.push_front([hp + Vector3(4.6, 1.75, -3.4), hp + Vector3(3.9, 1.6, -2.6), hp + Vector3(1.6, 1.15, -0.5), 8.0])
+		intro_shots.push_front([hp + Vector3(4.7, 2.2, -3.5), hp + Vector3(4.0, 2.0, -2.8), hp + Vector3(1.6, 1.5, -0.6), 8.0])
 	else:
 		intro_shots.push_front(intro_shots[0])
 	intro_i = -1
@@ -521,7 +525,7 @@ func _build_ops_room() -> void:
 	if not hq_set.is_empty():
 		return
 	var hp: Vector3 = city.hq_pos
-	var fl := 0.3
+	var fl := 0.73        # the office model's real floor (slab + rug) — measured, not the street level
 	var screen := MeshInstance3D.new()
 	var qm := BoxMesh.new(); qm.size = Vector3(0.08, 1.7, 3.0)
 	screen.mesh = qm
@@ -562,13 +566,14 @@ func _build_ops_room() -> void:
 	hq_set.append(ops_officer)
 	ops_team.clear()
 	# sofa seats: [position, facing]
-	var seats := [[Vector3(1.32, fl, -1.05), -PI / 2], [Vector3(1.32, fl, -0.3), -PI / 2], [Vector3(2.05, fl, -1.62), PI], [Vector3(1.32, fl, 0.45), -PI / 2]]
+	var seats := [[Vector3(1.2, fl, -1.15), -PI / 2], [Vector3(1.2, fl, -0.45), -PI / 2], [Vector3(2.15, fl, -1.75), PI], [Vector3(1.2, fl, 0.14), -PI / 2], [Vector3(1.9, fl, 0.62), 0.0]]
 	for i in mini(seats.size(), 1 + team_size):
 		var p := Person.new("swat", 1 if i == 0 else 300 + i)
 		add_child(p)
 		p.global_position = hp + (seats[i][0] as Vector3)
 		p.rotation.y = float(seats[i][1])
 		p.set_mode("none")
+		p.pose.sit_h = 0.45        # low lounge sofa
 		p.set_sit(1.0)
 		hq_set.append(p)
 		ops_team.append(p)
@@ -581,7 +586,7 @@ func _ops_scramble() -> void:
 	if phase != "intro" or intro_i != 0:
 		return
 	if ops_officer and is_instance_valid(ops_officer):
-		ops_officer.pose.point_at = city.hq_pos + Vector3(5.0, 1.8, -0.6)
+		ops_officer.pose.point_at = city.hq_pos + Vector3(5.0, 2.25, -0.6)
 		ops_officer.set_mode("point")
 	for i in ops_team.size():
 		var p: Node3D = ops_team[i]
@@ -590,7 +595,8 @@ func _ops_scramble() -> void:
 		var tw := create_tween()
 		tw.tween_interval(i * 0.25)
 		tw.tween_method(p.set_sit, 1.0, 0.0, 0.7)
-		tw.parallel().tween_property(p, "global_position", p.global_position + Vector3(0.45, 0, 0.0) if absf(p.rotation.y + PI / 2) < 0.1 else p.global_position + Vector3(0, 0, 0.45), 0.7)
+		# a step forward, away from the seat (model forward is -Z)
+		tw.parallel().tween_property(p, "global_position", p.global_position - p.global_transform.basis.z * 0.35, 0.7)
 		tw.tween_callback(func():
 			p.set_mode("rifle")
 			p.set_aim(-0.6))        # rifles at low ready, not pointed at each other
@@ -682,12 +688,13 @@ func _start_auto_drive() -> void:
 	var sp: Vector3 = vehicle.global_position
 	var zs: float = city.road_center(city.bank_block.y + 1)
 	var east := cp.x > sp.x
-	var lane := 2.3 if east else -2.3
+	# siren on: the truck runs nearer the middle of the road, past the cars that pulled over
+	var lane := 1.5 if east else -1.5
 	var sx := 1.0 if east else -1.0
-	var lane_x: float = city.road_center(1) + 2.2
-	sp = Vector3(lane_x, 0, sp.z)
-	# swing a little wide before the corner, then settle into the right-hand lane
-	vehicle.route = [Vector3(lane_x + 2.5, 0, city.size_total - 4.5), Vector3(lane_x, 0, city.size_total - 12.0), Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 12.0, 0, zs + lane)]
+	var lane_x: float = city.road_center(1) + 1.5
+	sp = Vector3(city.road_center(1) + 2.2, 0, sp.z)
+	# swing a little wide before the corner, then settle into the lane
+	vehicle.route = [Vector3(lane_x + 3.2, 0, city.size_total - 4.5), Vector3(lane_x, 0, city.size_total - 12.0), Vector3(sp.x - sx * 2.0, 0, zs + 6.0), Vector3(sp.x + sx * 6.0, 0, zs - 1.5), Vector3(sp.x + sx * 15.0, 0, zs + lane), Vector3(cp.x - sx * 12.0, 0, zs + lane)]
 	vehicle.route_i = 0
 	vehicle.auto_drive = true
 	hud.set_objectives(["◆ الصقر ٢ بيسوق للموقع – %s" % M.title, "◇ اضغط [فرامل/قفز] أو حرّك العصا لتاخذ القيادة"])
@@ -1049,8 +1056,8 @@ func _process(dt: float) -> void:
 			var hp: Vector3 = city.hq_pos
 			cine_cam.far = 60.0
 			cine_cam.fov = 50.0
-			cine_cam.global_position = hp + Vector3(4.9 + sin(cine_t * 0.12) * 0.5, 1.75, -3.3 + cos(cine_t * 0.1) * 0.4)
-			cine_cam.look_at(hp + Vector3(1.6, 1.1, -0.5))
+			cine_cam.global_position = hp + Vector3(4.9 + sin(cine_t * 0.12) * 0.5, 2.2, -3.4 + cos(cine_t * 0.1) * 0.4)
+			cine_cam.look_at(hp + Vector3(1.6, 1.5, -0.6))
 			cine_cam.h_offset = 1.15      # keeps the team in the left half, clear of the menu panel
 		else:
 			var c: Vector3 = city.door_pos

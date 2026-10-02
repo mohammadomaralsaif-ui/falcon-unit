@@ -194,8 +194,8 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0.32, 0.22, 0.17); m.roughness = 0.95
 		"granite":
 			m.albedo_texture = _img_tex(128, 128, func(img):
-				img.fill(Color(0.2, 0.2, 0.21))
-				_speckle(img, 4000, [Color(0.13, 0.13, 0.14), Color(0.32, 0.31, 0.3), Color(0.42, 0.4, 0.38)], 1)
+				img.fill(Color(0.36, 0.36, 0.38))
+				_speckle(img, 4000, [Color(0.26, 0.26, 0.28), Color(0.48, 0.47, 0.46), Color(0.58, 0.56, 0.54)], 1)
 				img.fill_rect(Rect2i(0, 0, 128, 1), Color(0.08, 0.08, 0.08)); img.fill_rect(Rect2i(0, 0, 1, 128), Color(0.08, 0.08, 0.08)))
 			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.4, 0.4, 0.4)
 			m.roughness = 0.22; m.metallic = 0.1
@@ -1254,7 +1254,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	for i in 6:
 		var ol := OmniLight3D.new()
 		ol.light_color = {"bank": Color(1, 0.93, 0.82), "apartment": Color(1, 0.8, 0.58), "mall": Color(0.95, 0.97, 1.0)}[style]
-		ol.light_energy = {"bank": 2.3, "apartment": 1.7, "mall": 2.6}[style]
+		ol.light_energy = {"bank": 1.6, "apartment": 1.25, "mall": 0.95}[style]
 		ol.omni_range = 17.0
 		ol.omni_attenuation = 0.7
 		ol.position = bank_origin + Vector3(cols * CELL * (0.18 + (i % 3) * 0.32), 3.6, rows * CELL * (0.28 if i < 3 else 0.72))
@@ -1265,7 +1265,7 @@ func _bank_block(bi: int, bj: int) -> void:
 	rp.interior = true
 	rp.ambient_mode = ReflectionProbe.AMBIENT_COLOR
 	rp.ambient_color = Color(0.55, 0.5, 0.44)
-	rp.ambient_color_energy = 1.5
+	rp.ambient_color_energy = {"bank": 1.1, "apartment": 1.0, "mall": 0.7}.get(style, 1.0)
 	rp.update_mode = ReflectionProbe.UPDATE_ONCE
 	add_child(rp)
 	cordon_point = door_pos + Vector3(0, 0, 14.0)
