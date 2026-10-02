@@ -6,6 +6,7 @@ static var _loaded := false
 static var quality := 1        # 0 خفيف · 1 متوسط · 2 عالي
 static var driver := 0         # 0 = the player drives · 1 = a teammate drives (auto-drive to the scene)
 static var voice := true
+static var autofire := false   # sights on a gunman while aiming = the weapon fires by itself (on by default on phones)
 
 const QUALITY_NAMES := ["خفيفة", "متوسطة", "عالية"]
 
@@ -15,11 +16,13 @@ static func load_all() -> void:
 	_loaded = true
 	var mobile := OS.has_feature("mobile")
 	quality = 1 if mobile else 2
+	autofire = mobile
 	var cf := ConfigFile.new()
 	if cf.load(SAVE) == OK:
 		quality = clampi(int(cf.get_value("settings", "quality", quality)), 0, 2)
 		driver = clampi(int(cf.get_value("settings", "driver", 0)), 0, 1)
 		voice = bool(cf.get_value("settings", "voice", true))
+		autofire = bool(cf.get_value("settings", "autofire", autofire))
 	if OS.has_environment("FALCON_QUALITY"):
 		quality = clampi(int(OS.get_environment("FALCON_QUALITY")), 0, 2)
 
@@ -29,6 +32,7 @@ static func save() -> void:
 	cf.set_value("settings", "quality", quality)
 	cf.set_value("settings", "driver", driver)
 	cf.set_value("settings", "voice", voice)
+	cf.set_value("settings", "autofire", autofire)
 	cf.save(SAVE)
 
 static func traffic_count() -> int:

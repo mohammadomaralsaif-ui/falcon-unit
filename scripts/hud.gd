@@ -256,7 +256,17 @@ func _build_hud() -> void:
 		var c := Color(1, 0.25, 0.2) if hit_kill else Color.WHITE
 		c.a = clampf(hit_t * 4.0, 0, 1)
 		for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
-			hitmark.draw_line(d * 7, d * 15, c, 3))
+			hitmark.draw_line(d * 7, d * 15, c, 3)
+		# where the fire is coming from: a red arc on that side of the crosshair
+		if dmg_t > 0.0 and dmg_from != null and is_instance_valid(dmg_from):
+			var cam := get_viewport().get_camera_3d()
+			if cam:
+				var to: Vector3 = dmg_from.global_position - cam.global_position
+				var ang := atan2(to.dot(cam.global_basis.x), to.dot(-cam.global_basis.z))
+				var mid := -PI * 0.5 + ang
+				var rc := Color(1, 0.15, 0.1, clampf(dmg_t * 1.4, 0.0, 0.85))
+				hitmark.draw_arc(Vector2.ZERO, 92.0, mid - 0.38, mid + 0.38, 16, rc, 7.0, true)
+				hitmark.draw_arc(Vector2.ZERO, 104.0, mid - 0.2, mid + 0.2, 10, rc, 4.0, true))
 	root.add_child(hitmark)
 	# health + ammo (bottom)
 	var bl := VBoxContainer.new(); bl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -270,17 +280,17 @@ func _build_hud() -> void:
 	hp_bar.add_theme_stylebox_override("background", bg); hp_bar.add_theme_stylebox_override("fill", fg)
 	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bl.add_child(hp_bar)
-	ammo_lbl = _label("", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+	ammo_lbl = _label("", 32, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	ammo_lbl.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	ammo_lbl.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	ammo_lbl.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	ammo_lbl.position = Vector2(-30, -30)
+	ammo_lbl.position = Vector2(-30, -20)
 	root.add_child(ammo_lbl)
-	speed_lbl = _label("", 54, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+	speed_lbl = _label("", 34, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	speed_lbl.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	speed_lbl.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	speed_lbl.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	speed_lbl.position = Vector2(-30, -30)
+	speed_lbl.position = Vector2(-30, -22)
 	root.add_child(speed_lbl)
 	# waypoint
 	waypoint = Control.new(); waypoint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -295,7 +305,7 @@ func _build_hud() -> void:
 	waypoint.add_child(wp_lbl)
 
 # ------------------------------------------------------------------ public API
-const TOUCH_HINTS := {"[E]": "(زر تفاعل)", "[F]": "(زر سيارة)", "[H]": "(زر صفارة)", "[Q]": "(زر استسلم!)", "[R]": "(زر تعبئة)", "[X]": "(زر سلاح)", "[G]": "(زر فلاش)", "[C]": "(زر انحناء)", "[T]": "(زر أوامر)"}
+const TOUCH_HINTS := {"[E] ": "", " [E]": "", "[E]": "", "[F] ": "", " [F]": "", "[F]": "", "[H]": "(زر صفارة)", "[Q]": "(الزر الأزرق)", "[R]": "(زر تعبئة)", "[X]": "(زر تبديل)", "[G]": "(زر فلاش)", "[C]": "(زر انحناء)", "[T]": "(زر الأوامر)", "[فرامل/قفز]": "زر الفرامل", "[زر يمين / تصويب]": "زر التصويب:"}
 
 ## On phones, replace keyboard key hints with the on-screen button names.
 func _touchify(t: String) -> String:
@@ -303,7 +313,7 @@ func _touchify(t: String) -> String:
 		return t
 	for k in TOUCH_HINTS:
 		t = t.replace(k, TOUCH_HINTS[k])
-	return t.replace("اضغط E", "اضغط زر التفاعل")
+	return t.replace("اضغط E", "اضغط الزر الأزرق")
 
 func set_objectives(lines: Array) -> void:
 	objectives.text = _touchify("\n".join(lines))
@@ -327,7 +337,10 @@ func show_banner(text: String, sub := "", dur := 3.0) -> void:
 	tw.tween_property(banner, "modulate:a", 1.0, 0.25)
 	tw.parallel().tween_property(banner_sub, "modulate:a", 1.0, 0.4)
 
+var prompt_raw := ""
+
 func set_prompt(text: String) -> void:
+	prompt_raw = text
 	prompt.text = _touchify(text)
 	# the "tap to skip" hint sits down in the letterbox bar, clear of the subtitles
 	var skip := text.contains("للتخطّي")
@@ -360,8 +373,35 @@ func white_flash(amount: float) -> void:
 	tw.tween_property(_white, "color:a", 0.0, 2.5 * amount + 0.3)
 	Sfx.play("beep", -12.0, 3.0)
 
-func damage_flash() -> void:
+var dmg_from: Node3D
+var dmg_t := 0.0
+
+func damage_flash(from: Node3D = null) -> void:
 	vig_a = minf(vig_a + 0.45, 1.0)
+	if from:
+		dmg_from = from
+		dmg_t = 1.4
+	if Controls.is_touch:
+		Input.vibrate_handheld(60)
+
+## Short gold line under the crosshair that floats up and fades: "تحييد", "اعتقال", "رهينة محرّرة"…
+func feed(text: String, col := GOLD) -> void:
+	var l := _label(text, 22, col)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	l.add_theme_constant_override("shadow_offset_x", 1)
+	l.add_theme_constant_override("shadow_offset_y", 1)
+	l.set_anchors_preset(Control.PRESET_CENTER)
+	l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	l.offset_top = 46.0 + _feed_n * 26.0
+	l.offset_bottom = l.offset_top + 28.0
+	root.add_child(l)
+	_feed_n = (_feed_n + 1) % 3
+	var tw := l.create_tween()
+	tw.tween_property(l, "position:y", l.position.y - 26.0, 1.3)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 1.3).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.tween_callback(l.queue_free)
+
+var _feed_n := 0
 
 func set_waypoint(p) -> void:
 	wp_target = p
@@ -416,6 +456,7 @@ func _process(dt: float) -> void:
 			tw.parallel().tween_property(banner_sub, "modulate:a", 0.0, 0.6)
 	countdown_lbl.pivot_offset = countdown_lbl.size * 0.5
 	hit_t = maxf(hit_t - udt, 0.0)
+	dmg_t = maxf(dmg_t - udt, 0.0)
 	hitmark.queue_redraw()
 	vig_a = maxf(vig_a - udt * 0.6, 0.0)
 	if not main:
@@ -476,12 +517,10 @@ func _process(dt: float) -> void:
 			Controls.reset()
 		touch_root.visible = show_touch
 		_layout_touch()
-		var near_car: bool = in_car or (pl.global_position.distance_to(main.vehicle.global_position) < 4.5)
+		var act := _action_now(in_car)
 		for k in touch_buttons:
 			var b: TouchScreenButton = touch_buttons[k]
 			match k:
-				"siren":
-					b.visible = in_car
 				"fire", "aim", "reload", "switch", "crouch":
 					b.visible = not in_car
 					if k == "aim":
@@ -489,23 +528,26 @@ func _process(dt: float) -> void:
 						b.get_child(0).text = "إنزال" if Controls.aim_toggle else "تصويب"
 					if k == "crouch":
 						b.get_child(0).text = "وقوف" if pl.crouch else "انحناء"
+				"action":
+					b.visible = not act.is_empty()
+					if b.visible:
+						if b.action != act[0] and not b.is_pressed():
+							b.action = act[0]
+						b.get_child(0).text = act[1]
 				"orders":
 					b.visible = not in_car and main.team.any(func(t): return not t.dead and t.visible)
 					b.get_child(0).text = "اقتحموا" if main.phase == "staging" else {"follow": "اثبتوا", "hold": "تقدّموا", "assault": "اتبعوني"}[main.team_order]
-				"yell":
-					b.visible = not in_car and main.phase == "assault"
-				"interact":
-					b.visible = in_car or (prompt.text != "" and not prompt.text.contains("سيارة"))
-					b.get_child(0).text = "زامور" if in_car else "تفاعل"
-				"vehicle":
-					b.visible = near_car
-				"jump":
-					b.visible = true
-					b.get_child(0).text = "فرامل" if in_car else "قفز"
-				"pause":
-					b.visible = true
 				"flash":
 					b.visible = not in_car and main.phase in ["staging", "breach", "assault"] and main.flashbangs > 0
+					b.get_child(0).text = "فلاش %d" % main.flashbangs
+				"jump", "siren", "interact":
+					b.visible = in_car
+				"pause":
+					b.visible = true
+		# on a phone the ACTION button already says what to do: keep the centre text short and small
+		prompt.visible = not (prompt_raw.begins_with("[F]") and not in_car)
+		if Controls.aim_toggle and (in_car or not pl.alive):
+			Controls.aim_toggle = false
 
 func _draw_minimap() -> void:
 	if not main or not main.city:
@@ -670,11 +712,14 @@ func show_briefing(on_start: Callable) -> void:
 		Settings.quality = v
 		Settings.save()
 		main.apply_quality())
+	_choice_row(vb, "إطلاق تلقائي لما التصويب يجي على مسلّح", [["إيقاف", false], ["تشغيل", true]], Settings.autofire, func(v):
+		Settings.autofire = v
+		Settings.save())
 	_choice_row(vb, "الكلام الصوتي", [["إيقاف", false], ["تشغيل", true]], Settings.voice, func(v):
 		Settings.voice = v
 		Voice.enabled = v
 		Settings.save())
-	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · C انحناء · T أوامر · X سلاح" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر · اسحب هالقائمة لفوق وتحت"
+	var hint := "تحكم: WASD حركة · الفأرة نظر/إطلاق · F ركوب/نزول · E تفاعل · Q استسلام · G قنبلة صوتية · R تعبئة · C انحناء · T أوامر · X سلاح" if not Controls.is_touch else "عصا يسار للحركة · اسحب يمين للنظر · الزر الأزرق بتغيّر حسب الموقف · اسحب هالقائمة لفوق وتحت"
 	var hl := _label(hint, 14, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_RIGHT)
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hl.custom_minimum_size.x = 520
@@ -763,11 +808,19 @@ func show_result(win: bool, title: String, lines: Array, rating: String) -> void
 			get_tree().reload_current_scene(), 28)
 		nxt.custom_minimum_size = Vector2(0, 60)
 		vb.add_child(nxt)
-	var again := _button("إعادة المهمة", func():
+	if not win and main and main.talked and not main.sniper_mission:
+		var cpb := _button("كمّل من نقطة الاقتحام  ◀", func():
+			Engine.time_scale = 1.0
+			Missions.autostart = true
+			Missions.checkpoint = true      # no opening, no drive: back at the cordon, ready to breach
+			get_tree().reload_current_scene(), 28)
+		cpb.custom_minimum_size = Vector2(0, 60)
+		vb.add_child(cpb)
+	var again := _button("إعادة المهمة من الأول", func():
 		Engine.time_scale = 1.0
 		Missions.autostart = true
-		get_tree().reload_current_scene(), 26)
-	again.custom_minimum_size = Vector2(0, 54)
+		get_tree().reload_current_scene(), 24)
+	again.custom_minimum_size = Vector2(0, 50)
 	vb.add_child(again)
 	var menu := _button("قائمة المهمات", func():
 		Engine.time_scale = 1.0
@@ -790,10 +843,12 @@ func _circle_tex(r: int, fill: Color, ring: Color) -> ImageTexture:
 func _build_touch() -> void:
 	touch_root = Node2D.new()
 	add_child(touch_root)
+	# fewer, context-aware buttons: one ACTION button changes with what is in front of you
+	# (talk / plant / cuff / free / board / shout), tactics sit on the left, shooting on the right
 	var specs := {
-		"fire": ["نار", 70], "aim": ["تصويب", 46], "reload": ["تعبئة", 38], "jump": ["قفز", 40],
-		"interact": ["تفاعل", 44], "vehicle": ["سيارة", 40], "yell": ["استسلم!", 42], "siren": ["صفارة", 38],
-		"pause": ["II", 26], "flash": ["فلاش", 36], "switch": ["سلاح", 34], "crouch": ["انحناء", 36], "orders": ["اثبتوا", 34],
+		"fire": ["نار", 60], "aim": ["تصويب", 42], "action": ["", 42], "reload": ["تعبئة", 30],
+		"crouch": ["انحناء", 30], "switch": ["تبديل", 26], "orders": ["اثبتوا", 32], "flash": ["فلاش", 30],
+		"jump": ["فرامل", 50], "siren": ["صفارة", 32], "interact": ["زامور", 32], "pause": ["II", 22],
 	}
 	for k in specs:
 		var r: int = specs[k][1]
@@ -808,10 +863,13 @@ func _build_touch() -> void:
 			b.pressed.connect(Controls.toggle_aim)
 			b.set_meta("tex_off", b.texture_normal)
 			b.set_meta("tex_on", _circle_tex(r, Color(0.96, 0.8, 0.35, 0.6), Color(1, 1, 1, 0.9)))
+		elif k == "action":
+			b.action = "interact"
+			b.texture_normal = _circle_tex(r, Color(0.1, 0.3, 0.5, 0.55), Color(0.6, 0.85, 1.0, 0.85))
 		else:
 			b.action = k
 		b.passby_press = k == "fire"
-		var l := _label(specs[k][0], 18 if r < 50 else 24)
+		var l := _label(specs[k][0], 15 if r < 36 else (18 if r < 55 else 24))
 		l.size = Vector2(r * 2, r * 2)
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		b.add_child(l)
@@ -830,20 +888,40 @@ func _build_touch() -> void:
 
 func _layout_touch() -> void:
 	var vs := root.size
+	var car: bool = main != null and main.in_vehicle
 	var place := {
-		"fire": Vector2(vs.x - 120, vs.y - 150), "aim": Vector2(vs.x - 250, vs.y - 110),
-		"reload": Vector2(vs.x - 110, vs.y - 300), "jump": Vector2(vs.x - 240, vs.y - 240),
-		"interact": Vector2(vs.x - 380, vs.y - 110), "vehicle": Vector2(vs.x - 380, vs.y - 230),
-		"yell": Vector2(vs.x - 250, vs.y - 370), "siren": Vector2(vs.x - 120, vs.y - 150),
-		"pause": Vector2(vs.x * 0.5 + 200, 34), "flash": Vector2(vs.x - 120, vs.y - 420),
-		"switch": Vector2(vs.x - 240, vs.y - 475),
-		"crouch": Vector2(vs.x - 370, vs.y - 345), "orders": Vector2(vs.x - 500, vs.y - 110),
+		"fire": Vector2(vs.x - 100, vs.y - 140), "aim": Vector2(vs.x - 232, vs.y - 96),
+		"action": Vector2(vs.x - 212, vs.y - 216) if not car else Vector2(vs.x - 240, vs.y - 92),
+		"reload": Vector2(vs.x - 70, vs.y - 262), "switch": Vector2(vs.x - 140, vs.y - 300),
+		"crouch": Vector2(vs.x - 335, vs.y - 72),
+		"orders": Vector2(58, vs.y - 262), "flash": Vector2(58, vs.y - 340),
+		"jump": Vector2(vs.x - 105, vs.y - 125), "siren": Vector2(vs.x - 70, vs.y - 250),
+		"interact": Vector2(vs.x - 190, vs.y - 212),
+		"pause": Vector2(vs.x * 0.5 + 200, 34),
 	}
 	for k in touch_buttons:
 		var b: TouchScreenButton = touch_buttons[k]
 		var r: float = (b.shape as CircleShape2D).radius
 		b.position = place[k] - Vector2(r, r)
 	joy_ring.queue_redraw()
+
+## What the ACTION button does right now: [input action, label] or [] when there is nothing to do.
+func _action_now(in_car: bool) -> Array:
+	if in_car:
+		return ["vehicle", "نزول"]
+	var raw := prompt_raw
+	if raw.begins_with("[F]"):
+		return ["vehicle", "اركب"]
+	if raw.contains("%") or raw.contains("مطوّل"):
+		return ["interact", "اضغط\nمطوّل" if not raw.contains("%") else "…"]
+	if raw.begins_with("[E]"):
+		for pair in [["تحدّث", "تحدّث"], ["عبوة الاقتحام", "ازرع\nالعبوة"], ["حرّز", "حرّز\nالدليل"], ["تكبيل", "كبّل"], ["وثاق", "حرّر"], ["اعتقال", "اعتقل"]]:
+			if raw.contains(pair[0]):
+				return ["interact", pair[1]]
+		return ["interact", "تفاعل"]
+	if main.phase == "assault":
+		return ["yell", "سلّم\nحالك!"]
+	return []
 
 func _on_button(p: Vector2) -> bool:
 	for k in touch_buttons:
@@ -861,10 +939,7 @@ func _on_named(k: String, p: Vector2) -> bool:
 	return b.visible and p.distance_to(b.position + Vector2(r, r)) < r + 6
 
 func _on_fire(p: Vector2) -> bool:
-	var b: TouchScreenButton = touch_buttons["fire"]
-	if not b.visible:
-		return false
-	return b.visible and p.distance_to(b.position + Vector2(70, 70)) < 76
+	return _on_named("fire", p)
 
 func _unhandled_input(e: InputEvent) -> void:
 	if pause_menu and e.is_action_pressed("pause"):

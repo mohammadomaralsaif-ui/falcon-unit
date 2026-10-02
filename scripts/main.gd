@@ -280,11 +280,38 @@ func _load_world() -> void:
 	if Missions.autostart:
 		Missions.autostart = false
 		_start_mission.call_deferred()
+		if Missions.checkpoint:
+			Missions.checkpoint = false
+			_checkpoint_start.call_deferred()
 	else:
 		_menu_scene()
 		hud.show_briefing(_start_mission)
 
 signal world_ready
+
+## "كمّل من نقطة الاقتحام": skip the opening, the drive and the briefing — the truck is already
+## parked at the cordon and the team is out, ready to stack on the door.
+func _checkpoint_start() -> void:
+	await get_tree().process_frame
+	_begin_drive()
+	if sniper_mission:
+		return
+	hud.clear_radio()
+	var cp: Vector3 = city.cordon_point
+	var zs: float = city.road_center(city.bank_block.y + 1)
+	var sx := 1.0 if cp.x > vehicle.global_position.x else -1.0
+	vehicle.auto_drive = false
+	vehicle.siren_on = false
+	vehicle.linear_velocity = Vector3.ZERO
+	vehicle.angular_velocity = Vector3.ZERO
+	vehicle.global_transform = Transform3D(Basis(Vector3.UP, PI * 0.5 * sx), Vector3(cp.x - sx * 12.0, 0.7, zs + 1.5 * sx))
+	await get_tree().create_timer(0.4).timeout
+	_arrive()
+	_exit_vehicle()
+	_talk_colonel()
+	hud.clear_radio()
+	hud.set_letterbox(false)
+	hud.show_banner("نقطة الاقتحام", "الفريق جاهز عند الطوق – كمّل", 2.5)
 
 ## Menu backdrop: the duty room with the team waiting. Far cheaper to draw than the whole city.
 func _menu_scene() -> void:
@@ -1380,12 +1407,14 @@ func _cuff(e) -> void:
 	arrests += 1
 	Sfx.play("cuff")
 	e.model.set_mode("kneel_back")
+	hud.feed("+ اعتقال", Color(0.5, 0.85, 1.0))
 	hud.radio("الصقر ١", "المشتبه مكبّل!", 2.0)
 	mission_assault_text()
 	_check_win()
 
 func _free(h) -> void:
 	h.free_hostage(trail.size())
+	hud.feed("+ رهينة محرّرة", Color(0.55, 1.0, 0.6))
 	Sfx.play("cuff", -4.0, 0.8)
 	hud.radio("رهينة", HOSTAGE_THANKS.pick_random(), 2.5)
 	# hand the hostage to the nearest free teammate, who walks them out while you keep clearing
@@ -1781,6 +1810,7 @@ func on_actor_dead(a, head: bool, from) -> void:
 		player.stats.kills += 1
 		if head:
 			player.stats.heads += 1
+		hud.feed("إصابة بالراس · تحييد" if head else "تحييد")
 	if phase == "assault":
 		mission_assault_text()
 	if phase == "sniper":
@@ -1799,8 +1829,8 @@ func on_player_hit(killed: bool, _head: bool) -> void:
 	hud.hit_marker(killed)
 	Sfx.play("hit", -6.0)
 
-func on_player_damaged(_from) -> void:
-	hud.damage_flash()
+func on_player_damaged(from) -> void:
+	hud.damage_flash(from if from is Node3D else null)
 
 func on_player_dead() -> void:
 	hud.radio("قائد العمليات", "الصقر ١ لا يستجيب! الصقر ١!", 3.0)

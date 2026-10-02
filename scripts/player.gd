@@ -4,6 +4,7 @@ extends CharacterBody3D
 
 const Person = preload("res://scripts/person.gd")
 const Fx = preload("res://scripts/fx.gd")
+const Settings = preload("res://scripts/settings.gd")
 
 signal shot_fired(pos: Vector3)
 
@@ -44,6 +45,7 @@ var crouch_k := 0.0
 var scoped := false
 var on_target := false        # crosshair is over a gunman
 var assist_t := 0.0
+var auto_t := 0.0
 var assist_yaw := 0.0
 var assist_pitch := 0.0
 var cur_anim := ""
@@ -250,7 +252,17 @@ func _physics_process(dt: float) -> void:
 			var take: int = mini(int(w.mag) - ammo, reserve)
 			ammo += take; reserve -= take
 			gun.rotation.z = 0.0
-	if not Controls.held("fire"):
+	# auto-fire: sights resting on a gunman fire the weapon for you (the button still works)
+	var trigger := Controls.held("fire")
+	if Settings.autofire and aim > 0.6 and on_target:
+		auto_t += dt
+		if auto_t > 0.16:
+			trigger = true
+			if not Controls.held("fire") and fire_cd <= -0.1:
+				_semi_ready = true
+	else:
+		auto_t = 0.0
+	if not trigger:
 		_semi_ready = true
 	if switch_t > 0.0:
 		switch_t -= dt
@@ -260,7 +272,7 @@ func _physics_process(dt: float) -> void:
 		pass
 	elif Controls.just("reload") and ammo < int(w.mag) and reserve > 0:
 		_reload()
-	elif Controls.held("fire") and fire_cd <= 0.0 and not sprint and (bool(w.auto) or _semi_ready):
+	elif trigger and fire_cd <= 0.0 and not sprint and (bool(w.auto) or _semi_ready):
 		if ammo > 0:
 			_semi_ready = false
 			_shoot()

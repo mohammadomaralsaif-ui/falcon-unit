@@ -11,7 +11,7 @@ var from: Vector2i
 var to: Vector2i
 var t := 0.5
 var speed := 0.0
-var max_speed := 17.0
+var max_speed := 13.0      # a little slower than the unit truck (15.5 m/s), so a clean chase catches it
 var hp := 100.0
 var disabled := false
 var smoke_t := 0.0

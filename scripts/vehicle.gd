@@ -40,9 +40,9 @@ var stuck_t := 0.0
 var unstick_t := 0.0
 var dodge_t := 0.0             # after backing out: swing around the obstacle on the left for a few seconds
 
-const MAX_FORCE := 5200.0
+const MAX_FORCE := 4300.0
 const MAX_BRAKE := 60.0
-const TOP_SPEED := 32.0  # m/s (~115 km/h)
+const TOP_SPEED := 17.0  # m/s (~60 km/h): a heavy armoured truck in city streets
 
 func _ready() -> void:
 	mass = 2100.0
@@ -201,11 +201,11 @@ func _physics_process(dt: float) -> void:
 	# brakes squeal whenever you brake with some speed on, louder the faster you go
 	if brake > 14.0 and speed_kmh > 10.0:
 		screech = maxf(screech, clampf(0.35 + speed_kmh / 70.0, 0.35, 1.0))
-	screech_snd.pitch_scale = lerpf(0.75, 1.1, clampf(speed_kmh / 80.0, 0.0, 1.0))
+	screech_snd.pitch_scale = lerpf(0.75, 1.1, clampf(speed_kmh / 68.0, 0.0, 1.0))
 	screech_snd.volume_db = lerpf(screech_snd.volume_db, lerpf(-60.0, -4.0, screech), 1.0 - exp(-dt * 10.0))
 	# --- engine: pitch follows speed, louder under throttle
 	var eng_load := absf(engine_force) / MAX_FORCE if driving else 0.0
-	engine_snd.pitch_scale = 0.55 + clampf(speed_kmh / 90.0, 0.0, 1.4) + eng_load * 0.2
+	engine_snd.pitch_scale = 0.55 + clampf(speed_kmh / 62.0, 0.0, 1.4) + eng_load * 0.2
 	engine_snd.volume_db = (-10.0 + eng_load * 5.0) if driving else -20.0
 	if broken:
 		engine_snd.volume_db = -80.0
@@ -252,15 +252,23 @@ func _physics_process(dt: float) -> void:
 	if broken:
 		throttle = 0.0
 	# steering gets tighter at speed
-	var steer_lim := lerpf(0.6, 0.12, clampf(speed_kmh / 90.0, 0.0, 1.0))
-	steering = move_toward(steering, steer_in * steer_lim, dt * 2.4)
+	var steer_lim := lerpf(0.55, 0.2, clampf(speed_kmh / 68.0, 0.0, 1.0))
+	steering = move_toward(steering, steer_in * steer_lim, dt * 2.0)
 	brake = 0.0
 	if throttle > 0.05:
 		if fwd_speed < -1.0:
 			brake = MAX_BRAKE * throttle
 			engine_force = 0.0
-		else:
+		elif auto_drive:
 			engine_force = MAX_FORCE * throttle * clampf(1.0 - fwd_speed / (TOP_SPEED * (0.6 if health < 40.0 else 1.0)), 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
+		else:
+			# the stick sets the speed you want, not raw power: half a push holds about 35 km/h,
+			# a full push tops out near 68 — easy to keep in hand on a phone
+			var cap := TOP_SPEED * (0.6 if health < 40.0 else 1.0)
+			var target := cap * clampf((throttle - 0.05) / 0.9, 0.12, 1.0)
+			engine_force = MAX_FORCE * 0.55 * clampf((target - fwd_speed) / 2.5, 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
+			if fwd_speed > target + 1.5:
+				brake = 7.0          # lifting off the stick slows the truck down
 	elif throttle < -0.05:
 		if fwd_speed > 1.0:
 			brake = MAX_BRAKE * -throttle
@@ -424,6 +432,8 @@ func _crash(dv: float, dmg_scale := 1.0) -> void:
 		pull = clampf(pull + randf_range(-0.05, 0.05), -0.08, 0.08)
 	if main and driving:
 		main.shake = maxf(main.shake, power * 1.1)
+		if Controls.is_touch and power > 0.3:
+			Input.vibrate_handheld(int(40 + power * 90))
 		if health < 40.0 and before >= 40.0:
 			main.hud.radio("الصقر ١", "السيارة انضربت كثير… المحرك بيطلع دخان وبيقطع!", 3.0)
 	if health <= 0.0 and not broken:
