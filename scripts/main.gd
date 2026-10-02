@@ -427,8 +427,8 @@ func _environment() -> void:
 	env.glow_hdr_threshold = 1.2
 	env.fog_enabled = true
 	env.fog_light_color = {"golden": Color(0.86, 0.74, 0.6), "night": Color(0.06, 0.06, 0.1), "morning": Color(0.82, 0.86, 0.9)}[sky_kind]
-	env.fog_density = 0.0028
-	env.fog_aerial_perspective = 0.4
+	env.fog_density = 0.0013          # light haze only: the far end of a street stays readable
+	env.fog_aerial_perspective = 0.25
 	env.fog_sky_affect = 0.25
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.03

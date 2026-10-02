@@ -186,8 +186,40 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0.22, 0.24, 0.27); m.metallic = 0.7; m.roughness = 0.45
 		"houses":
 			m.vertex_color_use_as_albedo = true; m.roughness = 0.9
+			# near-white stone wall with rows of windows (tinted per house by its instance colour);
+			# bottom quarter of the image is the plain roof
+			m.albedo_texture = _img_tex(256, 256, func(img: Image):
+				img.fill(Color(0.97, 0.96, 0.94))
+				_speckle(img, 2600, [Color(0.9, 0.89, 0.86), Color(1, 1, 1), Color(0.86, 0.84, 0.8)], 3)
+				for fy in [64, 128]:
+					img.fill_rect(Rect2i(0, fy - 2, 256, 3), Color(0.8, 0.78, 0.74))
+				for row in 3:
+					for col in 4:
+						var wx := 14 + col * 62
+						var wy := 12 + row * 64
+						img.fill_rect(Rect2i(wx - 3, wy - 3, 38, 40), Color(0.78, 0.76, 0.72))
+						img.fill_rect(Rect2i(wx, wy, 32, 34), Color(0.2, 0.26, 0.33))
+						img.fill_rect(Rect2i(wx + 15, wy, 2, 34), Color(0.7, 0.7, 0.7))
+						if (row * 4 + col) % 5 == 2:
+							img.fill_rect(Rect2i(wx, wy + 14, 32, 20), Color(0.5, 0.56, 0.5))      # shutter half down
+				img.fill_rect(Rect2i(0, 190, 256, 6), Color(0.7, 0.68, 0.63))
+				img.fill_rect(Rect2i(0, 196, 256, 60), Color(0.8, 0.78, 0.73)))
+		"retaining":
+			# coursed limestone blocks, no windows
+			m.albedo_texture = _img_tex(128, 128, func(img: Image):
+				img.fill(Color(0.8, 0.74, 0.62))
+				_speckle(img, 2600, [Color(0.72, 0.66, 0.55), Color(0.86, 0.81, 0.7), Color(0.76, 0.7, 0.58)], 3)
+				for cy in range(0, 128, 16):
+					img.fill_rect(Rect2i(0, cy, 128, 1), Color(0.58, 0.53, 0.44))
+					for cx in range((cy / 16 % 2) * 16, 128, 32):
+						img.fill_rect(Rect2i(cx, cy, 1, 16), Color(0.6, 0.55, 0.46)))
+			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.18, 0.18, 0.18)
+			m.roughness = 0.9
 		"hill":
-			m.albedo_color = Color(0.62, 0.55, 0.43); m.roughness = 1.0
+			m.albedo_texture = _img_tex(128, 128, func(img: Image):
+				img.fill(Color(0.6, 0.55, 0.44))
+				_speckle(img, 2200, [Color(0.52, 0.47, 0.37), Color(0.68, 0.63, 0.5), Color(0.45, 0.47, 0.33), Color(0.57, 0.52, 0.42)], 5))
+			m.roughness = 1.0
 			m.normal_enabled = true; m.normal_texture = _noise_normal(0.04, 4.0)
 			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.05, 0.05, 0.05)
 		"sofa":
@@ -403,16 +435,16 @@ func _shop_v2(v: int) -> Array:
 			# graffiti-free padlock box
 			img.fill_rect(Rect2i(ox + ow / 2 - 14, H - 40, 28, 20), Color(0.2, 0.2, 0.2))
 		1:
-			# lit interior: shelves full of goods
-			img.fill_rect(Rect2i(ox, oy, ow, oh), Color(0.42, 0.4, 0.36))
-			for sy in range(oy + 40, H - 20, 70):
-				img.fill_rect(Rect2i(ox + 10, sy, ow - 20, 8), Color(0.45, 0.32, 0.2))
-				var gx := ox + 14
-				while gx < ox + ow - 30:
-					var gw := r.randi_range(10, 26)
-					var gh := r.randi_range(24, 52)
-					img.fill_rect(Rect2i(gx, sy - gh, gw, gh), Color.from_hsv(r.randf(), r.randf_range(0.4, 0.9), r.randf_range(0.5, 0.95)))
-					gx += gw + 3
+			# lit interior: a few shelves with goods in soft colours (reads as a shop, not as noise)
+			img.fill_rect(Rect2i(ox, oy, ow, oh), Color(0.5, 0.47, 0.42))
+			for sy in range(oy + 110, H - 30, 110):
+				img.fill_rect(Rect2i(ox + 14, sy, ow - 28, 10), Color(0.36, 0.26, 0.17))
+				var gx := ox + 22
+				while gx < ox + ow - 60:
+					var gw := r.randi_range(26, 54)
+					var gh := r.randi_range(40, 78)
+					img.fill_rect(Rect2i(gx, sy - gh, gw, gh), Color.from_hsv(r.randf(), r.randf_range(0.15, 0.4), r.randf_range(0.55, 0.8)))
+					gx += gw + r.randi_range(8, 20)
 			emi.fill_rect(Rect2i(ox, oy, ow, oh), Color(0.35, 0.33, 0.28))
 			img.fill_rect(Rect2i(ox + ow / 2 - 50, oy + 120, 100, oh - 120), Color(0.15, 0.18, 0.2))
 			emi.fill_rect(Rect2i(ox + ow / 2 - 50, oy + 120, 100, oh - 120), Color.BLACK)
@@ -876,24 +908,48 @@ func _mosque(cx: float, cz: float, lot: float) -> void:
 	_static_box(Vector3(2.2, 26, 2.2), Vector3(cx + w * 0.42, 13.16, cz + w * 0.42))
 
 # ---------------------------------------------------------------- hills with houses (Amman skyline)
+## The hillsides around the district: they now start right behind a retaining wall at the edge of the
+## outer streets (no more bare strip of ground), and are covered in stone houses with windows.
 func _hills() -> void:
 	var fn := FastNoiseLite.new(); fn.frequency = 0.006; fn.seed = 3
 	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var ext := 520.0
 	var c := size_total * 0.5
-	var res := 64
-	var step := ext * 2.0 / res
+	var edge := 2.0                                   # the slope starts this far outside the streets
+	# the police HQ compound sits outside the grid on the south side: keep its pad flat
+	var px0 := road_center(1) + 3.2 - 24.0
+	var px1 := road_center(1) + 3.2 + 24.0
+	var pz1 := size_total + 38.0
 	var hfun := func(x: float, z: float) -> float:
-		var dx: float = max(0.0, abs(x - c) - c - 20.0)
-		var dz: float = max(0.0, abs(z - c) - c - 20.0)
+		var dx: float = max(0.0, abs(x - c) - c - edge)
+		var dz: float = max(0.0, abs(z - c) - c - edge)
 		var dist: float = sqrt(dx * dx + dz * dz)
+		var qx: float = max(0.0, max(px0 - x, x - px1))
+		var qz: float = max(0.0, max(size_total - z, z - pz1))
+		dist = min(dist, sqrt(qx * qx + qz * qz))
 		if dist <= 0.0:
 			return -0.5
 		return min(dist * 0.35, 110.0) * (0.75 + 0.5 * (fn.get_noise_2d(x, z) * 0.5 + 0.5)) - 0.5
-	for i in res:
-		for j in res:
-			var x0 := c - ext + i * step; var z0 := c - ext + j * step
-			var q := [Vector3(x0, 0, z0), Vector3(x0 + step, 0, z0), Vector3(x0 + step, 0, z0 + step), Vector3(x0, 0, z0 + step)]
+	# grid lines land exactly on the edges, so the slope never spills onto a street
+	var lines := func(lo: float, hi: float, extra: Array) -> Array:
+		var out: Array = [lo, hi]
+		out.append_array(extra)
+		var v := lo - 16.0
+		while v > c - ext:
+			out.append(v); v -= 16.0
+		v = hi + 16.0
+		while v < c + ext:
+			out.append(v); v += 16.0
+		v = lo + 16.0
+		while v < hi - 8.0:
+			out.append(v); v += 16.0
+		out.sort()
+		return out
+	var xs: Array = lines.call(-edge, size_total + edge, [px0, px1])
+	var zs: Array = lines.call(-edge, size_total + edge, [pz1])
+	for i in xs.size() - 1:
+		for j in zs.size() - 1:
+			var q := [Vector3(xs[i], 0, zs[j]), Vector3(xs[i + 1], 0, zs[j]), Vector3(xs[i + 1], 0, zs[j + 1]), Vector3(xs[i], 0, zs[j + 1])]
 			for k in 4:
 				q[k].y = hfun.call(q[k].x, q[k].z)
 			if q[0].y < 0 and q[1].y < 0 and q[2].y < 0 and q[3].y < 0:
@@ -902,20 +958,57 @@ func _hills() -> void:
 				st.add_vertex(q[idx])
 	st.generate_normals()
 	_mi(st.commit(), mat("hill"), Vector3.ZERO, false)
+	# stone retaining wall along the outer streets (with a gap for the HQ compound)
+	var wh := 3.2
+	var wmat := mat("retaining")
+	var segs := [
+		[Vector3(c, 0, -0.6), Vector3(size_total + 2.4, wh, 1.2)],
+		[Vector3(-0.6, 0, c), Vector3(1.2, wh, size_total + 2.4)],
+		[Vector3(size_total + 0.6, 0, c), Vector3(1.2, wh, size_total + 2.4)],
+		[Vector3((px0 - 1.2) * 0.5, 0, size_total + 0.6), Vector3(px0 + 1.2, wh, 1.2)],
+		[Vector3((px1 + size_total + 1.2) * 0.5, 0, size_total + 0.6), Vector3(size_total + 1.2 - px1, wh, 1.2)],
+		# the HQ compound's own yard wall
+		[Vector3(px0 - 0.6, 0, (size_total + pz1) * 0.5 + 0.6), Vector3(1.2, wh, pz1 - size_total + 1.2)],
+		[Vector3(px1 + 0.6, 0, (size_total + pz1) * 0.5 + 0.6), Vector3(1.2, wh, pz1 - size_total + 1.2)],
+		[Vector3((px0 + px1) * 0.5, 0, pz1 + 0.6), Vector3(px1 - px0 + 2.4, wh, 1.2)],
+	]
+	for sg in segs:
+		var p: Vector3 = sg[0]; var sz: Vector3 = sg[1]
+		_mi(_box_mesh(sz), wmat, p + Vector3(0, wh * 0.5, 0), false)
+		_mi(_box_mesh(Vector3(sz.x + 0.3 if sz.x > sz.z else 1.5, 0.22, 1.5 if sz.x > sz.z else sz.z + 0.3)), mat("roof"), p + Vector3(0, wh + 0.11, 0), false)
+		_static_box(sz, p + Vector3(0, wh * 0.5, 0))
+	# houses: one MultiMesh, each with windows and a flat roof, packed densest next to the district
 	var xf := []; var cols := []
-	var house := _box_mesh(Vector3(1, 1, 1))
-	for i in 3500:
-		var x := c + rng.randf_range(-ext * 0.95, ext * 0.95)
-		var z := c + rng.randf_range(-ext * 0.95, ext * 0.95)
+	var tones := [Color(0.93, 0.89, 0.8), Color(0.86, 0.8, 0.68), Color(0.97, 0.95, 0.9), Color(0.8, 0.74, 0.62), Color(0.9, 0.86, 0.8)]
+	for i in 6200:
+		var near := i < 2600
+		var span := (c + 150.0) if near else ext * 0.95
+		var x := c + rng.randf_range(-span, span)
+		var z := c + rng.randf_range(-span, span)
 		var y: float = hfun.call(x, z)
 		if y < 2.0:
 			continue
-		var s := Vector3(rng.randf_range(6, 14), rng.randf_range(4, 12), rng.randf_range(6, 14))
-		xf.append(Transform3D(Basis(Vector3.UP, rng.randf_range(-0.3, 0.3)).scaled(s), Vector3(x, y + s.y * 0.5 - 1.0, z)))
-		var t := rng.randf()
-		cols.append(Color(0.86, 0.82, 0.72).lerp(Color(0.97, 0.95, 0.9), t).darkened(rng.randf_range(0.0, 0.15)))
-	var mmi := _multimesh(house, mat("houses"), xf, cols)
+		var s := Vector3(rng.randf_range(7, 14), rng.randf_range(5, 12), rng.randf_range(7, 14))
+		xf.append(Transform3D(Basis(Vector3.UP, rng.randf_range(-0.25, 0.25)).scaled(s), Vector3(x, y + s.y * 0.5 - 1.5, z)))
+		cols.append((tones[rng.randi() % tones.size()] as Color).darkened(rng.randf_range(0.0, 0.12)))
+	var mmi := _multimesh(_house_mesh(), mat("houses"), xf, cols)
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+## Unit box for the hillside houses: the four walls show the window texture, the roof a plain patch.
+func _house_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var h := 0.5
+	var corners := [Vector3(-h, 0, h), Vector3(h, 0, h), Vector3(h, 0, -h), Vector3(-h, 0, -h)]
+	for i in 4:
+		var a: Vector3 = corners[i]; var b: Vector3 = corners[(i + 1) % 4]
+		var n := (b - a).cross(Vector3.UP).normalized()
+		var quad := [[a + Vector3(0, -h, 0), Vector2(0, 0.75)], [b + Vector3(0, -h, 0), Vector2(1, 0.75)], [b + Vector3(0, h, 0), Vector2(1, 0)], [a + Vector3(0, h, 0), Vector2(0, 0)]]
+		for idx in [0, 2, 1, 0, 3, 2]:
+			st.set_normal(n); st.set_uv(quad[idx][1]); st.add_vertex(quad[idx][0])
+	var top := [[Vector3(-h, h, h), Vector2(0.05, 0.98)], [Vector3(h, h, h), Vector2(0.95, 0.98)], [Vector3(h, h, -h), Vector2(0.95, 0.8)], [Vector3(-h, h, -h), Vector2(0.05, 0.8)]]
+	for idx in [0, 2, 1, 0, 3, 2]:
+		st.set_normal(Vector3.UP); st.set_uv(top[idx][1]); st.add_vertex(top[idx][0])
+	return st.commit()
 
 # ---------------------------------------------------------------- parked cars
 func bake(node: Node3D, lods := true) -> ArrayMesh:
