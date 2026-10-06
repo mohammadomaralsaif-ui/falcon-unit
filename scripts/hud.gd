@@ -890,7 +890,6 @@ func show_briefing(on_start: Callable) -> void:
 	var md2: Dictionary = main.M
 	var st2: Dictionary = Missions.story_of(md2.id)
 	vb.add_child(_label(Missions.chapter_label(Missions.current), 26, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
-	vb.add_child(_label("%s — %s" % [md2.title, md2.subtitle], 20, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
 	var story := _label(st2.get("hook", md2.subtitle), 18, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	story.custom_minimum_size.x = 540

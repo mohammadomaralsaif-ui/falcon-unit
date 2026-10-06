@@ -167,15 +167,24 @@ func _loading_screen() -> void:
 	vb.add_theme_constant_override("separation", 14)
 	_load_layer.add_child(vb)
 	var f: Font = load("res://assets/fonts/Tajawal-Bold.ttf")
+	# opening the game: the story's name. Going into a chapter: that chapter. Never a mission's
+	# place name — on the first screen it read as if the game were called after a bank.
+	var camp: Dictionary = Missions.story().get("campaign", {})
+	var big: String = "« %s »" % camp.get("title", "رمل أسود")
+	var small: String = str(camp.get("sub", ""))
+	if Missions.autostart and not ST.is_empty():
+		big = str(ST.name)
+		small = str(ST.chapter)
 	var title := Label.new()
-	title.text = "وحدة الصقر"
+	title.text = big
 	title.add_theme_font_override("font", f); title.add_theme_font_size_override("font_size", 64)
 	title.add_theme_color_override("font_color", Color(0.96, 0.8, 0.35))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(title)
 	var sub := Label.new()
-	sub.text = M.title + " · " + M.area
+	sub.text = small
 	sub.add_theme_font_override("font", f); sub.add_theme_font_size_override("font_size", 26)
+	sub.add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(sub)
 	_load_bar = ProgressBar.new()
@@ -635,7 +644,7 @@ func _build_ops_room() -> void:
 	stand.global_position = hp + Vector3(5.0, fl + 0.35, -0.6)
 	hq_set.append(stand)
 	var lbl := Label3D.new()
-	lbl.text = "غرفة العمليات\n%s · %s" % [M.title, M.area]
+	lbl.text = "غرفة العمليات\nمديرية الأمن العام"
 	lbl.font = load("res://assets/fonts/Tajawal-Bold.ttf")
 	lbl.font_size = 64; lbl.pixel_size = 0.0038; lbl.outline_size = 0
 	lbl.modulate = Color(0.8, 0.94, 1.0)
