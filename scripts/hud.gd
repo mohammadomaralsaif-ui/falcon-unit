@@ -157,7 +157,9 @@ func _build_hud() -> void:
 	root.add_child(minimap)
 	# radio subtitles
 	radio_box = PanelContainer.new()
-	radio_box.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.04, 0.07, 0.78), BLUE))
+	_box_style = _panel_style(Color(0.02, 0.04, 0.07, 0.78), BLUE)
+	_box_hacked = _panel_style(Color(0.09, 0.01, 0.01, 0.86), Color(0.95, 0.22, 0.16))
+	radio_box.add_theme_stylebox_override("panel", _box_style)
 	radio_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	radio_box.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	radio_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -371,15 +373,40 @@ func _touchify(t: String) -> String:
 func set_objectives(lines: Array) -> void:
 	objectives.text = _touchify("\n".join(lines))
 
-func radio(who: String, text: String, dur := 4.0) -> void:
-	radio_queue.append([who, text, dur])
+## A line on the net. `story` lines are the plot: they jump ahead of routine chatter, survive a
+## clear_radio(true), and are never dropped. `pre` seconds of silence come first (a phone ringing…).
+func radio(who: String, text: String, dur := 4.0, story := false, pre := 0.0) -> void:
+	if story:
+		var at := 0
+		for i in radio_queue.size():
+			if radio_queue[i][3]:
+				at = i + 1
+		radio_queue.insert(at, [who, text, dur, true, pre])
+		return
+	if radio_queue.size() >= 4:
+		return                   # chatter that would only arrive stale
+	radio_queue.append([who, text, dur, false, pre])
 
-func clear_radio() -> void:
-	radio_queue.clear()
+func clear_radio(keep_story := false) -> void:
+	if keep_story:
+		radio_queue = radio_queue.filter(func(m): return m[3])
+		if _radio_story:
+			return               # the plot line that is being said right now finishes
+	else:
+		radio_queue.clear()
 	radio_t = 0.0
+	_radio_story = false
 	if radio_box:
 		radio_box.visible = false
 	Voice.stop()
+
+## True while a plot line is on screen or waiting.
+func story_busy() -> bool:
+	return (_radio_story and radio_t > 0.0) or radio_queue.any(func(m): return m[3])
+
+var _radio_story := false
+var _box_style: StyleBoxFlat
+var _box_hacked: StyleBoxFlat
 
 func show_banner(text: String, sub := "", dur := 3.0) -> void:
 	banner.text = text
@@ -389,6 +416,11 @@ func show_banner(text: String, sub := "", dur := 3.0) -> void:
 	banner.scale = Vector2(1.15, 1.15)
 	tw.tween_property(banner, "modulate:a", 1.0, 0.25)
 	tw.parallel().tween_property(banner_sub, "modulate:a", 1.0, 0.4)
+
+func hide_banner() -> void:
+	banner_t = 0.0
+	banner.modulate.a = 0.0
+	banner_sub.modulate.a = 0.0
 
 var prompt_raw := ""
 
@@ -459,6 +491,76 @@ var _feed_n := 0
 func set_waypoint(p) -> void:
 	wp_target = p
 
+## Black title card that opens a chapter: "الفصل الأول" / its name / where and when.
+func chapter_card(chapter: String, title: String, sub: String, hold := 2.6) -> void:
+	var card := Control.new()
+	card.set_anchors_preset(Control.PRESET_FULL_RECT)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(card)
+	var bg := ColorRect.new(); bg.color = Color.BLACK
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(bg)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", 6)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(vb)
+	var camp: Dictionary = Missions.story().get("campaign", {})
+	var l0 := _label("« %s »" % camp.get("title", ""), 22, Color(1, 1, 1, 0.45))
+	var l1 := _label(chapter, 30, GOLD)
+	var l2 := _label(title, 76, Color.WHITE)
+	var rule := ColorRect.new(); rule.color = GOLD; rule.custom_minimum_size = Vector2(220, 2)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var l3 := _label(sub, 24, Color(1, 1, 1, 0.7))
+	for n in [l0, l1, l2, rule, l3]:
+		n.modulate.a = 0.0
+		vb.add_child(n)
+	var tw := create_tween()
+	tw.tween_property(l0, "modulate:a", 1.0, 0.4)
+	tw.parallel().tween_property(l1, "modulate:a", 1.0, 0.5)
+	tw.tween_property(l2, "modulate:a", 1.0, 0.6)
+	tw.parallel().tween_property(rule, "modulate:a", 1.0, 0.6)
+	tw.tween_property(l3, "modulate:a", 1.0, 0.4)
+	tw.tween_interval(hold - 1.5)
+	tw.tween_property(card, "modulate:a", 0.0, 0.9)
+	tw.tween_callback(card.queue_free)
+	_card = card
+
+var _card: Control
+
+func drop_card() -> void:
+	if _card and is_instance_valid(_card):
+		_card.queue_free()
+	_card = null
+
+## A decision the player has to make himself: big buttons, the world waits.
+var choice: Control
+
+func ask_choice(title: String, options: Array, on_pick: Callable) -> void:
+	choice = Control.new()
+	choice.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(choice)
+	var shade := ColorRect.new(); shade.color = Color(0, 0, 0, 0.45)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	choice.add_child(shade)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_CENTER)
+	vb.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	vb.grow_vertical = Control.GROW_DIRECTION_BOTH
+	vb.add_theme_constant_override("separation", 18)
+	choice.add_child(vb)
+	vb.add_child(_label(title, 52, GOLD))
+	for o in options:
+		var b := _button(str(o[0]), func():
+			choice.queue_free()
+			choice = null
+			on_pick.call(str(o[1])), 32)
+		b.custom_minimum_size = Vector2(620, 84)
+		vb.add_child(b)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
 func set_letterbox(on: bool) -> void:
 	var h := 70.0 if on else 0.0
 	for i in letterbox.size():
@@ -484,15 +586,27 @@ func _process(dt: float) -> void:
 		radio_t -= udt
 		if radio_t <= 0.0:
 			radio_box.visible = false
+	elif radio_queue.size() > 0 and radio_queue[0][4] > 0.0:
+		# a beat of silence before the line (the phone rings, the room looks up)
+		radio_t = radio_queue[0][4]
+		radio_queue[0][4] = 0.0
+		_radio_story = false
+		if main and main.has_method("on_radio_pre"):
+			main.on_radio_pre(radio_queue[0][1])
 	elif radio_queue.size() > 0:
 		var m: Array = radio_queue.pop_front()
-		radio_who.text = "◉  " + m[0]
+		# people next to you are heard directly; everyone else comes over the radio
+		var near: bool = main and main.voice_near(m[0])
+		# somebody who should not be on this channel: the box goes red and the speaker hisses
+		var hacked: bool = Missions.hacked(m[0]) and not near
+		radio_who.text = ("⚠  تردّد مخترق · " if hacked else "◉  ") + Missions.show_name(m[0])
+		radio_who.add_theme_color_override("font_color", Color(1.0, 0.42, 0.34) if hacked else BLUE)
+		radio_box.add_theme_stylebox_override("panel", _box_hacked if hacked else _box_style)
 		radio_txt.text = _touchify(m[1])
 		radio_t = m[2]
+		_radio_story = m[3]
 		radio_box.visible = true
-		Sfx.play("radio", -8.0)
-		# people next to you are heard directly; everyone else comes over the radio
-		var near: bool = main and (main.cutscene_t > 0.0 or m[0] in ["الصقر ١", "مواطن", "رهينة", "المراسلة", "مسلّح", main.LEADER])
+		Sfx.play("glitch" if hacked else "radio", -3.0 if hacked else -8.0)
 		var vdur := Voice.say(m[0], m[1], near)
 		if vdur > 0.0:
 			radio_t = maxf(m[2], vdur + 0.3)
@@ -518,7 +632,7 @@ func _process(dt: float) -> void:
 	var low: float = 1.0 - pl.hp / 100.0 if pl else 0.0
 	vignette.modulate.a = maxf(vig_a, low * 0.7 if low > 0.4 else 0.0)
 	var in_car: bool = main.in_vehicle
-	var playing: bool = not (main.phase in ["brief", "result", "intro"]) and main.cutscene_t <= 0.0
+	var playing: bool = not (main.phase in ["brief", "result", "intro"]) and main.cutscene_t <= 0.0 and not main.scene_on
 	crosshair.visible = playing and not in_car and pl.alive and main.doorcam_t <= 0.0
 	crosshair.queue_redraw()
 	var doorcam: bool = main.doorcam_t > 0.0
@@ -731,6 +845,9 @@ func show_briefing(on_start: Callable) -> void:
 	outer.add_theme_constant_override("separation", 8)
 	panel.add_child(outer)
 	outer.add_child(_label("وحدة الصقر", 40, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
+	var camp: Dictionary = Missions.story().get("campaign", {})
+	if not camp.is_empty():
+		outer.add_child(_label("« %s »  ·  %s" % [camp.title, camp.sub], 19, Color(1, 1, 1, 0.7), HORIZONTAL_ALIGNMENT_RIGHT))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -752,9 +869,11 @@ func show_briefing(on_start: Callable) -> void:
 		var md: Dictionary = Missions.LIST[i]
 		var locked := i >= unlocked
 		var stars := Missions.rating_of(i)
-		var txt := "%d. %s" % [i + 1, md.title]
+		var cst: Dictionary = Missions.story_of(md.id)
+		# a chapter you have not reached keeps its name to itself
+		var txt := "%d · %s" % [i + 1, cst.get("name", md.title)]
 		if locked:
-			txt += " (مقفلة)"
+			txt = "%d · ؟؟؟  (مقفل)" % (i + 1)
 		elif stars != "":
 			txt += "  " + stars.get_slice(" ", stars.get_slice_count(" ") - 1)
 		var mb := _button(txt, func():
@@ -769,8 +888,10 @@ func show_briefing(on_start: Callable) -> void:
 		mb.modulate = Color.WHITE if i == Missions.current else (Color(1, 1, 1, 0.3) if locked else Color(1, 1, 1, 0.6))
 		grid.add_child(mb)
 	var md2: Dictionary = main.M
-	vb.add_child(_label("%s — %s" % [md2.title, md2.subtitle], 23, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
-	var story := _label(md2.story, 18, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+	var st2: Dictionary = Missions.story_of(md2.id)
+	vb.add_child(_label(Missions.chapter_label(Missions.current), 26, GOLD, HORIZONTAL_ALIGNMENT_RIGHT))
+	vb.add_child(_label("%s — %s" % [md2.title, md2.subtitle], 20, BLUE, HORIZONTAL_ALIGNMENT_RIGHT))
+	var story := _label(st2.get("hook", md2.subtitle), 18, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	story.custom_minimum_size.x = 540
 	vb.add_child(story)
@@ -803,7 +924,7 @@ func show_briefing(on_start: Callable) -> void:
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hl.custom_minimum_size.x = 520
 	vb.add_child(hl)
-	var start := _button("ابدأ المهمة  ◀", func():
+	var start := _button("ابدأ الفصل  ◀", func():
 		briefing.queue_free()
 		briefing = null
 		on_start.call(), 34)
@@ -855,7 +976,8 @@ func close_briefing() -> void:
 		briefing.queue_free()
 		briefing = null
 
-func show_result(win: bool, title: String, lines: Array, rating: String) -> void:
+## `story`: {"chapter", "epigraph", "teaser", "epilogue", "replay"} — what this chapter meant.
+func show_result(win: bool, title: String, lines: Array, rating: String, story := {}) -> void:
 	result = Control.new()
 	result.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(result)
@@ -868,19 +990,39 @@ func show_result(win: bool, title: String, lines: Array, rating: String) -> void
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.custom_minimum_size = Vector2(520, 0)
+	panel.custom_minimum_size = Vector2(620, 0)
 	result.add_child(panel)
-	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 10)
+	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 8)
 	panel.add_child(vb)
-	vb.add_child(_label(title, 50, GOLD if win else Color(1, 0.4, 0.3)))
+	if story.has("chapter"):
+		vb.add_child(_label(story.chapter, 22, Color(1, 1, 1, 0.6)))
+	vb.add_child(_label(title, 46, GOLD if win else Color(1, 0.4, 0.3)))
+	if story.get("epigraph", "") != "":
+		var ep := _label(story.epigraph, 24, Color(1.0, 0.93, 0.74))
+		ep.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ep.custom_minimum_size.x = 580
+		vb.add_child(ep)
+	if story.get("epilogue", "") != "":
+		var el := _label(story.epilogue, 21, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		el.custom_minimum_size.x = 580
+		vb.add_child(el)
 	if rating != "":
-		vb.add_child(_label("التقييم: " + rating, 34, Color.WHITE))
+		vb.add_child(_label("التقييم: " + rating, 28, Color.WHITE))
 	vb.add_child(HSeparator.new())
 	for l in lines:
-		vb.add_child(_label(l, 24, Color(1, 1, 1, 0.9), HORIZONTAL_ALIGNMENT_RIGHT))
+		vb.add_child(_label(l, 20, Color(1, 1, 1, 0.88), HORIZONTAL_ALIGNMENT_RIGHT))
 	vb.add_child(HSeparator.new())
+	if story.get("replay", "") != "":
+		var rp := _button(story.replay, func():
+			Engine.time_scale = 1.0
+			Missions.autostart = true
+			Missions.checkpoint = true
+			get_tree().reload_current_scene(), 24)
+		rp.custom_minimum_size = Vector2(0, 54)
+		vb.add_child(rp)
 	if Missions.current + 1 < Missions.LIST.size() and (win or Missions.current + 1 < Missions.unlocked()):
-		var nxt := _button("المهمة التالية: %s  ◀" % Missions.LIST[Missions.current + 1].title, func():
+		var nxt := _button("كمّل القصة: %s  ◀" % Missions.chapter_label(Missions.current + 1), func():
 			Engine.time_scale = 1.0
 			Missions.current += 1
 			Missions.autostart = true      # straight into the next mission, no menu in between
@@ -895,13 +1037,13 @@ func show_result(win: bool, title: String, lines: Array, rating: String) -> void
 			get_tree().reload_current_scene(), 28)
 		cpb.custom_minimum_size = Vector2(0, 60)
 		vb.add_child(cpb)
-	var again := _button("إعادة المهمة من الأول", func():
+	var again := _button("إعادة الفصل من الأول", func():
 		Engine.time_scale = 1.0
 		Missions.autostart = true
 		get_tree().reload_current_scene(), 24)
 	again.custom_minimum_size = Vector2(0, 50)
 	vb.add_child(again)
-	var menu := _button("قائمة المهمات", func():
+	var menu := _button("قائمة الفصول", func():
 		Engine.time_scale = 1.0
 		get_tree().reload_current_scene(), 22)
 	menu.custom_minimum_size = Vector2(0, 46)
@@ -1027,7 +1169,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _input(e: InputEvent) -> void:
-	if not Controls.is_touch or not touch_root or not touch_root.visible:
+	if not Controls.is_touch or not touch_root or not touch_root.visible or choice:
 		return
 	if e is InputEventScreenTouch:
 		if e.pressed:

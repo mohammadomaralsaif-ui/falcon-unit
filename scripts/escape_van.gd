@@ -11,7 +11,7 @@ var from: Vector2i
 var to: Vector2i
 var t := 0.5
 var speed := 0.0
-var max_speed := 13.0      # a little slower than the unit truck (15.5 m/s), so a clean chase catches it
+var max_speed := 8.4       # a little slower than the unit truck (11 m/s), so a clean chase catches it
 var hp := 100.0
 var disabled := false
 var smoke_t := 0.0
@@ -102,7 +102,7 @@ func _physics_process(dt: float) -> void:
 	else:
 		blocked_t = 0.0
 	if (1.0 - t) * seg < 10.0:
-		want = minf(want, 10.0)
+		want = minf(want, 6.5)
 	speed = move_toward(speed, want, dt * (12.0 if want < speed else 5.0))
 	t += speed * dt / seg
 	if t >= 1.0:

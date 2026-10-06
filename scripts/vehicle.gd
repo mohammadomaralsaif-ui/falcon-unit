@@ -42,7 +42,7 @@ var dodge_t := 0.0             # after backing out: swing around the obstacle on
 
 const MAX_FORCE := 4300.0
 const MAX_BRAKE := 60.0
-const TOP_SPEED := 17.0  # m/s (~60 km/h): a heavy armoured truck in city streets
+const TOP_SPEED := 11.0  # m/s (~40 km/h): a heavy armoured truck in narrow city streets — you place it, you do not race it
 
 func _ready() -> void:
 	mass = 2100.0
@@ -131,7 +131,7 @@ func _cam_target() -> Transform3D:
 	var base_yaw := atan2(fwd.x, fwd.z)
 	var yaw := base_yaw + cam_yaw + PI
 	# reversing: the camera rises and pulls back so you can see what is behind the truck
-	var dist := 7.5 + clampf(speed_kmh / 120.0, 0.0, 1.0) * 1.5 + rev_k * 4.0
+	var dist := 8.2 + clampf(speed_kmh / 45.0, 0.0, 1.0) * 0.6 + rev_k * 4.0
 	var cp := cam_pitch - rev_k * 0.38
 	var dir := Vector3(sin(yaw) * cos(cp), -sin(cp), cos(yaw) * cos(cp))
 	var target := global_position + Vector3(0, 1.7, 0) - fwd.normalized() * rev_k * 3.5
@@ -201,11 +201,11 @@ func _physics_process(dt: float) -> void:
 	# brakes squeal whenever you brake with some speed on, louder the faster you go
 	if brake > 14.0 and speed_kmh > 10.0:
 		screech = maxf(screech, clampf(0.35 + speed_kmh / 70.0, 0.35, 1.0))
-	screech_snd.pitch_scale = lerpf(0.75, 1.1, clampf(speed_kmh / 68.0, 0.0, 1.0))
+	screech_snd.pitch_scale = lerpf(0.75, 1.1, clampf(speed_kmh / 42.0, 0.0, 1.0))
 	screech_snd.volume_db = lerpf(screech_snd.volume_db, lerpf(-60.0, -4.0, screech), 1.0 - exp(-dt * 10.0))
 	# --- engine: pitch follows speed, louder under throttle
 	var eng_load := absf(engine_force) / MAX_FORCE if driving else 0.0
-	engine_snd.pitch_scale = 0.55 + clampf(speed_kmh / 62.0, 0.0, 1.4) + eng_load * 0.2
+	engine_snd.pitch_scale = 0.55 + clampf(speed_kmh / 42.0, 0.0, 1.4) * 0.85 + eng_load * 0.2
 	engine_snd.volume_db = (-10.0 + eng_load * 5.0) if driving else -20.0
 	if broken:
 		engine_snd.volume_db = -80.0
@@ -252,7 +252,7 @@ func _physics_process(dt: float) -> void:
 	if broken:
 		throttle = 0.0
 	# steering gets tighter at speed
-	var steer_lim := lerpf(0.55, 0.2, clampf(speed_kmh / 68.0, 0.0, 1.0))
+	var steer_lim := lerpf(0.55, 0.26, clampf(speed_kmh / 42.0, 0.0, 1.0))
 	steering = move_toward(steering, steer_in * steer_lim, dt * 2.0)
 	brake = 0.0
 	if throttle > 0.05:
@@ -262,11 +262,11 @@ func _physics_process(dt: float) -> void:
 		elif auto_drive:
 			engine_force = MAX_FORCE * throttle * clampf(1.0 - fwd_speed / (TOP_SPEED * (0.6 if health < 40.0 else 1.0)), 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
 		else:
-			# the stick sets the speed you want, not raw power: half a push holds about 35 km/h,
-			# a full push tops out near 68 — easy to keep in hand on a phone
+			# the stick sets the speed you want, not raw power: half a push holds about 20 km/h,
+			# a full push tops out near 40 — easy to keep in hand on a phone
 			var cap := TOP_SPEED * (0.6 if health < 40.0 else 1.0)
 			var target := cap * clampf((throttle - 0.05) / 0.9, 0.12, 1.0)
-			engine_force = MAX_FORCE * 0.55 * clampf((target - fwd_speed) / 2.5, 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
+			engine_force = MAX_FORCE * 0.42 * clampf((target - fwd_speed) / 3.0, 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
 			if fwd_speed > target + 1.5:
 				brake = 7.0          # lifting off the stick slows the truck down
 	elif throttle < -0.05:
@@ -274,7 +274,7 @@ func _physics_process(dt: float) -> void:
 			brake = MAX_BRAKE * -throttle
 			engine_force = 0.0
 		else:
-			engine_force = MAX_FORCE * 0.75 * throttle * clampf(1.0 + fwd_speed / 11.0, 0.0, 1.0)
+			engine_force = MAX_FORCE * 0.6 * throttle * clampf(1.0 + fwd_speed / 5.0, 0.0, 1.0)
 	else:
 		engine_force = 0.0
 		brake = 2.5
@@ -319,7 +319,8 @@ func _process(dt: float) -> void:
 	rev_k = move_toward(rev_k, 1.0 if reversing else 0.0, dt * 1.6)
 	var t := _cam_target()
 	cam.global_transform = cam.global_transform.interpolate_with(t, 1.0 - exp(-dt * 9.0))
-	cam.fov = lerpf(cam.fov, 68.0 + clampf(speed_kmh / 110.0, 0.0, 1.0) * 14.0, 1.0 - exp(-dt * 3.0))
+	# hardly any zoom-out with speed: a widening lens makes the street rush past and the truck feel twice as fast
+	cam.fov = lerpf(cam.fov, 64.0 + clampf(speed_kmh / 45.0, 0.0, 1.0) * 3.0, 1.0 - exp(-dt * 3.0))
 
 ## Teammate at the wheel: steer along the route, keep ~45 km/h, slow for corners and anything in the way.
 var dodge_side := 1.0
@@ -338,10 +339,11 @@ func _auto_input() -> Vector2:
 		return Vector2(0.0, -1.0)
 	if speed_kmh < 2.0 and to.length() > 8.0:
 		stuck_t += dtp
-		if stuck_t > 2.5:
+		# a slower truck waits longer behind slower traffic before deciding it is wedged
+		if stuck_t > 4.5:
 			stuck_t = 0.0
 			unstick_t = 1.4
-			dodge_t = 7.0
+			dodge_t = 4.5
 			# go round on the road-centre side; only try the kerb side if that failed a moment ago
 			var now := Time.get_ticks_msec() * 0.001
 			dodge_side = -dodge_side if now - last_stuck < 14.0 else 1.0
@@ -359,14 +361,14 @@ func _auto_input() -> Vector2:
 		# aim at a point ahead and one lane to the left of the route to get around whatever blocked us
 		dodge_t -= dtp
 		var along := to.normalized()
-		to = along * 9.0 + Vector3.UP.cross(along) * 3.4 * dodge_side
+		to = along * 9.0 + Vector3.UP.cross(along) * 2.3 * dodge_side
 	var ang := atan2(to.normalized().dot(right), to.normalized().dot(fwd))
 	var steer := clampf(-ang * 1.6, -1.0, 1.0)
-	var want := 12.5
+	var want := 9.5
 	if absf(ang) > 0.35:
-		want = 4.5
-	elif not last and to.length() < 24.0:
-		want = 5.5       # corner coming up
+		want = 4.0
+	elif not last and to.length() < 20.0:
+		want = 5.0       # corner coming up
 	if last:
 		want = minf(want, maxf(to.length() * 0.45, 2.5))
 	# something ahead (traffic, a pedestrian)? ease off

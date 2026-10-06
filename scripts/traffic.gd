@@ -51,7 +51,7 @@ func setup(_city: Node, count: int) -> void:
 		var b: Vector2i = nb[rng.randi() % nb.size()]
 		var c := Car.new()
 		c.from = a; c.to = b; c.t = rng.randf_range(0.15, 0.8)
-		c.max_speed = rng.randf_range(8.0, 12.5)
+		c.max_speed = rng.randf_range(7.0, 10.0)       # 25-36 km/h: town traffic, about the pace of the unit truck
 		c.speed = c.max_speed
 		var pos := _lane_pos(c)
 		if pos.distance_to(city.spawn_point.origin) < 30.0:

@@ -125,7 +125,7 @@ func give_shield() -> void:
 		switch_weapon()
 
 func _frozen() -> bool:
-	return main != null and main.get("cutscene_t") != null and (main.cutscene_t > 0.0 or main.doorcam_t > 0.0)
+	return main != null and main.get("cutscene_t") != null and (main.cutscene_t > 0.0 or main.doorcam_t > 0.0 or main.scene_on)
 
 func _physics_process(dt: float) -> void:
 	if not active:

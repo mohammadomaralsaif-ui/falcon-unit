@@ -31,6 +31,8 @@ func _make(name: String) -> AudioStream:
 		"reload": return _reload()
 		"radio": return _radio()
 		"ring": return _ring()
+		"glitch": return _glitch()
+		"sting": return _sting()
 		"sniper": return _shot(0.9, 1.0, 95.0)
 		"bolt": return _bolt()
 		"sputter": return _sputter()
@@ -39,7 +41,7 @@ func _make(name: String) -> AudioStream:
 		"ambience_night": return _ambience(true)
 	return null
 
-const NAMES := ["rifle", "pistol", "far", "boom", "click", "beep", "hit", "cuff", "siren", "engine", "screech", "crash", "crash_small", "horn", "step", "flesh", "reload", "radio", "ring", "sniper", "bolt", "sputter", "glass"]
+const NAMES := ["rifle", "pistol", "far", "boom", "click", "beep", "hit", "cuff", "siren", "engine", "screech", "crash", "crash_small", "horn", "step", "flesh", "reload", "radio", "ring", "sniper", "bolt", "sputter", "glass", "glitch", "sting"]
 
 func _get_stream(name: String) -> AudioStream:
 	var path := BAKED + name + ".res"
@@ -327,6 +329,43 @@ func _ring() -> AudioStreamWAV:
 		if on:
 			var f := 950.0 if fmod(t * 22.0, 1.0) < 0.5 else 1250.0
 			s[i] = sin(TAU * f * t) * 0.35
+	return _wav(s)
+
+func _glitch() -> AudioStreamWAV:
+	## somebody breaks into the channel: a tearing burst of static, a falling squeal, stuttering carrier
+	var n := int(0.7 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var a := 0.0
+	var b := 0.0
+	var ph := 0.0
+	var rng := RandomNumberGenerator.new(); rng.seed = 77
+	for i in n:
+		var t := float(i) / RATE
+		var noise := rng.randf() * 2.0 - 1.0
+		a += (noise - a) * 0.55
+		b += (a - b) * 0.06
+		var gate := 1.0 if fmod(t * 31.0, 1.0) < (0.75 - t * 0.5) else 0.15      # stutter
+		var env := minf(t / 0.01, 1.0) * clampf((0.7 - t) / 0.25, 0.0, 1.0)
+		ph += TAU * lerpf(2600.0, 420.0, clampf(t / 0.45, 0.0, 1.0)) / RATE
+		s[i] = ((a - b) * 0.75 * gate + sin(ph) * 0.16 * (1.0 - clampf(t / 0.5, 0.0, 1.0))) * env
+	return _wav(s)
+
+func _sting() -> AudioStreamWAV:
+	## low drum hit with a dark held note under it: a chapter opens, a truth lands
+	var n := int(3.2 * RATE)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var lp := 0.0
+	var rng := RandomNumberGenerator.new(); rng.seed = 5
+	for i in n:
+		var t := float(i) / RATE
+		var hit := sin(TAU * (48.0 + 60.0 * exp(-t * 18.0)) * t) * exp(-t * 3.2) * 0.7
+		lp += ((rng.randf() * 2.0 - 1.0) - lp) * 0.02
+		var air := lp * exp(-t * 2.0) * 1.6
+		var pad_env := minf(t / 0.5, 1.0) * clampf((3.2 - t) / 1.6, 0.0, 1.0)
+		var pad := (sin(TAU * 73.4 * t) + 0.6 * sin(TAU * 110.0 * t + 0.4) + 0.35 * sin(TAU * 146.8 * t * 1.003)) * 0.11 * pad_env
+		s[i] = hit + air + pad
 	return _wav(s)
 
 func _radio() -> AudioStreamWAV:

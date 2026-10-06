@@ -1,0 +1,431 @@
+{
+"_readme": "The campaign script. Every line is [speaker code, Arabic subtitle, English line that is spoken]; intro lines start with the shot (ops / city / target / truck) and may end with a cue (ring = the desk phone rings first, up = the team stands up); briefing lines end with the colonel's gesture (salute / talk / point). {n} {h} {e} {leader} in the briefing are filled with the number of gunmen, hostages, evidence items and the leader's name. Beats play once when their moment comes: breach, half, one_left, hostage1..N, evidence1..N, evidence_all, bomb_near, defused, sniper_start. After editing, re-record the voices: tools/build_voices.py.",
+"campaign": {"title": "رمل أسود", "sub": "أربعة أيام في عمّان · سبعة فصول"},
+"cast": {
+	"P": "الصقر ١", "2": "الصقر ٢", "3": "الصقر ٣", "4": "الصقر ٤",
+	"C": "العقيد سامر الخطيب", "N": "المفاوِضة الرائد ليلى", "M": "العميد منصور",
+	"O": "غرفة العمليات", "TV": "نشرة الأخبار", "SV": "فريق المراقبة", "S": "القنّاص", "G": "الفريق الأرضي", "H": "رهينة",
+	"X": "صوت مجهول", "A": "العقرب", "D": "الرائد نضال", "W": "فارس", "L": "@leader"
+},
+"show": {"الصقر ١": "ليث · الصقر ١", "الصقر ٢": "رعد · الصقر ٢", "الصقر ٣": "زيد · الصقر ٣", "الصقر ٤": "جواد · الصقر ٤", "فارس": "فارس · المحاسب"},
+"hacked": ["صوت مجهول", "العقرب", "الرائد نضال"],
+"missions": {
+
+"bank": {
+	"chapter": "الفصل الأول", "name": "الصندوق ١١٤", "day": "الأحد",
+	"hook": "الأحد، ٥:٤٢ مساءً. مسلّحون اقتحموا «مصرف الشرق» واحتجزوا الموظفين. المفاوِضة بتقول إنهم ما طلبوا ولا قرش. حرامي بنك ما بدّه مصاري… معناها جاي على إشي ثاني.",
+	"epigraph": "«حرامي ما بدّه مصاري… معناها في إشي أغلى من المصاري.»",
+	"teaser": "الفصل الثاني · دفاتر الخال",
+	"intro": [
+		["ops", "3", "ثلاث سنين اليوم. حدا متذكّر؟", "Three years today. Anybody remember?"],
+		["ops", "2", "أنا ما بنسى يا زيد. ولا يوم.", "I don't forget, Zaid. Not a single day."],
+		["ops", "O", "نداء عاجل لوحدة الصقر: سطو مسلّح ورهائن، مصرف الشرق، جبل عمّان. تحرّكوا فوراً!", "Urgent call for Falcon Unit. Armed robbery with hostages, Orient Bank, Jabal Amman. Move out now!", "ring"],
+		["city", "TV", "…ولا تزال قوات الأمن العام تطوّق محيط المصرف منذ ساعتين وسط حالة من الترقّب.", "Public Security forces have surrounded the bank for two hours now, and the tension is rising."],
+		["target", "N", "زعيمهم «أبو جاسر» رفض كل العروض. والغريب؟ ما طلب ولا قرش. حرامي بنك ما بدّه مصاري… هاي أول مرة بتمرّ عليّ.", "Their leader, Abu Jasser, turned down every offer. And the strange part? He never asked for a single dinar. A bank robber who doesn't want money. That's a first for me."],
+		["truck", "M", "الصقر ١، معك العميد منصور. القرار انأخذ: اقتحام. الرهائن أولاً… وبدّي الموضوع مسكّر قبل نشرة الثمانية.", "Falcon One, this is Brigadier Mansour. The decision is made. You breach. Hostages first. And I want this closed before the eight o'clock news."]
+	],
+	"banter": [
+		["3", "يا زلمة أنا كنت طالب منسف… قلتلهم خمس دقايق وراجع.", "Man, I had just ordered mansaf. I told them, five minutes and I'm back."],
+		["2", "المنسف ما بيهرب يا زيد. الرهائن أهمّ.", "The mansaf isn't going anywhere, Zaid. The hostages matter more."],
+		["4", "سيدي… هاي أول مهمة حقيقية إلي. في نصيحة؟", "Sir, this is my first real mission. Any advice?"],
+		["P", "آه يا جواد. خلّيك ورا رعد واعمل زيّ ما بيعمل. رعد طلع حيّ من أسوأ من هيك.", "Yes, Jawad. Stay behind Raad and do exactly what he does. Raad walked out alive from worse than this."],
+		["2", "مرة وحدة بس. وما بحبّ أحكي عنها.", "Only once. And I don't like to talk about it."],
+		["3", "قاعدة رقم واحد بالوحدة يا جواد: ما حدا بيسأل عن «رمل أسود».", "Rule number one in this unit, Jawad. Nobody asks about Black Sand."],
+		["P", "خلص. ركّزوا. أول ما ننزل، عيونكم على الشبابيك.", "Enough. Focus. The moment we step out, eyes on the windows."]
+	],
+	"dialogue": [
+		["C", "أهلين بالصقر. تأخرتوا عليّ دقيقة ونص.", "Welcome, Falcon. You're a minute and a half late.", "salute"],
+		["P", "سير الدوّار السابع يا سيدي… شو الوضع؟", "Seventh Circle traffic, sir. What's the situation?", ""],
+		["C", "{n} مسلّحين جوّا، ومعهم {h} من موظفين البنك.", "{n} gunmen inside, holding {h} bank employees.", "talk"],
+		["N", "وفي إشي مش راكب. الخزنة الرئيسية ما لمسوها. نزلوا دغري على صناديق الأمانات.", "And something doesn't add up. They never touched the main vault. They went straight down to the safe deposit boxes.", ""],
+		["P", "صناديق الأمانات؟ شو بدهم فيها؟", "The deposit boxes? What do they want down there?", ""],
+		["C", "هاد اللي بدّي أعرفه. عشان هيك بدّي «{leader}» حيّ. فاهم عليّ؟ حيّ.", "That's what I want to know. Which is why I want {leader} alive. You hear me? Alive.", "talk"],
+		["C", "الباب الرئيسي مقفّلينه بسلاسل. بتفجّره بعبوة وبتدخل… الانفجار بدوّخهم كم ثانية.", "They chained the main door. You blow it with a charge and go in. The blast will stun them for a few seconds.", "point"],
+		["P", "علم. الرهائن أول إشي.", "Copy. Hostages first.", ""],
+		["C", "الله معكم يا شباب. يلّا.", "God be with you, boys. Go.", "talk"]
+	],
+	"beats": {
+		"half": [
+			["2", "سيدي! الخزنة الرئيسية مفتوحة… والمصاري مكانها. ما أخذوا ولا دينار!", "Sir! The main vault is open, and the money is all still here. They didn't take a single dinar!"],
+			["P", "خلّي عينك مفتوحة يا رعد. في إشي غلط هون.", "Keep your eyes open, Raad. Something is wrong here."]
+		],
+		"hostage1": [
+			["H", "أخذوا منّي مفاتيح صناديق الأمانات! كانوا بيدوّروا على صندوق واحد بس… رقم مية وأربعطعش!", "They took the deposit box keys from me! They were looking for one box only. Number one-fourteen!"]
+		]
+	},
+	"chase": {
+		"banner": ["هروب!", "«أبو جاسر» طلع من الباب الخلفي بفان نقل الأموال"],
+		"lines": [
+			["S", "الصقر ١! فان المصرف طالع من الشارع الخلفي بسرعة! «أبو جاسر» جوّاته!", "Falcon One! The bank van just tore out of the back street! Abu Jasser is inside!"],
+			["C", "ومعه اللي أخذه من الصندوق! لا تخلّيه يفلت… ارجع للسيارة والحقه!", "And he has whatever he took from that box! Don't let him get away. Back to the truck and go after him!"]
+		],
+		"stop": [["L", "خلص! خلص! لا تطخ… أنا مستسلم!", "Okay! Okay! Don't shoot! I give up!"]],
+		"lost": "«أبو جاسر» اختفى بشوارع عمّان… واللي بالصندوق معه."
+	},
+	"outro": [
+		["P", "وين اللي أخذته من الصندوق مية وأربعطعش؟", "Where is what you took from box one-fourteen?"],
+		["L", "راح. سلّمته من الشبّاك الخلفي قبل ما تفجّروا الباب. أنا كنت بس… بأخّركم.", "Gone. I handed it out the back window before you blew the door. I was only here to slow you down."],
+		["P", "لمين سلّمته؟", "Handed it to who?"],
+		["L", "ما شفت وجهه بحياتي. بيسمّوه «العقرب». دفعلي ثلاث أضعاف اللي بالخزنة… عشان دفتر واحد.", "I never saw his face. They call him the Scorpion. He paid me three times what's in that vault, for one notebook."],
+		["C", "الصقر ١، الصندوق مسجّل باسم شركة شحن بجبل الحسين. لا تروّحوا… الليلة طويلة.", "Falcon One, that box is registered to a freight company in Jabal Al-Hussein. Don't go home. It's going to be a long night."]
+	]
+},
+
+"raid": {
+	"chapter": "الفصل الثاني", "name": "دفاتر الخال", "day": "الأحد",
+	"hook": "نفس الليلة، ١١:٢٠. الصندوق ١١٤ مسجّل باسم شركة شحن بجبل الحسين — واجهة لعصابة «الخال». جوّا دفاتر، وهمّ ناويين يحرقوها. والعميد منصور بدّه إياها مشمّعة على مكتبه… قبل ما حدا يقراها.",
+	"epigraph": "«اللي حامينا لابس نفس بدلتك.»",
+	"teaser": "الفصل الثالث · الإلهاء",
+	"intro": [
+		["ops", "O", "وحدة الصقر: أمر مداهمة. شركة «الشمال للشحن»، جبل الحسين. الصندوق مية وأربعطعش مسجّل باسمها.", "Falcon Unit, raid order. Northern Freight Company, Jabal Al-Hussein. Box one-fourteen is registered in its name.", "ring"],
+		["ops", "M", "الصقر ١، معك العميد منصور. أي ورقة بتلاقوها جوّا بتتشمّع وبتيجي على مكتبي أنا. ما حدا يفتحها. واضح؟", "Falcon One, Brigadier Mansour. Any paper you find in there gets sealed and comes to my desk. Nobody opens it. Is that clear?"],
+		["ops", "P", "واضح يا سيادة العميد.", "Clear, sir."],
+		["target", "SV", "المستودع بالطابق الأرضي. «الخال» وجماعته جوّا وصاحيين… وفي ريحة كاز طالعة من الشبابيك. ناويين يحرقوا إشي.", "The warehouse is on the ground floor. Al-Khal and his men are inside, wide awake. And there's a smell of kerosene coming from the windows. They are getting ready to burn something."],
+		["truck", "2", "من إيمتى عميد بيهتمّ بدفاتر مهرّبين؟", "Since when does a brigadier care about a smuggler's notebooks?"]
+	],
+	"banter": [
+		["3", "جبل الحسين بالليل… بحبّ هالهدوء.", "Jabal Al-Hussein at night. I love how quiet it is."],
+		["2", "استنّى شوي وبتشوف الهدوء.", "Give it a minute. You'll see how quiet."],
+		["4", "سيدي، «العقرب» هاد… حدا سامع فيه قبل؟", "Sir, this Scorpion. Has anyone ever heard of him?"],
+		["P", "ولا مرة. وهاد اللي مقلقني. اللي بيدفع ثلاث أضعاف خزنة عشان دفتر، بيكون عارف شو مكتوب فيه.", "Never. And that's what worries me. A man who pays three vaults for one notebook already knows what's written in it."],
+		["2", "دفتر بصندوق أمانات باسم شركة شحن؟ هاد دفتر حسابات. مين قبض… ومين دفع.", "A notebook in a deposit box under a freight company? That's an account book. Who got paid, and who paid."],
+		["P", "وعشان هيك بدهم يحرقوا الباقي. أول ما نوصل، عالباب دغري.", "And that's why they want to burn the rest. The moment we arrive, straight to the door."]
+	],
+	"dialogue": [
+		["C", "وطّوا صوتكم… الحارة كلها نايمة.", "Keep your voices down. The whole street is asleep.", "salute"],
+		["P", "جاهزين يا سيدي. وين الشقة؟", "We're ready, sir. Where is it?", ""],
+		["C", "الطابق الأرضي قدّامك. المراقبة عدّت {n} مسلّحين، وكلهم صاحيين.", "Ground floor, right in front of you. Surveillance counted {n} gunmen, all of them awake.", "point"],
+		["C", "جوّا {e} دفاتر شحن. إذا حسّوا علينا بيحرقوهم… وبنحرق معهم الخيط الوحيد اللي بيوصّلنا للعقرب.", "There are {e} shipping ledgers in there. If they hear us coming they burn them, and with them the only thread that leads to the Scorpion.", "talk"],
+		["P", "والعميد بدّه إياهم مشمّعين على مكتبه.", "And the Brigadier wants them sealed, on his desk.", ""],
+		["C", "سمعته. إنت جيبهم سليمين… والباقي عليّ أنا.", "I heard him. You bring them out in one piece. Leave the rest to me.", "talk"],
+		["P", "و«{leader}»؟", "And {leader}?", ""],
+		["C", "حيّ. هالزلمة بيعرف العقرب أحسن منّا كلنا.", "Alive. That man knows the Scorpion better than all of us.", "talk"]
+	],
+	"beats": {
+		"evidence1": [
+			["P", "معي أول دفتر. هاي مش بضاعة… هاي أرقام تسلسلية لبواريد.", "I have the first ledger. This isn't cargo. These are serial numbers. Rifles."],
+			["2", "استنّى… هالأرقام بعرفها. هاي من مستودع سلاحنا إحنا! سلاح أمن عام!", "Wait. I know these numbers. They are from our own armory! Public Security weapons!"]
+		],
+		"evidence_all": [
+			["P", "الدفاتر كلها معي. وبكل صفحة في عمود دفعات لواحد… مكتوب اسمه بحرفين بس: عين، ميم.", "I have all the ledgers. And on every page there's a column of payments to one man. His name is written in two letters only. A. M."]
+		]
+	},
+	"chase": {
+		"banner": ["هروب!", "«الخال» طلع من الكراج بفان الشركة"],
+		"lines": [
+			["S", "الصقر ١! فان طالع من الكراج الخلفي! «الخال» جوّاته!", "Falcon One! A van just left the back garage! Al-Khal is inside!"],
+			["C", "هاد اللي بيعرف العقرب! الحقه… وبدّي إياه يحكي!", "He's the one who knows the Scorpion! Go after him. I want him talking!"]
+		],
+		"stop": [["L", "طيّب، طيّب! وقّفت! لا تطخّوا!", "All right, all right! I stopped! Don't shoot!"]],
+		"lost": "«الخال» هرب… وهرب معه كل اللي بيعرفه."
+	},
+	"outro": [
+		["L", "بتفكّر حالك مسكت راس الأفعى؟ أنا سوّاق شاحنات يا حضرة الضابط.", "You think you caught the head of the snake? I drive trucks, officer."],
+		["P", "مين «عين ميم»؟", "Who is A. M.?"],
+		["L", "اسأل جماعتك. اللي حامينا من عشر سنين لابس نفس بدلتك… وبياكل من نفس صحننا.", "Ask your own people. The man who has protected us for ten years wears the same uniform you do, and eats from the same plate we do."],
+		["P", "والعقرب؟ شغّال معكم؟", "And the Scorpion? He works with you?"],
+		["L", "معنا؟ العقرب عم يصطادنا واحد واحد. وإحنا خايفين منه… أكثر ما خايفين منكم.", "With us? The Scorpion is hunting us down, one by one. And we fear him more than we fear you."],
+		["M", "الصقر ١. الدفاتر بتنحطّ بغرفة الأدلة، وبكرة الصبح بتكون على مكتبي. مشمّعة.", "Falcon One. The ledgers go into the evidence room, and tomorrow morning they are on my desk. Sealed."]
+	]
+},
+
+"mall": {
+	"chapter": "الفصل الثالث", "name": "الإلهاء", "day": "الاثنين",
+	"hook": "الاثنين، ٩:٠٥ الصبح. عبوة ناسفة ومسلّحين بمول الياسمين. ما في مطالب، ما في اتصال — بس مؤقّت بيعدّ. كل وحدات عمّان رايحة على عبدون. يمكن هاد بالزبط اللي بدّه إياه حدا.",
+	"epigraph": "«عبوة بلا صاعق. الهدف ما كان المول.»",
+	"teaser": "الفصل الرابع · تحييد كامل",
+	"intro": [
+		["ops", "3", "نمنا ثلاث ساعات. ثلاث. أنا بدّي نقابة.", "We slept three hours. Three. I want a union."],
+		["ops", "O", "نداء عاجل لكل الوحدات! عبوة ناسفة ومسلّحين بمول الياسمين، عبدون! كل الوحدات تتحرّك!", "All units, urgent! A bomb and gunmen at Yasmin Mall, Abdoun! All units move!", "ring"],
+		["city", "TV", "…مسلّحون يتحصّنون داخل المول مع عدد من الموظفين بعد إخلاء معظم الزوّار.", "Gunmen have barricaded themselves inside the mall with a number of employees, after most shoppers were evacuated."],
+		["target", "N", "ما في مطالب. ما في اتصال. بس مؤقّت بيعدّ. اللي عمل هيك ما بدّه إشي منّا… بدّه إنّا نكون هناك.", "No demands. No contact. Only a timer counting down. Whoever did this doesn't want anything from us. He just wants us to be there."],
+		["truck", "C", "الصقر ١، المؤقّت أقل من خمس دقايق. فكّ العبوة أول إشي، وبعدين الرهائن.", "Falcon One, the timer is under five minutes. Defuse the bomb first. Then the hostages."]
+	],
+	"banter": [
+		["3", "عبدون الصبح… كنت ناوي أفطر هون مش أقتحم.", "Abdoun in the morning. I was planning to have breakfast here, not breach the place."],
+		["2", "خلّصنا بسرعة وبعزمك أنا.", "Finish this fast and breakfast is on me."],
+		["4", "سيدي، الدفاتر… استلمها العميد؟", "Sir, the ledgers. Did the Brigadier collect them?"],
+		["P", "لسّا بغرفة الأدلة. بيستلمها الساعة عشرة.", "Still in the evidence room. He collects them at ten."],
+		["2", "بنك مبارح، مستودع بالليل، وقنبلة اليوم. ثلاث ضربات بأقل من يوم. هاد مش صدفة يا ليث.", "A bank yesterday, a warehouse last night, and a bomb today. Three hits in less than a day. That is no coincidence, Laith."],
+		["4", "حدا فيكم فكّ عبوة قبل هيك؟", "Has any of you ever defused a bomb before?"],
+		["P", "أنا. علّمني واحد… الله يرحمه. وما بدّي حدا يحكي معي وأنا بفكّها.", "I have. A man taught me, God rest his soul. And I don't want anyone talking to me while I do it."]
+	],
+	"dialogue": [
+		["C", "الصقر، ما في وقت للسلام. في عبوة بنص المول.", "Falcon, no time for greetings. There's a bomb in the middle of that mall.", "talk"],
+		["P", "كم ضايل عالمؤقّت؟", "How long is left on the timer?", ""],
+		["C", "دقايق. شايف المدخل؟ العبوة بنص الصالة، جنب الأكشاك.", "Minutes. See the entrance? The bomb is in the middle of the hall, next to the kiosks.", "point"],
+		["C", "وفي {n} مسلّحين و{h} رهائن. وهدول مش زعران… هدول متدرّبين.", "There are {n} gunmen and {h} hostages. And these are not street thugs. These men are trained.", "talk"],
+		["N", "ليث. كل وحدات عمّان هون هلأ. كلها. لو أنا بدّي أسرق إشي بمكان ثاني… هيك كنت بعمل.", "Laith. Every unit in Amman is here right now. Every one. If I wanted to steal something somewhere else, this is exactly what I would do.", ""],
+		["C", "بنفكّر فيها بعدين يا ليلى. هلأ في مؤقّت.", "We'll think about that later, Laila. Right now there's a timer.", "talk"],
+		["P", "العبوة أول إشي، بعدين الرهائن.", "Bomb first. Then the hostages.", ""],
+		["C", "وإيدك ما ترجف.", "And keep your hand steady.", "talk"],
+		["P", "إيدي ما بترجف يا سيدي.", "My hand doesn't shake, sir.", ""]
+	],
+	"beats": {
+		"breach": [
+			["X", "صباح الخير يا وحدة الصقر. خذوا راحتكم… المؤقّت كريم اليوم.", "Good morning, Falcon Unit. Take your time. The timer is generous today."],
+			["2", "مين هاد؟! مين عالتردّد؟!", "Who is that?! Who is on our channel?!"],
+			["C", "التردّد مخترق! كمّلوا يا الصقر، ما توقّفوا!", "The channel is compromised! Keep going, Falcon, don't stop!"]
+		],
+		"bomb_near": [
+			["X", "السلك الأزرق أول إشي يا ليث. زيّ ما تعلّمت.", "The blue wire first, Laith. Just like you were taught."],
+			["P", "…مين إنت؟", "Who are you?"],
+			["X", "واحد كان واقف وراك، وإنت بتفكّ أول عبوة بحياتك.", "Someone who stood right behind you, the day you defused the first bomb of your life."]
+		],
+		"defused": [
+			["P", "العبوة معطّلة. بس… سيدي، هاي ما فيها صاعق. ما كانت رح تنفجر أصلاً.", "The bomb is disarmed. But sir, there's no detonator in it. It was never going to go off."],
+			["C", "شو قلت؟ عيدها.", "What did you say? Repeat that."]
+		]
+	},
+	"outro": [
+		["O", "العقيد سامر! غرفة الأدلة بالمديرية انفتحت قبل عشر دقايق… دفاتر جبل الحسين اختفت.", "Colonel Samer! The evidence room at headquarters was opened ten minutes ago. The Jabal Al-Hussein ledgers are gone."],
+		["N", "قلتلكم. بدّه إيّانا هون.", "I told you. He wanted us here."],
+		["C", "اللي دخل ما كسر ولا قفل. كان عارف الكود… وعارف أيّ رفّ.", "Whoever walked in didn't break a single lock. He knew the code. And he knew which shelf."],
+		["2", "سيدي… الصوت اللي طلع عالراديو. أنا بعرف هالصوت.", "Sir. That voice on the radio. I know that voice."],
+		["P", "رعد؟ احكي.", "Raad? Say it."],
+		["2", "…لا. مستحيل. الأموات ما بيحكوا عالراديو.", "No. It's impossible. Dead men don't talk on the radio."]
+	]
+},
+
+"sniper": {
+	"chapter": "الفصل الرابع", "name": "تحييد كامل", "day": "الاثنين",
+	"hook": "الاثنين، ٦:١٥ مساءً. معلومة من العميد منصور شخصياً: جماعة العقرب بساحة مستودعات بماركا ومعهم عمّال رهائن. إنت على السطح المقابل. والأمر غريب: ما بدّه ولا معتقل.",
+	"epigraph": "«تحييد كامل. ولا واحد يحكي.»",
+	"teaser": "الفصل الخامس · الشاهد",
+	"intro": [
+		["ops", "M", "الصقر ١، معك العميد منصور. معلومة مؤكّدة: جماعة العقرب بيحمّلوا شحنة بساحة مستودعات بماركا، وماخذين العمّال رهائن.", "Falcon One, Brigadier Mansour. Confirmed intelligence. The Scorpion's men are loading a shipment in a warehouse yard in Marka, and they are holding the workers hostage.", "ring"],
+		["ops", "M", "إنت على السطح المقابل. وما بدّي معتقلين اليوم. كل مسلّح بالساحة هدف… تحييد كامل.", "You take the rooftop across from it. And I want no prisoners today. Every armed man in that yard is a target. Full neutralization."],
+		["ops", "C", "سيادة العميد، لو مسكنا واحد منهم حيّ بنعرف مين—", "Brigadier, if we take even one of them alive, we could find out who"],
+		["ops", "M", "تحييد كامل يا عقيد. هذا أمر.", "Full neutralization, Colonel. That is an order."],
+		["target", "2", "ليث… من إيمتى بنطلع مهمة عشان ما نرجّع حدا حيّ؟", "Laith. Since when do we go out on a mission to bring nobody back alive?"],
+		["truck", "P", "ما بعرف يا رعد. بس في عمّال قاعدين عالأرض تحت السلاح. بنطلع.", "I don't know, Raad. But there are workers sitting on the ground at gunpoint. We go."]
+	],
+	"beats": {
+		"sniper_start": [
+			["C", "الصقر ١، إنت بالموقع. ابدأ بالأقرب للرهائن… إذا شافوا رفيقهم وقع رح يتحرّكوا عليهم.", "Falcon One, you are in position. Start with the ones closest to the hostages. If they see a friend go down, they will move on them."],
+			["G", "الفريق الأرضي جاهز عند البوابة. بنستنّى إشارتك يا ليث.", "Ground team is ready at the gate. Waiting on your signal, Laith."]
+		],
+		"half": [
+			["A", "نفس الزاوية اللي علّمتك إياها. الشمس ورا ظهرك والريح عن يمينك. شاطر.", "The same angle I taught you. Sun behind your back, wind on your right. Good boy."],
+			["P", "اطلع عن التردّد.", "Get off this channel."],
+			["A", "لو بدّي أأذيك، كان خلصت من أول ما طلعت عالسطح. أنا مش عدوّك يا ليث.", "If I wanted to hurt you, it would have been over the moment you climbed onto that roof. I am not your enemy, Laith."]
+		],
+		"one_left": [
+			["A", "اسأل حالك سؤال واحد: ليش منصور بدّه إياهم كلهم ميتين؟ ولا واحد يحكي؟", "Ask yourself one question. Why does Mansour want every one of them dead? Not a single one left to talk?"]
+		]
+	},
+	"outro": [
+		["G", "الساحة نظيفة والعمّال بخير. بس سيدي… الصناديق هون فاضية. ما في شحنة.", "The yard is clear and the workers are safe. But sir, these crates are empty. There is no shipment."],
+		["A", "طبعاً فاضية. هدول مش رجالي يا ليث. هدول شركاء منصور… بعتك تسكّتهم قبل ما يحكوا. وإنت نفّذت.", "Of course they are empty. Those were never my men, Laith. They were Mansour's partners. He sent you to silence them before they could talk. And you did."],
+		["P", "كذّاب.", "Liar."],
+		["A", "سلّملي على رعد. قلّه الكتف اللي حملته عليه برمل أسود… لسّا بيوجعني بالشتا.", "Give Raad my regards. Tell him the shoulder I carried him on, at Black Sand, still aches in the winter."],
+		["2", "…ما حدا بيعرف هاي. ما حدا بالدنيا غير الرائد نضال.", "Nobody knows that. Nobody in this world, except Major Nidal."],
+		["C", "نضال مات يا رعد. أنا مشيت بجنازته.", "Nidal is dead, Raad. I walked in his funeral."],
+		["2", "مشيت ورا تابوت مسكّر يا سيدي. كلنا مشينا ورا تابوت مسكّر.", "You walked behind a closed coffin, sir. We all walked behind a closed coffin."]
+	]
+},
+
+"hotel": {
+	"chapter": "الفصل الخامس", "name": "الشاهد", "day": "الثلاثاء",
+	"hook": "الثلاثاء، ٩:٤٠ مساءً. مسلّحون سيطروا على «فندق الواحة». زعيمهم «الذيب» طالب طيّارة — بس ليلى بتقول إنه بيقرأ طلباته من ورقة. رجاله بيفتّشوا الغرف وحدة وحدة. بيدوّروا على حدا.",
+	"epigraph": "«كلام شاهد خايف ما بيوقّف عميد. بدّي ورقة.»",
+	"teaser": "الفصل السادس · حسب الأصول",
+	"intro": [
+		["ops", "4", "يعني «العقرب»… هو الرائد نضال؟ اللي أسّس الوحدة؟", "So the Scorpion is Major Nidal? The man who founded this unit?"],
+		["ops", "2", "هو اللي علّم ليث. وعلّمني. وحملني مصاوب ثلاث كيلو على كتفه… وأنا مشيت بجنازته.", "He trained Laith. He trained me. He carried me wounded for three kilometers on his shoulder. And I walked in his funeral."],
+		["ops", "O", "نداء عاجل لوحدة الصقر: مسلّحون سيطروا على فندق الواحة بالشميساني. نزلاء محتجزين.", "Urgent call for Falcon Unit. Gunmen have taken the Oasis Hotel in Shmeisani. Guests are being held.", "ring"],
+		["city", "TV", "…شهود عيان: سُمع إطلاق نار داخل الفندق، والأمن العام أخلى الشوارع المحيطة.", "Witnesses report gunfire inside the hotel. Public Security has cleared the surrounding streets."],
+		["target", "N", "زعيمهم «الذيب» طالب طيّارة وإفراج عن أخوه. بس طلباته… كأنه بيقراها من ورقة. هاد مش خاطف. هاد واحد بيكسب وقت.", "Their leader, Al-Theeb, wants a plane and his brother released. But his demands sound like he's reading them off a piece of paper. This is no kidnapper. This is a man buying time."],
+		["target", "N", "ورجاله بيفتّشوا الغرف وحدة وحدة. بيدوّروا على حدا.", "And his men are searching the rooms, one by one. They are looking for someone."]
+	],
+	"banter": [
+		["3", "فندق خمس نجوم… وأنا داخله من غير حجز.", "A five star hotel, and I'm walking in without a reservation."],
+		["4", "سيدي، إذا طلع العقرب عالراديو… بنردّ عليه؟", "Sir, if the Scorpion comes on the radio, do we answer him?"],
+		["P", "بنسمع. ما بنصدّق، وما بنكذّب… لحد ما نشوف بعيونّا.", "We listen. We don't believe him, and we don't call him a liar. Not until we see it with our own eyes."],
+		["2", "ليث. بماركا الصناديق كانت فاضية. زيّ ما قال.", "Laith. In Marka the crates were empty. Just like he said."],
+		["P", "عارف.", "I know."],
+		["2", "والعميد هو اللي بعتنا.", "And it was the Brigadier who sent us."],
+		["P", "عارف يا رعد. خلّيها بقلبك هلأ… في ناس جوّا.", "I know, Raad. Keep it to yourself for now. There are people in there."]
+	],
+	"dialogue": [
+		["C", "الصقر. الليلة طويلة… والفندق مليان غرف.", "Falcon. It's a long night, and that hotel is full of rooms.", "salute"],
+		["P", "كم واحد جوّا يا سيدي؟", "How many inside, sir?", ""],
+		["C", "{n} مسلّحين، و{h} نزلاء محجوزين بالغرف الأرضية.", "{n} gunmen, and {h} guests locked in the ground floor rooms.", "talk"],
+		["A", "سامر. ليث. اسمعوني دقيقة وحدة.", "Samer. Laith. Give me one minute.", ""],
+		["C", "اطلع عن تردّدي!", "Get off my channel!", "talk"],
+		["A", "هدول مش رجالي. هدول رجال منصور. بغرفة من هالغرف في محاسب اسمه فارس… هو اللي كان بيسجّل الدفعات. إذا مات، ماتت الحقيقة معه.", "Those are not my men. They are Mansour's. In one of those rooms there's an accountant named Faris. He is the one who recorded the payments. If he dies, the truth dies with him.", ""],
+		["C", "وأنا ليش أصدّق واحد زرع عبوة بمول؟", "And why would I believe a man who planted a bomb in a mall?", "talk"],
+		["A", "عبوة بلا صاعق يا سامر. إنت اللي وقّعت التقرير.", "A bomb with no detonator, Samer. You signed that report yourself.", ""],
+		["C", "…الصقر ١. طلّع النزلاء كلهم أحياء. كلهم. وإذا في بينهم واحد اسمه فارس… بتجيبه لعندي أنا. مش لحدا ثاني.", "Falcon One. Get every guest out alive. All of them. And if one of them is named Faris, you bring him to me. To nobody else.", "point"],
+		["P", "علم يا سيدي.", "Understood, sir.", ""]
+	],
+	"beats": {
+		"hostage1": [
+			["H", "كانوا بيسألوا كل واحد عن اسمه! بيدوّروا على محاسب… واحد اسمه فارس!", "They were asking every one of us for our names! They are looking for an accountant. A man called Faris!"]
+		],
+		"half": [
+			["L", "لاقوه! بدّي المحاسب قبل ما يوصلوله الشرطة!", "Find him! I want that accountant before the police get to him!"],
+			["2", "سمعت يا ليث؟ بيدوّروا عليه عن جدّ. نضال ما كذب.", "Did you hear that, Laith? They really are after him. Nidal wasn't lying."]
+		],
+		"hostage3": [
+			["W", "أنا فارس. أنا اللي بيدوّروا عليه. بالله عليكم… لا تسلّموني للمديرية. بيقتلوني هناك!", "I am Faris. I'm the one they are looking for. I beg you, don't hand me over to headquarters. They will kill me there!"]
+		]
+	},
+	"outro": [
+		["W", "كل شهر دفعة. عشر سنين. لحساب واحد بس… العميد منصور.", "A payment every month. For ten years. To one man's account. Brigadier Mansour."],
+		["C", "…عيدها.", "Say that again."],
+		["W", "العميد منصور. هو اللي كان بيفتح الحدود للشحنات. ولما وحدتكم قرّبت كثير قبل ثلاث سنين… هو اللي باع موقعهم.", "Brigadier Mansour. He was the one opening the border for the shipments. And three years ago, when your unit got too close, he was the one who sold their position."],
+		["2", "رمل أسود.", "Black Sand."],
+		["C", "كلام محاسب خايف ما بيوقّف عميد. بدّي ورقة.", "The word of a frightened accountant doesn't stop a brigadier. I need paper."],
+		["W", "في ورقة. عقد التوريد الأصلي بتوقيعه… الوسيط حاطّه بخزنة سفارة. ما حدا بيقدر يوصلها.", "There is paper. The original supply contract, with his signature on it. The broker keeps it in an embassy safe. Nobody can get to it."],
+		["N", "نضال بيقدر.", "Nidal can."]
+	]
+},
+
+"bus": {
+	"chapter": "الفصل السادس", "name": "حسب الأصول", "day": "الأربعاء",
+	"hook": "الأربعاء، ٧:١٥ الصبح. العقيد نقل الشاهد بالسرّ، بباص ركّاب عادي — وما بلّغ غير واحد. بعد عشرين دقيقة انخطف الباص ودخلوا فيه مجمّع الشمال.",
+	"epigraph": "«بلّغت واحد بس. حسب الأصول.»",
+	"teaser": "الفصل الأخير · ليلة السفارة",
+	"intro": [
+		["ops", "O", "نداء عاجل: خطف باص ركّاب. المسلّحين دخلوا فيه مجمّع الشمال بطبربور.", "Urgent. A passenger bus has been hijacked. The gunmen drove it into the Northern Terminal in Tabarbour.", "ring"],
+		["ops", "C", "الصقر ١… هالباص. فارس كان فيه.", "Falcon One. That bus. Faris was on it."],
+		["ops", "P", "فارس؟! مش مفروض يكون تحت الحماية؟", "Faris?! Wasn't he supposed to be under protection?"],
+		["target", "C", "أنا اللي حطّيته فيه. باص عادي ومرافقين بلباس مدني… ما حدا بيدوّر على شاهد بباص طبربور. وما حدا كان بيعرف.", "I put him on it myself. An ordinary bus, with plain clothes escorts. Nobody looks for a witness on the Tabarbour bus. And nobody knew."],
+		["target", "N", "ولا حدا يا سيدي؟", "Nobody at all, sir?"],
+		["truck", "C", "…بلّغت واحد بس. حسب الأصول. العميد منصور.", "I reported it to one man only. By the book. Brigadier Mansour."]
+	],
+	"banter": [
+		["3", "أنا كل يوم بركب من هالمجمّع… أول مرة بيجي الباص عالوقت.", "I ride from that terminal every day. First time the bus ever came on time."],
+		["2", "مش وقتها يا زيد.", "Not now, Zaid."],
+		["4", "يعني العميد… عن جدّ؟", "So the Brigadier. For real?"],
+		["2", "عشرين دقيقة بين ما العقيد بلّغه وبين ما انخطف الباص. عدّها إنت يا جواد.", "Twenty minutes between the Colonel reporting it and the bus getting hijacked. You do the math, Jawad."],
+		["P", "هلأ ما في عميد وما في عقرب. في ركّاب قاعدين عالأرض وخايفين. هدول شغلنا… والباقي بعدين.", "Right now there is no Brigadier and no Scorpion. There are passengers sitting on the ground, terrified. They are our job. Everything else comes later."],
+		["2", "ساحة مكشوفة. ما بحبّها.", "An open yard. I don't like it."],
+		["P", "ولا أنا. من ساتر لساتر، وعيونكم مفتّحة.", "Neither do I. Cover to cover, and keep your eyes open."]
+	],
+	"dialogue": [
+		["C", "صباح الخير يا الصقر. ما في قهوة اليوم… وما في نوم من مبارح.", "Good morning, Falcon. No coffee today. And no sleep since yesterday.", "salute"],
+		["P", "شو عنّا يا سيدي؟", "What do we have, sir?", ""],
+		["C", "{n} مسلّحين و{h} ركّاب قاعدين عالأرض جنب الباص. وواحد منهم فارس.", "{n} gunmen, and {h} passengers sitting on the ground beside the bus. One of them is Faris.", "point"],
+		["M", "عقيد سامر، معك العميد منصور. وحدة الصقر تنسحب فوراً. قوّة خاصة من عندي بالطريق… ربع ساعة.", "Colonel Samer, this is Brigadier Mansour. Falcon Unit is to withdraw immediately. A special force of mine is on the way. Fifteen minutes.", ""],
+		["N", "ربع ساعة؟ بيكون الشاهد مات من عشر دقايق.", "Fifteen minutes? The witness will have been dead for ten of them.", ""],
+		["C", "سيادة العميد… الإرسال عندي بيقطّع. ما سمعت آخر جملة.", "Brigadier, my signal is breaking up. I didn't catch that last part.", "talk"],
+		["M", "سامر! هذا أمر مباش—", "Samer! That is a direct", ""],
+		["C", "ليث. الراديو خربان. ادخل… وهاي عليّ أنا.", "Laith. The radio is broken. Go in. This one is on me.", "talk"],
+		["P", "علم يا سيدي. الركّاب أول إشي.", "Copy, sir. Passengers first.", ""]
+	],
+	"beats": {
+		"half": [
+			["M", "الصقر ١! معك العميد منصور! أوقف العملية فوراً! هذا أمر!", "Falcon One! This is Brigadier Mansour! Stop this operation at once! That is an order!"],
+			["P", "…الإرسال بيقطّع يا سيادة العميد.", "You're breaking up, Brigadier."]
+		],
+		"hostage1": [
+			["W", "قلتلكم! قلتلكم بيلاقوني وين ما رحت!", "I told you! I told you they would find me wherever I go!"]
+		]
+	},
+	"outro": [
+		["C", "فارس حيّ، والركّاب كلهم بخير. …ليث، شكراً.", "Faris is alive, and every passenger is safe. Laith. Thank you."],
+		["M", "عقيد سامر الخطيب. إنت موقوف عن العمل من هاللحظة. ووحدة الصقر محلولة لحين انتهاء التحقيق. سلّموا سلاحكم.", "Colonel Samer Al-Khatib. You are suspended from duty as of this moment. And Falcon Unit is disbanded, pending investigation. Hand in your weapons."],
+		["3", "محلولة؟! إحنا لسّا مطلّعين ركّاب من تحت السلاح!", "Disbanded?! We just pulled passengers out from under the gun!"],
+		["C", "اسكت يا زيد. …سلّموا السلاح يا شباب.", "Quiet, Zaid. Hand in your weapons, boys."],
+		["A", "شايف يا ليث؟ هيك عملوا فينا. بالزبط هيك. الليلة أنا بجيب الورقة… لحالي.", "You see, Laith? This is what they did to us. Exactly this. Tonight I am getting that paper. Alone."]
+	]
+},
+
+"embassy": {
+	"chapter": "الفصل الأخير", "name": "رمل أسود", "day": "الخميس",
+	"hook": "الخميس، ٢:١٠ بعد منتصف الليل. نضال اقتحم السفارة ليفتح الخزنة. العميد منصور ماسك القيادة بنفسه، وأمره واضح: ما حدا يطلع حيّ. وحدة الصقر محلولة رسمياً… بس أربعة منها ما حدا حلّهم.",
+	"epigraph": "«لا دعم. لا إخلاء.»",
+	"teaser": "",
+	"intro": [
+		["ops", "3", "وحدة محلولة… وقاعدين بغرفة العمليات. آخر واحد بيطلع يطفّي الضو.", "A disbanded unit, sitting in its own operations room. Last one out, turn off the lights."],
+		["ops", "TV", "عاجل: مسلّحون يقتحمون مبنى سفارة في دير غبار… والعميد منصور يتولّى قيادة العملية شخصياً.", "Breaking news. Gunmen have stormed an embassy building in Deir Ghbar. Brigadier Mansour has taken personal command of the operation."],
+		["ops", "2", "هو. نضال راح يجيب الورقة.", "It's him. Nidal went to get the paper."],
+		["ops", "4", "والعميد هناك. مش رح يطلّع حدا حيّ من المبنى… لا نضال، ولا الورقة.", "And the Brigadier is there. He won't let anyone leave that building alive. Not Nidal, and not the paper."],
+		["ops", "P", "وحدة الصقر محلولة. بس ليث ورعد وزيد وجواد… ما حدا حلّهم. مين معي؟", "Falcon Unit is disbanded. But Laith, Raad, Zaid and Jawad? Nobody disbanded them. Who is with me?", "up"],
+		["truck", "2", "من ثلاث سنين وأنا مستنّي هالسؤال.", "I have been waiting three years for that question."]
+	],
+	"banter": [
+		["3", "يعني رسمياً إحنا هلأ شو؟ أربع مواطنين بسيارة مصفّحة؟", "So officially, what are we now? Four citizens in an armored truck?"],
+		["2", "أربع مواطنين مصحصحين.", "Four citizens who are wide awake."],
+		["4", "سيدي… إذا وصلنا لنضال، شو بنعمل؟", "Sir. If we reach Nidal, what do we do?"],
+		["P", "بنجيبه حيّ. هو والورقة. الورقة بتدين منصور… وهو بيتحاسب على اللي عمله.", "We bring him in alive. Him and the paper. The paper convicts Mansour. And Nidal answers for what he did."],
+		["2", "ليث… هالزلمة أنقذ حياتي.", "Laith. That man saved my life."],
+		["P", "وحياتي أنا كمان. وخوّف نص عمّان أربع أيام. الثنتين صح يا رعد.", "Mine too. And he terrorized half of Amman for four days. Both are true, Raad."],
+		["3", "طيّب، وإذا العميد أمرنا نطخّه؟", "Fine. And if the Brigadier orders us to shoot him?"],
+		["P", "العميد ما عاد بيأمرنا يا زيد.", "The Brigadier doesn't give us orders anymore, Zaid."]
+	],
+	"dialogue": [
+		["C", "ما كان لازم تيجوا.", "You should not have come.", "talk"],
+		["P", "ولا إنت يا سيدي.", "Neither should you, sir.", ""],
+		["C", "أنا موقوف عن العمل. بس ما حدا قال إني ما بقدر أوقف عالرصيف.", "I am suspended from duty. But nobody said I can't stand on a sidewalk.", "talk"],
+		["N", "{n} مسلّحين جوّا مع نضال، و{h} دبلوماسيين. ورجال منصور ملتفّين من ورا المبنى… ومعهم أمر: ما حدا يطلع.", "{n} gunmen inside with Nidal, and {h} diplomats. Mansour's men are circling around the back of the building, with one order. Nobody comes out.", ""],
+		["C", "بالخزنة في {e} ملفات: عقد التوريد، وأمر عمليات «رمل أسود» الأصلي. إذا وصلوها رجال منصور قبلك… بتنحرق.", "There are {e} files in that safe. The supply contract, and the original Black Sand operation order. If Mansour's men reach them before you do, they burn.", "point"],
+		["P", "ندخل من الباب الرئيسي؟", "We go in through the main door?", ""],
+		["C", "ما في غيره. كاميرا تحت الباب، عبوة، وبسرعة.", "There is no other way. Camera under the door, charge, and move fast.", "talk"],
+		["C", "ليث. نضال… جيبلي إياه حيّ. بدّي أسمعها منه. وبدّي المحكمة تسمعها.", "Laith. Nidal. Bring him to me alive. I want to hear it from him. And I want a court to hear it.", "talk"],
+		["P", "حيّ يا سيدي. وعد.", "Alive, sir. You have my word.", ""]
+	],
+	"beats": {
+		"breach": [
+			["D", "عرفت إنك جاي يا ليث. بس ما كنت متأكّد… مع مين.", "I knew you would come, Laith. I just wasn't sure whose side you'd be on."],
+			["P", "مع الرهائن. زيّ دايماً.", "The hostages' side. Like always."]
+		],
+		"evidence1": [
+			["P", "أول ملف معي. عقد توريد سلاح… والتوقيع: منصور.", "I have the first file. A weapons supply contract. And the signature: Mansour."]
+		],
+		"evidence_all": [
+			["P", "الملفّين معي. أمر عمليات رمل أسود… ومكتوب عليه بخط إيده: «لا دعم. لا إخلاء.»", "I have both files. The Black Sand operation order. And written across it, in his own handwriting: No support. No extraction."],
+			["2", "لا دعم. لا إخلاء. …ثلاث مرات ناديت عالراديو يا ليث. ثلاث مرات.", "No support. No extraction. I called on that radio three times, Laith. Three times."]
+		],
+		"half": [
+			["M", "لكل القوّات: المبنى فيه إرهابيين. ما في أسرى. أكرّر: ما في أسرى.", "All forces. That building is full of terrorists. No prisoners. I repeat. No prisoners."],
+			["C", "لكل القوّات: هذا أمر غير قانوني، واللي بينفّذه بيتحاسب. أنا العقيد سامر الخطيب… وأنا شاهد.", "All forces. That order is unlawful, and whoever carries it out will answer for it. I am Colonel Samer Al-Khatib. And I am a witness."]
+		]
+	},
+	"chase": {
+		"banner": ["نضال!", "طلع من كراج السفارة بفان"],
+		"lines": [
+			["S", "الصقر ١! فان طالع من كراج السفارة! نضال جوّاته!", "Falcon One! A van just left the embassy garage! Nidal is inside!"],
+			["D", "الملفات معك؟ منيح. وصّلها. بس أنا ما برجع على زنزانة… مفتاحها بجيبة منصور.", "You have the files? Good. Deliver them. But I am not going back to a cell whose key sits in Mansour's pocket."]
+		],
+		"stop": [["D", "خلص يا ليث. وقّفت.", "It's over, Laith. I've stopped."]],
+		"lost": "نضال اختفى بشوارع عمّان. الملفات معك… بس الشاهد الوحيد على «رمل أسود» راح."
+	},
+	"confront": [
+		["D", "ثلاث سنين وأنا ميّت… وأول واحد بيوقّفني هو اللي علّمته يسوق.", "Three years as a dead man. And the first one to stop me is the boy I taught how to drive."],
+		["P", "موظفين بنك. ركّاب باص. ناس بتتسوّق. هدول شو ذنبهم يا سيدي؟", "Bank clerks. Bus passengers. People out shopping. What did they ever do, sir?"],
+		["D", "ما كان لازم حدا يتأذّى. استأجرت كلاب… وفلتوا منّي. هاي بحملها أنا، مش إنت.", "Nobody was supposed to get hurt. I hired dogs, and they slipped the leash. That weight is mine to carry. Not yours."],
+		["M", "الصقر ١. الهدف قدّامك. نفّذ. هذا أمر مباشر… وبنسى إنك عصيتني الليلة.", "Falcon One. The target is right in front of you. Take the shot. That is a direct order. And I will forget that you disobeyed me tonight."],
+		["C", "ليث. إنت بتعرف شو الصح. القرار قرارك يا ابني.", "Laith. You know what's right. The decision is yours, son."],
+		["D", "اعمل اللي بتشوفه صح. بس الملفات… وصّلها.", "Do what you believe is right. But the files. Deliver them."]
+	],
+	"choice": {"title": "القرار قرارك", "options": [["كلبشه — خلّي المحكمة تسمعه", "justice"], ["نفّذ أمر العميد", "silence"]]},
+	"endings": {
+		"justice": {
+			"title": "النهاية: العدالة",
+			"lines": [
+				["P", "الرائد نضال الصافي. إنت موقوف… وعندك حقّ تحكي كل إشي.", "Major Nidal Al-Safi. You are under arrest. And you have the right to tell them everything."],
+				["D", "أخيراً حدا بيكمّل الإجراء للآخر. …علّمتك منيح.", "At last. Someone who follows procedure all the way to the end. I taught you well."],
+				["C", "سيادة العميد منصور. معي ملفّين، وشاهد، ورائد راجع من الموت. إيديك لو سمحت.", "Brigadier Mansour. I have two files, a witness, and a major back from the dead. Your hands, please."],
+				["M", "إنت عارف مع مين بتحكي يا سامر؟", "Do you know who you are talking to, Samer?"],
+				["C", "عارف. عشان هيك جبت الكلبشات معي.", "I do. That is why I brought the handcuffs."],
+				["2", "أربعة راحوا برمل أسود. الليلة… الليلة بيرتاحوا.", "Four men died at Black Sand. Tonight, they can finally rest."]
+			],
+			"epilogue": "بعد ستة أشهر: حُكم على العميد منصور بالمؤبّد. الرائد نضال الصافي شهد أمام المحكمة، ثم وقف أمامها متّهماً وقبل حكمها. وحدة الصقر رجعت للخدمة… بقيادة النقيب ليث."
+		},
+		"silence": {
+			"title": "النهاية: الصمت",
+			"lines": [
+				["M", "أحسنت يا ابني. الملفات بتتسلّم لمكتبي. والليلة… ما صار إشي.", "Well done, son. The files go to my office. And tonight, nothing happened."],
+				["2", "…هو اللي حملني على كتفه.", "He carried me on his shoulder."],
+				["C", "خلصت المهمة يا الصقر ١.", "Mission complete, Falcon One."]
+			],
+			"epilogue": "الملفّان اختفيا من غرفة الأدلة بعد أسبوع. فارس وُجد ميتاً في زنزانته. العميد منصور رُقّي إلى لواء. وما حدا عاد حكى عن «رمل أسود»…  في نهاية ثانية لهالقصة."
+		}
+	}
+}
+
+}
+}

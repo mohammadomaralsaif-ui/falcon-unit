@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Pre-record every spoken line of the game with offline neural TTS, one voice per character.
 
-Lines are collected from the game scripts (hud.radio calls, mission dialogue), each character
+Lines are collected from the story (assets/story.json: Arabic subtitle + the English that is spoken)
+and from the game scripts (hud.radio calls, with their English in tools/voice_en.json); each character
 is mapped to a voice (model + pitch + pace), and the result is written to assets/voice/<md5>.ogg
 where md5 = md5("<speaker>|<raw text>") — the same key the game computes at run time.
 
@@ -25,24 +26,33 @@ LEADERS = sorted({m["leader"] for m in missions if m["leader"]})
 # speaker -> (voice model, pitch shift in semitones, pace)
 EN = json.load(open(os.path.join(ROOT, "tools", "voice_en.json"), encoding="utf-8"))   # Arabic template -> English line
 EN_NAMES = {"أبو جاسر": "Abu Jasser", "الخال": "Al-Khal", "جبل عمّان": "Jabal Amman", "جبل الحسين": "Jabal Al-Hussein",
-            "عبدون": "Abdoun", "ماركا": "Marka", "الذيب": "Al-Theeb", "العقرب": "Al-Aqrab", "الشميساني": "Shmeisani", "طبربور": "Tabarbour", "دير غبار": "Deir Ghbar", "الصقر ٢": "Falcon Two", "الصقر ٣": "Falcon Three", "الصقر ٤": "Falcon Four", "الصقر ٥": "Falcon Five"}
+            "عبدون": "Abdoun", "ماركا": "Marka", "الذيب": "Al-Theeb", "العقرب": "the Scorpion", "الرائد نضال": "Nidal", "الشميساني": "Shmeisani", "طبربور": "Tabarbour", "دير غبار": "Deir Ghbar", "الصقر ٢": "Falcon Two", "الصقر ٣": "Falcon Three", "الصقر ٤": "Falcon Four", "الصقر ٥": "Falcon Five"}
 
 # The game speaks English (clear, natural neural voices) with Arabic subtitles on screen.
 # speaker -> (Piper voice, pitch shift in semitones, pace)
 CAST = {
-    COLONEL: ("en_GB-alan-medium", 0.0, 1.0), "قائد العمليات": ("en_GB-alan-medium", 0.0, 1.05),
+    COLONEL: ("en_GB-alan-medium", 0.0, 1.0),
     PLAYER: ("en_US-ryan-high", 0.0, 1.0),
     "الصقر ٢": ("en_US-joe-medium", 0.0, 1.05), "الصقر ٣": ("en_US-bryce-medium", 0.0, 1.3),
     "الصقر ٤": ("en_US-john-medium", 0.0, 1.15), "الصقر ٥": ("en_US-kusal-medium", 0.0, 1.05),
-    "فريق المراقبة": ("en_US-hfc_male-medium", 0.0, 1.05), "القنّاص": ("en_GB-northern_english_male-medium", 0.0, 1.0),
-    "الفريق الأرضي": ("en_US-norman-medium", 0.0, 1.0),
+    "فريق المراقبة": ("en_US-hfc_male-medium", 0.0, 1.05), "القنّاص": ("en_US-hfc_male-medium", -1.0, 1.1),
+    "الفريق الأرضي": ("en_US-kusal-medium", 0.0, 1.05),
     "المسعف": ("en_US-sam-medium", 0.0, 1.1), "مسلّح": ("en_US-reza_ibrahim-medium", -1.5, 1.1),
     "مواطن": ("en_US-danny-low", 0.0, 1.0), "رهينة": ("en_US-sam-medium", 2.0, 1.1),
     NEGOTIATOR: ("en_US-lessac-high", 0.0, 1.0), "غرفة العمليات": ("en_US-amy-medium", 0.0, 1.15),
     "نشرة الأخبار": ("en_US-kristin-medium", 0.0, 1.05), "المراسلة": ("en_US-hfc_female-medium", 0.0, 1.05),
+    # the brigadier: older, heavier, unhurried
+    "العميد منصور": ("en_US-norman-medium", -1.0, 0.95),
+    # the man on the hacked channel — one voice under three names as the story finds out who he is
+    "صوت مجهول": ("en_GB-northern_english_male-medium", -2.0, 0.92),
+    "العقرب": ("en_GB-northern_english_male-medium", -2.0, 0.92),
+    "الرائد نضال": ("en_GB-northern_english_male-medium", -2.0, 0.92),
+    # the accountant: thin, fast, frightened
+    "فارس": ("en_US-hfc_male-medium", 2.0, 1.12),
+    # the hired leaders
+    "أبو جاسر": ("en_US-reza_ibrahim-medium", -1.5, 1.05), "الخال": ("en_US-reza_ibrahim-medium", -3.5, 0.95),
+    "الذيب": ("en_US-reza_ibrahim-medium", 0.5, 1.15),
 }
-for l in LEADERS:
-    CAST[l] = ("en_US-reza_ibrahim-medium", -1.5, 1.05)
 
 NUM = {0: "صفر", 1: "واحد", 2: "اثنين", 3: "ثلاثة", 4: "أربعة", 5: "خمسة", 6: "ستة", 7: "سبعة", 8: "ثمانية", 9: "تسعة", 10: "عشرة"}
 def speakable(t):
@@ -62,23 +72,29 @@ def en_of(template):
         raise SystemExit("no English line for: " + template)
     return EN[template]
 
-# ---- mission data
+# ---- the story (assets/story.json): every line carries its own English, per mission
+STORY = json.load(open(os.path.join(ROOT, "assets", "story.json"), encoding="utf-8"))
+CODES = STORY["cast"]
 for m in missions:
+    st = STORY["missions"].get(m["id"], {})
     hcount = sum(r.count("H") for r in m["map"]); ecount = sum(r.count("V") for r in m["map"])
-    add("نشرة الأخبار", m["news_line"], en_of(m["news_line"]))
-    add("فريق المراقبة" if m["id"] == "raid" else NEGOTIATOR, m["negotiator_line"], en_of(m["negotiator_line"]))
-    if m.get("type") == "sniper" and "dialogue" not in m: m["dialogue"] = []; m.setdefault("banter", [])
-    add(COLONEL, m["commander_line"], en_of(m["commander_line"]))
-    for b in m["brief"]:
-        add(COLONEL, b, en_of(b))
-    for who, text in m["banter"]:
-        add(who, text, en_of(text))
-    names = {"C": COLONEL, "P": PLAYER, "N": NEGOTIATOR, "T": "الصقر ٢"}
+    def who(code, m=m):
+        w = CODES[code]
+        return m["leader"] if w == "@leader" else w
+    for l in st.get("intro", []):
+        add(who(l[1]), l[2], l[3])
+    flat = list(st.get("banter", [])) + list(st.get("outro", [])) + list(st.get("confront", []))
+    for ls in st.get("beats", {}).values(): flat += ls
+    flat += st.get("chase", {}).get("lines", []) + st.get("chase", {}).get("stop", [])
+    for e in st.get("endings", {}).values(): flat += e["lines"]
+    for l in flat:
+        add(who(l[0]), l[1], l[2])
+    # the briefing at the cordon counts gunmen / hostages / files, which change with the difficulty
     for n in m["enemies"]:
-        for d in m["dialogue"]:
+        for d in st.get("dialogue", []):
             def fill(t, leader):
                 return t.replace("{n}", str(n)).replace("{h}", str(hcount)).replace("{e}", str(ecount)).replace("{leader}", leader)
-            add(names[d[0]], fill(d[1], m["leader"]), fill(en_of(d[1]), EN_NAMES.get(m["leader"], "")))
+            add(who(d[0]), fill(d[1], m["leader"]), fill(d[2], EN_NAMES.get(m["leader"], "")))
 
 # ---- hud.radio(...) calls in the scripts
 def split_args(s):
