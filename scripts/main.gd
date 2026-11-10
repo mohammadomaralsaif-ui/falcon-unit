@@ -2085,7 +2085,8 @@ func _place_team(out: Vector3, b: Basis) -> void:
 			cands.append(out + Vector3(0, 0, 0))
 			# physics hasn't seen the teammates placed this frame yet: keep them apart by hand
 			var free_c := cands.filter(func(c): return not used.any(func(u): return (u as Vector3).distance_to(c) < 1.0))
-			t.global_position = _free_spot(free_c if free_c.size() > 0 else cands, [vehicle.get_rid(), player.get_rid()])
+			# the truck counts as an obstacle here: a spot inside its body leaves that man stuck for the whole mission
+			t.global_position = _free_spot(free_c if free_c.size() > 0 else cands, [player.get_rid()])
 			used.append(t.global_position)
 			t.rotation.y = player.yaw
 
@@ -2204,7 +2205,7 @@ func _team_work(dt: float) -> void:
 			breacher = null
 			_plant_charge(who)
 	team_tick -= dt
-	if team_tick > 0.0 or phase != "assault" or team_order != "assault":
+	if team_tick > 0.0 or phase != "assault":
 		return
 	team_tick = 0.6
 	for t in team:
@@ -2220,6 +2221,8 @@ func _team_work(dt: float) -> void:
 				mission_assault_text()
 				_check_win()
 				return
+		if team_order != "assault":
+			continue          # cuffing whoever is within reach is automatic; walking hostages out is by order
 		for h in hostages:
 			if not h.dead and not h.freed and not h.rescued and t.global_position.distance_to(h.global_position) < 2.4:
 				h.free_hostage(trail.size())

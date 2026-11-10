@@ -40,6 +40,28 @@ var cover_t := 0.0
 var _wp := Vector3.ZERO
 var _wp_goal := Vector3.INF
 var _wp_t := 0.0
+var cuff_by: Node3D = null      # the teammate on his way to cuff this (surrendered) gunman
+var _stuck := 0.0
+var _side_t := 0.0
+var _side := 1.0
+
+## Walking into a wall, a desk or each other: after most of a second with no progress, slide round it
+## (left, then right) and ask for a fresh path, instead of running on the spot.
+func _unstick(move: Vector3, dt: float) -> Vector3:
+	if move.length() > 1.0 and Vector2(velocity.x, velocity.z).length() < 0.5:
+		_stuck += dt
+	else:
+		_stuck = maxf(0.0, _stuck - dt * 2.0)
+	if _stuck > 0.7:
+		_stuck = 0.3
+		_side = -_side
+		_side_t = 0.6
+		_wp_t = 0.0
+	if _side_t > 0.0 and move.length() > 0.1:
+		_side_t -= dt
+		var f := move.normalized()
+		return (f.rotated(Vector3.UP, PI * 0.5 * _side) * 0.85 + f * 0.35) * 3.4
+	return move
 
 ## Next point to walk to (navmesh path when available, straight line otherwise). Re-planned 4x a second.
 func _nav_to(goal: Vector3, dt: float) -> Vector3:
@@ -111,6 +133,7 @@ func _physics_process(dt: float) -> void:
 		move = _enemy_ai(dt)
 	else:
 		move = _team_ai(dt)
+	move = _unstick(move, dt)
 	velocity.x = move.x
 	velocity.z = move.z
 	move_and_slide()
@@ -184,17 +207,7 @@ func _enemy_ai(dt: float) -> Vector3:
 				react = main.diff_react * randf_range(0.7, 1.3)
 				# some gunmen dash to the nearest piece of cover first
 				if target == null and randf() < 0.55 and not executioner_of:
-					var bc := Vector3.INF
-					var bcd := 9.0
-					for cp in main.city.cover_points:
-						var cd: float = cp.distance_to(global_position)
-						if cd < bcd:
-							bcd = cd; bc = cp
-					if bc != Vector3.INF:
-						var away: Vector3 = (bc - best.global_position)
-						away.y = 0
-						cover_spot = bc + away.normalized() * 1.25
-						cover_t = 4.0
+					_dash_to_cover(best.global_position)
 			if state == "idle":
 				alert(best.global_position)
 			target = best
@@ -231,9 +244,25 @@ func _enemy_ai(dt: float) -> Vector3:
 			var d := _nav_to(last_seen, dt)
 			_face(global_position + d, dt, 6.0)
 			return d.normalized() * 3.2
+	elif state == "alert":
+		_face(last_seen, dt, 3.0)        # nobody in sight: cover the way they came from, not a wall
 	elif state == "idle":
 		rotation.y = home_yaw + sin(Time.get_ticks_msec() * 0.0004 + position.x) * 0.7
 	return Vector3.ZERO
+
+## Cover within a short dash that puts something solid between this gunman and `from`.
+func _dash_to_cover(from: Vector3) -> void:
+	var bc := Vector3.INF
+	var bcd := 9.0
+	for cp in main.city.cover_points:
+		var cd: float = cp.distance_to(global_position)
+		if cd < bcd:
+			bcd = cd; bc = cp
+	if bc != Vector3.INF:
+		var away: Vector3 = bc - from
+		away.y = 0
+		cover_spot = bc + away.normalized() * 1.25
+		cover_t = 4.0
 
 func _team_ai(dt: float) -> Vector3:
 	var pl: Node3D = main.player
@@ -249,6 +278,20 @@ func _team_ai(dt: float) -> Vector3:
 				bd = d; target = e
 	var move := Vector3.ZERO
 	var goal: Vector3 = pl.global_position + pl.global_transform.basis * follow_offset
+	# follow in the leader's own footsteps (single file, through the doors he used) rather than in a slot
+	# beside him: a slot swings through walls and makes the team run about every time he looks round
+	var tr: Array = main.trail
+	var back := 2 + team_index * 2
+	if tr.size() > back:
+		goal = tr[tr.size() - 1 - back]
+	var following: bool = task_goal == Vector3.INF and main.team_order == "follow" and main.phase == "assault"
+	if following and target == null and escort_h == null:
+		for e in main.enemies:
+			if e.surrendered and not e.cuffed and not e.dead and (e.cuff_by == null or e.cuff_by == self or e.cuff_by.dead) \
+					and global_position.distance_to(e.global_position) < 9.0 and can_see(e.global_position + Vector3(0, 1.0, 0)):
+				e.cuff_by = self
+				goal = e.global_position
+				break
 	var spd_cap := 99.0
 	var low := false
 	# breach drill: when the leader is at the door, the team stacks up on both sides of it
@@ -300,7 +343,7 @@ func _team_ai(dt: float) -> Vector3:
 	if target and is_instance_valid(target):
 		var ang := _face(target.global_position, dt, 7.0)
 		if fire_cd <= 0.0 and ang < 0.3:
-			fire_cd = randf_range(0.35, 0.75)
+			fire_cd = randf_range(0.3, 0.55)
 			_shoot_at(target)
 	elif move.length() > 0.3:
 		_face(global_position + move, dt, 8.0)
@@ -314,7 +357,7 @@ func _shoot_at(t: Node3D) -> void:
 	var dist := from.distance_to(tp)
 	var acc: float = accuracy * clampf(1.15 - dist / 45.0, 0.3, 1.1)
 	if side == "team":
-		acc = 0.28 * clampf(1.2 - dist / 45.0, 0.35, 1.0)
+		acc = clampf(0.72 - dist / 38.0, 0.3, 0.66)      # trained shooters: sure up close, less so down a long hall
 		if t.get("stun") and t.stun > 0.0:
 			acc = 0.75
 	elif t == main.player and main.player.crouch_k > 0.5:
@@ -326,7 +369,7 @@ func _shoot_at(t: Node3D) -> void:
 	if not get_world_3d().direct_space_state.intersect_ray(los).is_empty():
 		acc = 0.0
 	if randf() < acc and t.has_method("take_hit"):
-		var killed: bool = t.take_hit(damage if side == "enemy" else randf_range(22, 34), false, self)
+		var killed: bool = t.take_hit(damage if side == "enemy" else randf_range(28, 40), false, self)
 		var bdir := (tp - from).normalized()
 		Fx.blood_hit(main, tp + Vector3(randf_range(-0.15, 0.15), randf_range(-0.3, 0.2), 0), bdir, -bdir)
 		if side == "team" and killed:
@@ -371,6 +414,12 @@ func take_hit(dmg: float, head := false, from: Node3D = null) -> bool:
 		# flinch: knocked back a little and can't fire straight away
 		fire_cd = maxf(fire_cd, 0.4)
 		model.hit_react(head)
+		if side == "enemy" and not surrendered and main.phase == "assault":
+			# wounded men break: some throw the gun down, others scramble for cover
+			if hp < 45.0 and randf() < 0.3:
+				surrender()
+			elif from and cover_spot == Vector3.INF and not executioner_of and randf() < 0.6:
+				_dash_to_cover(from.global_position)
 	if hp <= 0.0:
 		die(head, from)
 		return true
