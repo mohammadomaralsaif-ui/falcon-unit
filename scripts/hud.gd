@@ -897,9 +897,9 @@ func show_briefing(on_start: Callable) -> void:
 	_choice_row(vb, "عدد أفراد الفريق معك", [["4", 4], ["3", 3], ["2", 2], ["1", 1], ["0", 0]], main.team_size, func(v): main.team_size = v, 66, 26)
 	_choice_row(vb, "الصعوبة", [["واقعي", 2], ["متوسط", 1], ["سهل", 0]], main.difficulty, func(v): main.difficulty = v)
 	if main.M.get("type", "") != "sniper":
-		_choice_row(vb, "مين بسوق للموقع؟", [["واحد من الفريق", 1], ["أنا بسوق", 0]], Settings.driver, func(v):
+		_choice_row(vb, "الوصول للموقع (المباشر أخف وأسرع – بيتفعّل كامل من المهمة الجاية)", [["وصول مباشر", 2], ["واحد بسوق", 1], ["أنا بسوق", 0]], Settings.driver, func(v):
 			Settings.driver = v
-			Settings.save(), 180)
+			Settings.save(), 150, 19)
 	if main.M.get("type", "") != "sniper":
 		_choice_row(vb, "السلاح الأساسي", [["شوتغن M870 (قريب وقاتل)", "shotgun"], ["رشاش RM-277 (منظار)", "rifle"]], Settings.primary, func(v):
 			Settings.primary = v

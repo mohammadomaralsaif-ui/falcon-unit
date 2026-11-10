@@ -331,6 +331,16 @@ signal world_ready
 func _checkpoint_start() -> void:
 	await get_tree().process_frame
 	_begin_drive()
+	_deploy_at_cordon("نقطة الاقتحام", "الفريق جاهز عند الطوق – كمّل", true)
+
+## The drive, or — when the player chose to start at the scene — straight to the cordon.
+func _drive_or_deploy() -> void:
+	_begin_drive()
+	if Settings.driver == 2:
+		_deploy_at_cordon(M.title, "%s · %s" % [M.area, M.clock])
+
+## `retry`: the briefing at the cordon was already heard, so it is skipped too.
+func _deploy_at_cordon(title: String, sub: String, retry := false) -> void:
 	if sniper_mission:
 		return
 	hud.clear_radio()
@@ -346,9 +356,11 @@ func _checkpoint_start() -> void:
 	_arrive()
 	_exit_vehicle()
 	_talk_colonel()
+	if not retry:
+		return          # first time here: the colonel's briefing plays, with its own cameras
 	hud.clear_radio()
 	hud.set_letterbox(false)
-	hud.show_banner("نقطة الاقتحام", "الفريق جاهز عند الطوق – كمّل", 2.5)
+	hud.show_banner(title, sub, 2.5)
 
 ## Menu backdrop: the duty room with the team waiting. Far cheaper to draw than the whole city.
 func _menu_scene() -> void:
@@ -716,7 +728,7 @@ func _next_shot() -> void:
 	intro_t = 0.0
 	hud.clear_radio()
 	if intro_i >= intro_groups.size():
-		_begin_drive()
+		_drive_or_deploy()
 		return
 	var g: Array = intro_groups[intro_i]
 	intro_span = 0.0
@@ -2531,7 +2543,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			Controls.block_fire()
 			intro_card_t = 0.0
 			hud.drop_card()
-			_begin_drive()
+			_drive_or_deploy()
 			return
 	if scene_on and not scene_idle and scene_t > 0.8 and not hud.choice:
 		if (e is InputEventKey and e.pressed and not e.echo) or (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):

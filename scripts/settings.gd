@@ -4,7 +4,7 @@ extends RefCounted
 const SAVE := "user://progress.cfg"
 static var _loaded := false
 static var quality := 1        # 0 خفيف · 1 متوسط · 2 عالي
-static var driver := 0         # 0 = the player drives · 1 = a teammate drives (auto-drive to the scene)
+static var driver := 2         # 0 = the player drives · 1 = a teammate drives (auto-drive) · 2 = start at the cordon (no drive: lightest and fastest)
 static var voice := true
 static var primary := "rifle"    # rifle | shotgun
 static var gear := "flash"       # flash | smoke | shield
@@ -22,7 +22,7 @@ static func load_all() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(SAVE) == OK:
 		quality = clampi(int(cf.get_value("settings", "quality", quality)), 0, 2)
-		driver = clampi(int(cf.get_value("settings", "driver", 0)), 0, 1)
+		driver = clampi(int(cf.get_value("settings", "driver2", driver)), 0, 2)
 		voice = bool(cf.get_value("settings", "voice", true))
 		autofire = bool(cf.get_value("settings", "autofire", autofire))
 		primary = str(cf.get_value("settings", "primary", "rifle"))
@@ -31,6 +31,8 @@ static func load_all() -> void:
 			primary = "rifle"
 		if not gear in ["flash", "smoke", "shield"]:
 			gear = "flash"
+	if OS.has_environment("FALCON_DRIVER"):
+		driver = clampi(int(OS.get_environment("FALCON_DRIVER")), 0, 2)
 	if OS.has_environment("FALCON_QUALITY"):
 		quality = clampi(int(OS.get_environment("FALCON_QUALITY")), 0, 2)
 
@@ -38,7 +40,7 @@ static func save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(SAVE)
 	cf.set_value("settings", "quality", quality)
-	cf.set_value("settings", "driver", driver)
+	cf.set_value("settings", "driver2", driver)
 	cf.set_value("settings", "voice", voice)
 	cf.set_value("settings", "autofire", autofire)
 	cf.set_value("settings", "primary", primary)
@@ -47,11 +49,12 @@ static func save() -> void:
 
 static func traffic_count() -> int:
 	load_all()
-	return [14, 20, 26][quality]
+	# starting at the cordon: the streets only matter for the backdrop and the chase, so far fewer cars
+	return [6, 9, 13][quality] if driver == 2 else [14, 20, 26][quality]
 
 static func ped_count() -> int:
 	load_all()
-	return [8, 13, 22][quality]
+	return [4, 6, 10][quality] if driver == 2 else [8, 13, 22][quality]
 
 static func crowd_count() -> int:
 	load_all()
