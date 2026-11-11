@@ -100,10 +100,10 @@ func _init(_role := "swat", seed_val := 0, _model := "") -> void:
 		if c is GeometryInstance3D:
 			var skinned: bool = c is MeshInstance3D and c.get_parent() == skel
 			# background people (civilians, crowd) only cast shadows on the highest quality level
-			var shadow: bool = skinned and (Settings.quality == 2 or role in ["swat", "robber", "officer", "hostage"])
+			var shadow: bool = skinned and (Settings.quality >= 2 or role in ["swat", "robber", "officer", "hostage"])
 			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			if role == "civilian":
-				c.visibility_range_end = [55.0, 75.0, 110.0][Settings.quality]
+				c.visibility_range_end = [55.0, 75.0, 110.0, 140.0][Settings.quality]
 
 func _ready() -> void:
 	play(idle_clip)

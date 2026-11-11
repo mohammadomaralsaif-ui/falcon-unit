@@ -907,10 +907,10 @@ func show_briefing(on_start: Callable) -> void:
 		_choice_row(vb, "العدّة", [["درع واقي + مسدس", "shield"], ["دخان ×3", "smoke"], ["قنابل صوتية ×3", "flash"]], Settings.gear, func(v):
 			Settings.gear = v
 			Settings.save(), 168, 19)
-	_choice_row(vb, "جودة الرسم (خفيفة = أسرع على الأجهزة الضعيفة)", [["عالية", 2], ["متوسطة", 1], ["خفيفة", 0]], Settings.quality, func(v):
+	_choice_row(vb, "جودة الرسم (فائقة للأجهزة القوية – تفاصيل المباني تكتمل من المهمة الجاية)", [["فائقة", 3], ["عالية", 2], ["متوسطة", 1], ["خفيفة", 0]], Settings.quality, func(v):
 		Settings.quality = v
 		Settings.save()
-		main.apply_quality())
+		main.apply_quality(), 96, 20)
 	_choice_row(vb, "إطلاق تلقائي لما التصويب يجي على مسلّح", [["إيقاف", false], ["تشغيل", true]], Settings.autofire, func(v):
 		Settings.autofire = v
 		Settings.save())

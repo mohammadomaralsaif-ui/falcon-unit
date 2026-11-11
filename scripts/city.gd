@@ -139,6 +139,17 @@ func mat(key: String) -> StandardMaterial3D:
 			m.roughness = 0.7; m.metallic = 0.2
 		"roof":
 			m.albedo_color = Color(0.58, 0.55, 0.5); m.roughness = 0.95
+		"contact":
+			var g := Image.create(4, 64, false, Image.FORMAT_RGBA8)
+			for gy in 64:
+				var k := 1.0 - gy / 63.0
+				for gx in 4:
+					g.set_pixel(gx, gy, Color(0, 0, 0, 0.5 * k * k))
+			m.albedo_texture = ImageTexture.create_from_image(g)
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.texture_repeat = false
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
 		"plaster":
 			m.albedo_texture = _photo("plaster")
 			_burn(2500, 3, 128)
@@ -714,6 +725,10 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 	var bal := []
 	var rail := []
 	var acs := []
+	# real stone round every window (sill, lintel, jambs standing proud of the wall), so the sun throws a
+	# shadow across the glass and the window reads as set into the facade instead of painted on it
+	var deep := Settings.quality >= 2
+	var sills := []; var lintels := []; var jambs := []
 	for f in faces:
 		var half: float = (d if f.z != 0 else w) * 0.5
 		var span: float = (w if f.z != 0 else d)
@@ -727,6 +742,13 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 				var off := -span * 0.5 + 1.7 + b * 3.4
 				var p: Vector3 = base + f * (half + 0.55) + right * off
 				p.y = y
+				if deep:
+					var wc: Vector3 = base + f * half + right * off
+					wc.y = y
+					sills.append(Transform3D(basis, wc + f * 0.13 + Vector3(0, 0.86, 0)))
+					lintels.append(Transform3D(basis, wc + f * 0.09 + Vector3(0, 2.7, 0)))
+					for sd in [-0.875, 0.875]:
+						jambs.append(Transform3D(basis, wc + f * 0.07 + right * sd + Vector3(0, 1.78, 0)))
 				if (b + fl) % 3 == 0:
 					bal.append(Transform3D(basis, p))
 					rail.append(Transform3D(basis, p + Vector3(0, 0.55, 0) + f * 0.55))
@@ -747,6 +769,24 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 		_multimesh(_box_mesh(Vector3(2.8, 1.0, 0.06)), mat("metal"), rail)
 	if acs.size():
 		_multimesh(_box_mesh(Vector3(0.85, 0.55, 0.35)), mat("ac"), acs)
+	if sills.size():
+		_multimesh(_box_mesh(Vector3(2.05, 0.1, 0.26)), mat("white"), sills)
+		_multimesh(_box_mesh(Vector3(1.95, 0.16, 0.18)), mat("white"), lintels)
+		_multimesh(_box_mesh(Vector3(0.16, 1.7, 0.14)), mat("white"), jambs)
+	if Settings.quality >= 1:
+		# contact shadow: the pavement darkens towards the foot of the wall, which is what seats a building
+		# on the ground (without it the block looks as if it were placed on top of the street)
+		var sk := SurfaceTool.new(); sk.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var hw := w * 0.5 + 0.07; var hd := d * 0.5 + 0.07
+		var cs := [Vector3(-hw, 0, hd), Vector3(hw, 0, hd), Vector3(hw, 0, -hd), Vector3(-hw, 0, -hd)]
+		for i in 4:
+			var a: Vector3 = cs[i]; var b2: Vector3 = cs[(i + 1) % 4]
+			var n: Vector3 = (b2 - a).cross(Vector3.UP).normalized() * 1.5
+			var al: Vector3 = (b2 - a).normalized() * 1.5
+			for vv in [[a, 0.0], [b2 + n + al, 1.0], [b2, 0.0], [a, 0.0], [a + n - al, 1.0], [b2 + n + al, 1.0]]:
+				sk.set_normal(Vector3.UP); sk.set_uv(Vector2(0.5, vv[1])); sk.add_vertex(vv[0] + Vector3(0, 0.035, 0))
+		var skm := _mi(sk.commit(), mat("contact"), base, false)
+		skm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# roof clutter: water tanks + solar heaters (very Amman)
 	for i in rng.randi_range(2, 6):
 		var p := base + Vector3(rng.randf_range(-w * 0.35, w * 0.35), h + 0.35, rng.randf_range(-d * 0.35, d * 0.35))
@@ -906,7 +946,7 @@ func _build_trees() -> void:
 			mmi.multimesh = mm
 			mmi.position = center
 			mmi.set_meta("no_merge", true)
-			mmi.visibility_range_end = [110.0, 150.0, 200.0][Settings.quality]
+			mmi.visibility_range_end = [110.0, 150.0, 200.0, 260.0][Settings.quality]
 			if Settings.quality < 2:
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)
@@ -1092,7 +1132,7 @@ void fragment() {
 """
 
 var CAR_LOD_DIST: float:
-	get: return [20.0, 26.0, 34.0][Settings.quality]
+	get: return [20.0, 26.0, 34.0, 44.0][Settings.quality]
 
 func _car_model(kind: String, variant: int) -> Array:
 	var key := kind + str(variant)
