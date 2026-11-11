@@ -116,23 +116,18 @@ func mat(key: String) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	match key:
 		"asphalt":
-			m.albedo_texture = _img_tex(256, 256, func(img):
-				img.fill(Color(0.17, 0.18, 0.19))
-				_speckle(img, 9000, [Color(0.1, 0.1, 0.11), Color(0.26, 0.27, 0.28), Color(0.21, 0.22, 0.23)], 2)
-				for i in 6:
-					var x := rng.randi_range(0, 230); var y := rng.randi_range(0, 230)
-					img.fill_rect(Rect2i(x, y, rng.randi_range(10, 30), rng.randi_range(6, 16)), Color(0.13, 0.13, 0.14)))
-			m.normal_enabled = true; m.normal_texture = _noise_normal(0.08, 2.0)
+			# scanned road surface (ambientCG, CC0) instead of painted speckle
+			m.albedo_texture = _photo("asphalt")
+			m.normal_enabled = true; m.normal_texture = _photo("asphalt_n"); m.normal_scale = 0.6
+			_burn(9000, 2)
+			for i in 6:
+				rng.randi_range(0, 230); rng.randi_range(0, 230); rng.randi_range(10, 30); rng.randi_range(6, 16)
 			m.roughness = 0.88
-			m.uv1_scale = Vector3(1.0 / 6.0, 1.0 / 6.0, 1)
+			m.uv1_scale = Vector3(1.0 / 4.0, 1.0 / 4.0, 1)
 			m.uv1_world_triplanar = true; m.uv1_triplanar = true
 		"sidewalk":
-			m.albedo_texture = _img_tex(128, 128, func(img):
-				img.fill(Color(0.62, 0.6, 0.56))
-				_speckle(img, 2500, [Color(0.5, 0.49, 0.46), Color(0.7, 0.68, 0.64)], 2)
-				for k in 3:
-					img.fill_rect(Rect2i(0, k * 64, 128, 2), Color(0.42, 0.41, 0.38))
-					img.fill_rect(Rect2i(k * 64, 0, 2, 128), Color(0.42, 0.41, 0.38)))
+			m.albedo_texture = _photo("pavers")      # concrete slabs, a metre square
+			_burn(2500, 2, 128)
 			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.5, 0.5, 0.5)
 			m.roughness = 0.9
 		"stone":
@@ -145,10 +140,8 @@ func mat(key: String) -> StandardMaterial3D:
 		"roof":
 			m.albedo_color = Color(0.58, 0.55, 0.5); m.roughness = 0.95
 		"plaster":
-			m.albedo_texture = _img_tex(128, 128, func(img):
-				img.fill(Color(0.78, 0.75, 0.69))
-				_speckle(img, 2500, [Color(0.7, 0.67, 0.6), Color(0.84, 0.82, 0.77)], 3)
-				img.fill_rect(Rect2i(0, 116, 128, 12), Color(0.36, 0.34, 0.31)))
+			m.albedo_texture = _photo("plaster")
+			_burn(2500, 3, 128)
 			m.uv1_triplanar = true; m.uv1_world_triplanar = true; m.uv1_scale = Vector3(0.3, 0.3, 0.3)
 			m.roughness = 0.9
 		"tile":
@@ -463,29 +456,58 @@ func _shop_v2(v: int) -> Array:
 	hgt.generate_mipmaps()
 	return [ImageTexture.create_from_image(img), ImageTexture.create_from_image(hgt), ImageTexture.create_from_image(emi)]
 
+## The painted textures these photos replaced drew thousands of random specks. The whole city is laid
+## out from the same seeded generator, so the same numbers are still drawn (and thrown away): every
+## building, prop and spawn point stays exactly where the missions were tuned for it.
+func _burn(n: int, sz: int, w := 256) -> void:
+	for i in n:
+		rng.randi_range(0, w - 1); rng.randi_range(0, w - 1); rng.randi_range(1, sz); rng.randi_range(1, sz)
+
+func _photo(tex_name: String) -> Texture2D:
+	return load("res://assets/textures/%s.webp" % tex_name)
+
+## One bay of a street front, 512 px: real limestone coursing behind a window (or a shop shutter) that
+## is drawn with a reveal shadow, a frame, a sill and glass that darkens upwards, so it reads as set
+## into the wall rather than painted on it.
 func _facade_tex(shop: bool) -> ImageTexture:
-	return _img_tex(256, 256, func(img: Image):
-		var stone := Color(0.84, 0.78, 0.66)
-		img.fill(stone)
-		_speckle(img, 5000, [Color(0.76, 0.7, 0.58), Color(0.9, 0.85, 0.74), Color(0.72, 0.66, 0.55)], 3)
-		for y in range(0, 256, 21):
-			img.fill_rect(Rect2i(0, y, 256, 1), Color(0.66, 0.6, 0.5))
-			var off := 0 if (y / 21) % 2 == 0 else 32
-			for x in range(off, 256, 64):
-				img.fill_rect(Rect2i(x, y, 1, 21), Color(0.66, 0.6, 0.5))
+	return _img_tex(512, 512, func(img: Image):
+		var base: Image = _photo("limestone").get_image()
+		if base.is_compressed():
+			base.decompress()
+		base.convert(Image.FORMAT_RGBA8)
+		if base.get_width() != 512:
+			base.resize(512, 512)
+		img.blit_rect(base, Rect2i(0, 0, 512, 512), Vector2i.ZERO)
+		_burn(5000, 3)
 		if shop:
-			img.fill_rect(Rect2i(12, 60, 232, 196), Color(0.36, 0.38, 0.4))
-			for y in range(64, 256, 7):
-				img.fill_rect(Rect2i(12, y, 232, 2), Color(0.25, 0.26, 0.28))
-			img.fill_rect(Rect2i(8, 50, 240, 12), Color(0.2, 0.21, 0.23))
+			img.fill_rect(Rect2i(16, 100, 480, 20), Color(0.16, 0.17, 0.19))                # shutter box
+			img.fill_rect(Rect2i(16, 96, 480, 4), Color(0.45, 0.42, 0.36))
+			img.fill_rect(Rect2i(24, 120, 464, 392), Color(0.4, 0.42, 0.44))                # roller shutter
+			for y in range(124, 512, 14):
+				img.fill_rect(Rect2i(24, y, 464, 3), Color(0.27, 0.28, 0.3))
+				img.fill_rect(Rect2i(24, y + 3, 464, 2), Color(0.5, 0.52, 0.54))
+			img.fill_rect(Rect2i(24, 120, 464, 10), Color(0.22, 0.23, 0.25))                 # shadow under the box
+			img.fill_rect(Rect2i(16, 120, 8, 392), Color(0.3, 0.3, 0.31)); img.fill_rect(Rect2i(488, 120, 8, 392), Color(0.3, 0.3, 0.31))
 		else:
-			img.fill_rect(Rect2i(40, 50, 176, 150), Color(0.6, 0.55, 0.45))
-			img.fill_rect(Rect2i(48, 58, 160, 136), Color(0.08, 0.1, 0.12))
-			img.fill_rect(Rect2i(126, 58, 4, 136), Color(0.55, 0.52, 0.47))
-			img.fill_rect(Rect2i(48, 58, 70, 50), Color(0.22, 0.28, 0.33))
-			if rng.randf() < 0.5:
-				img.fill_rect(Rect2i(48, 58, 160, rng.randi_range(30, 100)), Color(0.88, 0.86, 0.8))
-			img.fill_rect(Rect2i(34, 196, 188, 10), Color(0.9, 0.86, 0.76)))
+			img.fill_rect(Rect2i(76, 92, 360, 312), Color(0.66, 0.6, 0.5))                  # dressed stone surround
+			img.fill_rect(Rect2i(92, 108, 328, 284), Color(0.3, 0.27, 0.23))                # reveal, in shadow
+			img.fill_rect(Rect2i(100, 124, 312, 268), Color(0.82, 0.81, 0.78))              # frame
+			for i in 26:                                                                    # glass: sky high up, room dark below
+				var k := i / 25.0
+				img.fill_rect(Rect2i(108, 132 + i * 10, 296, 10), Color(0.2, 0.27, 0.33).lerp(Color(0.05, 0.065, 0.08), k))
+			img.fill_rect(Rect2i(252, 124, 8, 268), Color(0.82, 0.81, 0.78))                # mullion
+			img.fill_rect(Rect2i(100, 250, 312, 6), Color(0.82, 0.81, 0.78))                # transom
+			var r := rng.randf()
+			if r < 0.5:
+				var h := rng.randi_range(30, 100) * 2                                       # roller blind part down
+				img.fill_rect(Rect2i(108, 132, 296, h), Color(0.86, 0.84, 0.78))
+				for y in range(132, 132 + h, 12):
+					img.fill_rect(Rect2i(108, y, 296, 2), Color(0.72, 0.7, 0.64))
+			elif r < 0.75:
+				img.fill_rect(Rect2i(108, 132, 60, 252), Color(0.74, 0.7, 0.62))             # curtains drawn back
+				img.fill_rect(Rect2i(344, 132, 60, 252), Color(0.74, 0.7, 0.62))
+			img.fill_rect(Rect2i(64, 392, 384, 22), Color(0.92, 0.88, 0.78))                # sill
+			img.fill_rect(Rect2i(64, 414, 384, 8), Color(0.5, 0.45, 0.37)))                 # its shadow on the wall
 
 # ---------------------------------------------------------------- mesh helpers
 func _mi(mesh: Mesh, m: Material, pos := Vector3.ZERO, shadow := true) -> MeshInstance3D:

@@ -33,6 +33,20 @@ func setup(_main: Node) -> void:
 		_respawn(p, true)
 		peds.append(p)
 
+var _tick := 0
+var _probe: PhysicsShapeQueryParameters3D
+
+## Nothing solid (a wall, a lamp post, a parked car's kerb stone) where a walker would stand at `pos`.
+func _free(pos: Vector3) -> bool:
+	if _probe == null:
+		_probe = PhysicsShapeQueryParameters3D.new()
+		var sh := SphereShape3D.new()
+		sh.radius = 0.3
+		_probe.shape = sh
+		_probe.collision_mask = 1
+	_probe.transform = Transform3D(Basis(), pos + Vector3(0, 0.9, 0))
+	return get_world_3d().direct_space_state.intersect_shape(_probe, 1).is_empty()
+
 func _blocked(b: Vector2i) -> bool:
 	var bb: Vector2i = city.bank_block
 	return absi(b.x - bb.x) <= 1 and b.y <= bb.y + 1
@@ -102,6 +116,8 @@ func _physics_process(dt: float) -> void:
 	var ref: Vector3 = main.vehicle.global_position if main.in_vehicle else main.player.global_position
 	var car: VehicleBody3D = main.vehicle
 	var car_speed: float = car.linear_velocity.length()
+	_tick += 1
+	var pi := 0
 	for p in peds:
 		var dref: float = p.node.global_position.distance_to(ref)
 		if p.down > 0.0:
@@ -132,12 +148,19 @@ func _physics_process(dt: float) -> void:
 		var to_car: Vector3 = car.global_position - p.node.global_position
 		var want_dodge := 0.0
 		if car_speed > 4.0 and to_car.length() < 9.0 and car.linear_velocity.dot(-to_car) > 0.0:
-			want_dodge = 1.6
+			want_dodge = 0.3      # a step towards the shop fronts, never into them (the walls start a metre in)
 		p.dodge = move_toward(p.dodge, want_dodge, dt * 3.0)
 		var spd: float = p.speed
 		if p.flee > 0.0:
 			p.flee -= dt
 			spd = 4.6
+		# every few frames: something solid on the pavement ahead means turning back, not walking through it
+		pi += 1
+		if (_tick + pi) % 4 == 0 and p.node.visible:
+			if not _free(_pos(p.block, p.u, p.dodge)[0]):
+				p.u += 2.0 * p.dir          # placed inside something: move along until clear
+			elif not _free(_pos(p.block, p.u + p.dir * 0.9, p.dodge)[0]):
+				p.dir = -p.dir
 		p.u += spd * dt * p.dir
 		_apply(p, dt)
 		if spd > 3.0:
