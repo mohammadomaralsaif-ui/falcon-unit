@@ -11,6 +11,7 @@ var cam_yaw := 0.0
 var cam_pitch := -0.22
 var look_t := 0.0
 var siren_on := true
+var pursuit := false          # a chase is on: the truck is let off the leash (about 70 km/h instead of 40)
 var flashers := {}
 var light_r: OmniLight3D
 var light_b: OmniLight3D
@@ -42,6 +43,9 @@ var dodge_t := 0.0             # after backing out: swing around the obstacle on
 
 const MAX_FORCE := 4300.0
 const MAX_BRAKE := 60.0
+const LETTER_X := 1.14      # where the Arabic lettering sits on the truck's flanks
+const LETTER_Y := 1.2
+const LETTER_Z := -0.35
 const TOP_SPEED := 11.0  # m/s (~40 km/h): a heavy armoured truck in narrow city streets — you place it, you do not race it
 
 func _ready() -> void:
@@ -58,6 +62,22 @@ func _ready() -> void:
 	var body := CarMesh.compact(CarMesh.build("swat", Color(), false))
 	add_child(body)
 	flashers = body.get_meta("flashers")
+	if body.has_meta("custom"):
+		# the model's own English lettering is painted out of its texture; the unit's name goes on in Arabic
+		for sd in [-1.0, 1.0]:
+			var t := Label3D.new()
+			t.text = "القوات الخاصة"
+			t.font = load("res://assets/fonts/Tajawal-Bold.ttf")
+			t.font_size = 96
+			t.pixel_size = 0.0034
+			t.modulate = Color(0.93, 0.94, 0.96)
+			t.outline_size = 0
+			t.shaded = false
+			t.double_sided = false
+			t.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+			t.position = Vector3(sd * LETTER_X, LETTER_Y, LETTER_Z)
+			t.rotation.y = sd * PI * 0.5
+			add_child(t)
 	var s: Dictionary = body.get_meta("spec")
 	var cs := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
@@ -264,9 +284,9 @@ func _physics_process(dt: float) -> void:
 		else:
 			# the stick sets the speed you want, not raw power: half a push holds about 20 km/h,
 			# a full push tops out near 40 — easy to keep in hand on a phone
-			var cap := TOP_SPEED * (0.6 if health < 40.0 else 1.0)
+			var cap := TOP_SPEED * (1.75 if pursuit else 1.0) * (0.6 if health < 40.0 else 1.0)
 			var target := cap * clampf((throttle - 0.05) / 0.9, 0.12, 1.0)
-			engine_force = MAX_FORCE * 0.42 * clampf((target - fwd_speed) / 3.0, 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
+			engine_force = MAX_FORCE * (0.8 if pursuit else 0.42) * clampf((target - fwd_speed) / 3.0, 0.0, 1.0) * (0.6 if health < 40.0 else 1.0)
 			if fwd_speed > target + 1.5:
 				brake = 7.0          # lifting off the stick slows the truck down
 	elif throttle < -0.05:

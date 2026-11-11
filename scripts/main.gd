@@ -351,7 +351,10 @@ func _deploy_at_cordon(title: String, sub: String, retry := false) -> void:
 	vehicle.siren_on = false
 	vehicle.linear_velocity = Vector3.ZERO
 	vehicle.angular_velocity = Vector3.ZERO
-	vehicle.global_transform = Transform3D(Basis(Vector3.UP, PI * 0.5 * sx), Vector3(cp.x - sx * 12.0, 0.7, zs + 1.5 * sx))
+	var stop := Transform3D(Basis(Vector3.UP, PI * 0.5 * sx), Vector3(cp.x - sx * 12.0, 0.7, zs + 1.5 * sx))
+	if not retry:
+		await _roll_in(stop, title, sub)      # the truck is seen driving up to the cordon first
+	vehicle.global_transform = stop
 	await get_tree().create_timer(0.4).timeout
 	_arrive()
 	_exit_vehicle()
@@ -361,6 +364,72 @@ func _deploy_at_cordon(title: String, sub: String, retry := false) -> void:
 	hud.clear_radio()
 	hud.set_letterbox(false)
 	hud.show_banner(title, sub, 2.5)
+
+const ROLLIN_LEN := 7.2
+var rollin_t := -1.0              # >= 0 while the arrival scene plays
+var rollin_stop: Transform3D
+var rollin_hidden: Array = []
+
+## Arrival scene for a direct deployment: the truck rolls up the cordoned street in three shots — from
+## the far kerb, alongside it, then over the colonel's shoulder as it brakes — and only then does he speak.
+func _roll_in(stop: Transform3D, title: String, sub: String) -> void:
+	rollin_stop = stop
+	rollin_t = 0.0
+	vehicle.siren_on = true
+	# out of the physics world while it is moved by hand (a frozen vehicle body turns its wheels' maths to NaN)
+	vehicle.process_mode = Node.PROCESS_MODE_DISABLED
+	hud.set_letterbox(true)
+	hud.show_banner(title, sub, 3.2)
+	_update_rollin(0.0)
+	while rollin_t >= 0.0 and rollin_t < ROLLIN_LEN:
+		await get_tree().process_frame
+	rollin_t = -1.0
+	for b in rollin_hidden:
+		if is_instance_valid(b):
+			b.visible = true
+	rollin_hidden.clear()
+	vehicle.process_mode = Node.PROCESS_MODE_INHERIT
+	vehicle.linear_velocity = Vector3.ZERO
+	vehicle.angular_velocity = Vector3.ZERO
+	vehicle.siren_on = false
+	hud.set_prompt("")
+
+func _update_rollin(dt: float) -> void:
+	rollin_t += dt
+	var k := clampf(rollin_t / 6.3, 0.0, 1.0)
+	var e := 1.0 - pow(1.0 - k, 2.3)          # steady, then braking into the stop
+	var fwd := rollin_stop.basis.z
+	var pos := rollin_stop.origin - fwd * 48.0 * (1.0 - e)
+	pos.y = 0.06
+	vehicle.global_transform = Transform3D(rollin_stop.basis, pos)
+	# traffic in the truck's lane steps out of the picture
+	if traffic:
+		for c in traffic.cars:
+			var b: Node3D = c.body
+			if b.visible and absf(b.global_position.z - pos.z) < 3.2 and (b.global_position - pos).dot(fwd) > -6.0 and (b.global_position - rollin_stop.origin).dot(fwd) < 8.0:
+				b.visible = false
+				rollin_hidden.append(b)
+	var look := pos + Vector3(0, 1.25, 0)
+	var south := Vector3(0, 0, 1)             # the far kerb: the target building stays behind the truck
+	cine_cam.current = true
+	cine_cam.h_offset = 0.0
+	cine_cam.far = 1500.0
+	if rollin_t < 2.5:
+		cine_cam.fov = 36.0
+		cine_cam.global_position = rollin_stop.origin - fwd * 14.0 + south * 5.2 + Vector3(0, 0.75, 0)
+	elif rollin_t < 4.8 or colonel == null:
+		cine_cam.fov = 48.0
+		cine_cam.global_position = pos + fwd * 7.5 + south * 4.4 + Vector3(0, 1.25, 0)
+	else:
+		var cpos: Vector3 = colonel.global_position
+		var d: Vector3 = rollin_stop.origin - cpos
+		d.y = 0
+		d = d.normalized()
+		cine_cam.fov = 42.0
+		cine_cam.global_position = cpos - d * 1.5 + d.cross(Vector3.UP) * 0.55 + Vector3(0, 1.72, 0)
+	cine_cam.look_at(look)
+	if rollin_t > 0.6:
+		hud.set_prompt("اضغط للتخطّي")
 
 ## Menu backdrop: the duty room with the team waiting. Far cheaper to draw than the whole city.
 func _menu_scene() -> void:
@@ -1328,6 +1397,7 @@ func _start_chase() -> void:
 		return
 	phase = "chase"
 	chase_t = 0.0
+	vehicle.pursuit = true
 	var bb: Vector2i = city.bank_block
 	van = AnimatableBody3D.new()
 	van.set_script(EscapeVan)
@@ -1617,6 +1687,10 @@ func _process(dt: float) -> void:
 		# a shot lasts as long as what is said in it
 		if (has_lines and intro_t > 1.5 and not hud.story_busy() and hud.radio_t <= 0.0) or (not has_lines and intro_t >= span):
 			_next_shot()
+		return
+	if rollin_t >= 0.0:
+		_update_rollin(dt)
+		_update_colonel(dt)
 		return
 	if scene_on:
 		_update_scene(dt)
@@ -2547,6 +2621,11 @@ func _unhandled_input(e: InputEvent) -> void:
 			intro_card_t = 0.0
 			hud.drop_card()
 			_drive_or_deploy()
+			return
+	if rollin_t > 0.6 and rollin_t < ROLLIN_LEN:
+		if (e is InputEventKey and e.pressed and not e.echo) or (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):
+			get_viewport().set_input_as_handled()
+			rollin_t = ROLLIN_LEN
 			return
 	if scene_on and not scene_idle and scene_t > 0.8 and not hud.choice:
 		if (e is InputEventKey and e.pressed and not e.echo) or (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):

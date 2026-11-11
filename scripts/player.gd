@@ -25,10 +25,10 @@ var ammo := 30
 var reserve := 150
 ## fov: camera field of view while aiming (smaller = more zoom)
 const WEAPONS := {
-	"rifle": {"name": "RM-277", "mag": 30, "cd": 0.08, "dmg": 34.0, "spread": 0.02, "reload": 2.0, "sound": "rifle", "kick": 0.009, "fov": 22.0, "auto": true},
-	"pistol": {"name": "Glock 17", "mag": 17, "cd": 0.2, "dmg": 30.0, "spread": 0.014, "reload": 1.3, "sound": "pistol", "kick": 0.02, "fov": 50.0, "auto": false},
-	"shotgun": {"name": "M870", "mag": 7, "cd": 0.8, "dmg": 19.0, "spread": 0.05, "reload": 2.8, "sound": "rifle", "kick": 0.04, "fov": 46.0, "auto": false, "pellets": 9},
-	"sniper": {"name": "M24", "mag": 5, "cd": 1.25, "dmg": 220.0, "spread": 0.05, "reload": 2.6, "sound": "sniper", "kick": 0.05, "fov": 11.0, "auto": false},
+	"rifle": {"name": "رشاش", "mag": 30, "cd": 0.08, "dmg": 34.0, "spread": 0.02, "reload": 2.0, "sound": "rifle", "kick": 0.009, "fov": 22.0, "auto": true},
+	"pistol": {"name": "مسدس", "mag": 17, "cd": 0.2, "dmg": 30.0, "spread": 0.014, "reload": 1.3, "sound": "pistol", "kick": 0.02, "fov": 50.0, "auto": false},
+	"shotgun": {"name": "خرطوش", "mag": 7, "cd": 0.8, "dmg": 19.0, "spread": 0.05, "reload": 2.8, "sound": "rifle", "kick": 0.04, "fov": 46.0, "auto": false, "pellets": 9},
+	"sniper": {"name": "قنّاصة", "mag": 5, "cd": 1.25, "dmg": 220.0, "spread": 0.05, "reload": 2.6, "sound": "sniper", "kick": 0.05, "fov": 11.0, "auto": false},
 }
 var weapon := "rifle"
 var primary := "rifle"

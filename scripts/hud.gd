@@ -632,7 +632,7 @@ func _process(dt: float) -> void:
 	var low: float = 1.0 - pl.hp / 100.0 if pl else 0.0
 	vignette.modulate.a = maxf(vig_a, low * 0.7 if low > 0.4 else 0.0)
 	var in_car: bool = main.in_vehicle
-	var playing: bool = not (main.phase in ["brief", "result", "intro"]) and main.cutscene_t <= 0.0 and not main.scene_on
+	var playing: bool = not (main.phase in ["brief", "result", "intro"]) and main.cutscene_t <= 0.0 and not main.scene_on and main.rollin_t < 0.0
 	crosshair.visible = playing and not in_car and pl.alive and main.doorcam_t <= 0.0
 	crosshair.queue_redraw()
 	var doorcam: bool = main.doorcam_t > 0.0
