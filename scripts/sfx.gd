@@ -57,6 +57,12 @@ func _ready() -> void:
 		AudioServer.add_bus(bi)
 		AudioServer.set_bus_name(bi, "SFX")
 		AudioServer.set_bus_send(bi, "Master")
+	# a little room tone on every effect: shots and doors ring off the walls (more so indoors, see set_indoor)
+	var sbi := AudioServer.get_bus_index("SFX")
+	if AudioServer.get_bus_effect_count(sbi) == 0:
+		var rv := AudioEffectReverb.new()
+		rv.room_size = 0.35; rv.damping = 0.6; rv.wet = 0.06; rv.dry = 1.0; rv.spread = 0.8
+		AudioServer.add_bus_effect(sbi, rv)
 	for n in NAMES:
 		streams[n] = _get_stream(n)
 	for i in 12:
@@ -73,6 +79,17 @@ func _ready() -> void:
 		_pool3d.append(p3)
 
 var _duck := 0.0
+var _indoor := 0.0
+
+## 0 = street, 1 = inside a building: the reverb gets longer and wetter indoors.
+func set_indoor(inside: bool, dt: float) -> void:
+	_indoor = move_toward(_indoor, 1.0 if inside else 0.0, dt * 1.5)
+	var bi := AudioServer.get_bus_index("SFX")
+	if bi >= 0 and AudioServer.get_bus_effect_count(bi) > 0:
+		var rv := AudioServer.get_bus_effect(bi, 0) as AudioEffectReverb
+		if rv:
+			rv.wet = lerpf(0.06, 0.22, _indoor)
+			rv.room_size = lerpf(0.35, 0.6, _indoor)
 
 ## Called every frame by the HUD: world sounds dip while a voice line is playing so speech stays clear.
 func duck(speaking: bool, dt: float) -> void:
@@ -109,10 +126,9 @@ func play(name: String, vol_db := 0.0, pitch := 1.0) -> void:
 			return
 
 func play_at(name: String, pos: Vector3, listener: Vector3, base_db := 0.0) -> void:
-	var d := pos.distance_to(listener)
-	var db := base_db - d * 0.35
-	if db > -40.0:
-		play(name, db, randf_range(0.9, 1.1))
+	# positional: the engine pans it towards where the shot came from and fades it with distance
+	if pos.distance_to(listener) < 110.0:
+		play_3d(name, pos, base_db, randf_range(0.9, 1.1))
 
 func _wav(samples: PackedFloat32Array, loop := false) -> AudioStreamWAV:
 	var bytes := PackedByteArray()

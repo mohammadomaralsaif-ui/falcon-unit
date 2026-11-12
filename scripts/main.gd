@@ -607,6 +607,8 @@ func apply_quality() -> void:
 	Settings.apply(get_viewport(), _env, _sun)
 
 # ---- automatic quality: watch the real frame rate, step down fast when it stutters, step up (to 'عالية' at most) only after a long smooth stretch
+var _indoors := false
+var _indoor_t := 0.0
 var _aq_t := 0.0            # time in the current measuring window
 var _aq_frames := 0
 var _aq_warm := 6.0         # ignore the first seconds after a change (shader compile, loading)
@@ -1691,6 +1693,12 @@ func _process(dt: float) -> void:
 		return
 	var real_dt := dt / maxf(Engine.time_scale, 0.05)
 	_auto_quality(real_dt)
+	_indoor_t -= real_dt
+	if _indoor_t <= 0.0 and player:
+		_indoor_t = 0.4
+		var q := PhysicsRayQueryParameters3D.create(player.global_position + Vector3(0, 1.0, 0), player.global_position + Vector3(0, 7.0, 0), 1)
+		_indoors = not get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+	Sfx.set_indoor(_indoors, real_dt)
 	if slowmo_t > 0.0:
 		slowmo_t -= real_dt
 	elif Engine.time_scale < 1.0:
