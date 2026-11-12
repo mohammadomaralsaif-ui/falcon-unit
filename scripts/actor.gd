@@ -44,6 +44,8 @@ var cuff_by: Node3D = null      # the teammate on his way to cuff this (surrende
 var _stuck := 0.0
 var _side_t := 0.0
 var _side := 1.0
+var _strafe_t := 0.0
+var _strafe_dir := 1.0
 
 ## Walking into a wall, a desk or each other: after most of a second with no progress, slide round it
 ## (left, then right) and ask for a fresh path, instead of running on the spot.
@@ -236,6 +238,17 @@ func _enemy_ai(dt: float) -> Vector3:
 				fire_cd = randf_range(0.7, 1.4)
 			else:
 				fire_cd = 0.12
+		# between bursts a gunman does not stand like a target: he side-steps across the line of fire
+		# (not when the shooter is close, in a doorway, or guarding a hostage)
+		_strafe_t -= dt
+		if _strafe_t <= 0.0:
+			_strafe_t = randf_range(0.7, 1.5)
+			if randf() < 0.7:
+				_strafe_dir = -_strafe_dir
+		var to_t: Vector3 = target.global_position - global_position
+		to_t.y = 0
+		if burst == 0 and fire_cd > 0.3 and not executioner_of and to_t.length() > 5.0:
+			return to_t.normalized().cross(Vector3.UP) * _strafe_dir * 2.3
 		return Vector3.ZERO
 	if state == "alert" and hunter:
 		var far := last_seen - global_position
@@ -333,6 +346,8 @@ func _team_ai(dt: float) -> Vector3:
 			spd_cap = 2.3 if hd < 2.6 else 0.0
 	elif escort_h:
 		escort_h = null
+	if target and is_instance_valid(target) and escort_h == null and task_goal == Vector3.INF and global_position.distance_to(target.global_position) > 7.0:
+		low = true       # engaging at range: kneel to shoot, stand to move
 	model.set_crouch(move_toward(model.crouch, 1.0 if low and velocity.length() < 1.0 else 0.0, dt * 4.0))
 	var dg := goal - global_position
 	dg.y = 0
