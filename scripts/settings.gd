@@ -4,6 +4,7 @@ extends RefCounted
 const SAVE := "user://progress.cfg"
 static var _loaded := false
 static var quality := 1        # 0 خفيف · 1 متوسط · 2 عالي · 3 فائق (strong phones: full resolution, 4x anti-aliasing, long sharp shadows)
+static var auto := true         # adapt render quality to the measured frame rate (never goes above 'عالية' by itself)
 static var driver := 2         # 0 = the player drives · 1 = a teammate drives (auto-drive) · 2 = start at the cordon (no drive: lightest and fastest)
 static var voice := true
 static var primary := "rifle"    # rifle | shotgun
@@ -23,6 +24,7 @@ static func load_all() -> void:
 	if cf.load(SAVE) == OK:
 		quality = clampi(int(cf.get_value("settings", "quality", quality)), 0, 3)
 		driver = clampi(int(cf.get_value("settings", "driver2", driver)), 0, 2)
+		auto = bool(cf.get_value("settings", "auto", true))
 		voice = bool(cf.get_value("settings", "voice", true))
 		autofire = bool(cf.get_value("settings", "autofire", autofire))
 		primary = str(cf.get_value("settings", "primary", "rifle"))
@@ -35,12 +37,14 @@ static func load_all() -> void:
 		driver = clampi(int(OS.get_environment("FALCON_DRIVER")), 0, 2)
 	if OS.has_environment("FALCON_QUALITY"):
 		quality = clampi(int(OS.get_environment("FALCON_QUALITY")), 0, 3)
+		auto = false
 
 static func save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(SAVE)
 	cf.set_value("settings", "quality", quality)
 	cf.set_value("settings", "driver2", driver)
+	cf.set_value("settings", "auto", auto)
 	cf.set_value("settings", "voice", voice)
 	cf.set_value("settings", "autofire", autofire)
 	cf.set_value("settings", "primary", primary)

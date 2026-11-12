@@ -606,6 +606,53 @@ var _sun: DirectionalLight3D
 func apply_quality() -> void:
 	Settings.apply(get_viewport(), _env, _sun)
 
+# ---- automatic quality: watch the real frame rate, step down fast when it stutters, step up (to 'عالية' at most) only after a long smooth stretch
+var _aq_t := 0.0            # time in the current measuring window
+var _aq_frames := 0
+var _aq_warm := 6.0         # ignore the first seconds after a change (shader compile, loading)
+var _aq_good := 0.0         # seconds of smooth play at the current level
+var _aq_ceiling := 2        # highest level the auto mode may use; lowered when a level proved too heavy
+
+func auto_reset() -> void:
+	_aq_t = 0.0
+	_aq_frames = 0
+	_aq_warm = 6.0
+	_aq_good = 0.0
+	_aq_ceiling = 2
+
+func _auto_quality(real_dt: float) -> void:
+	if not Settings.auto or get_tree().paused or real_dt > 0.5:
+		return
+	if _aq_warm > 0.0:
+		_aq_warm -= real_dt
+		return
+	_aq_t += real_dt
+	_aq_frames += 1
+	if _aq_t < 3.0:
+		return
+	var fps := _aq_frames / _aq_t
+	_aq_t = 0.0
+	_aq_frames = 0
+	if fps < 40.0 and Settings.quality > 0:
+		_aq_ceiling = mini(_aq_ceiling, Settings.quality - 1)
+		Settings.quality -= 1
+		_aq_warm = 5.0
+		_aq_good = 0.0
+		Settings.save()
+		apply_quality()
+		print("AUTOQ down -> ", Settings.quality, " fps=", fps)
+	elif fps >= 55.0:
+		_aq_good += 3.0
+		if _aq_good >= 30.0 and Settings.quality < _aq_ceiling:
+			Settings.quality += 1
+			_aq_warm = 5.0
+			_aq_good = 0.0
+			Settings.save()
+			apply_quality()
+			print("AUTOQ up -> ", Settings.quality, " fps=", fps)
+	else:
+		_aq_good = 0.0
+
 # ------------------------------------------------------------------ mission flow
 func _start_mission() -> void:
 	diff_react = [0.95, 0.6, 0.38][difficulty]
@@ -1643,6 +1690,7 @@ func _process(dt: float) -> void:
 	if not loaded:
 		return
 	var real_dt := dt / maxf(Engine.time_scale, 0.05)
+	_auto_quality(real_dt)
 	if slowmo_t > 0.0:
 		slowmo_t -= real_dt
 	elif Engine.time_scale < 1.0:
