@@ -184,6 +184,19 @@ func mat(key: String) -> StandardMaterial3D:
 			m.albedo_color = Color(0.08, 0.12, 0.2); m.metallic = 0.7; m.roughness = 0.15
 		"metal":
 			m.albedo_color = Color(0.6, 0.62, 0.64); m.metallic = 0.8; m.roughness = 0.35
+		"railing":
+			# wrought-iron balcony rail: top and bottom bars with thin uprights, see-through in between
+			m.albedo_texture = _img_tex(128, 64, func(img: Image):
+				img.fill(Color(0.1, 0.1, 0.11, 0.0))
+				var iron := Color(0.1, 0.1, 0.11, 1.0)
+				img.fill_rect(Rect2i(0, 0, 128, 6), iron)
+				img.fill_rect(Rect2i(0, 58, 128, 6), iron)
+				for bx in range(2, 128, 8):
+					img.fill_rect(Rect2i(bx, 0, 2, 64), iron))
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			m.alpha_scissor_threshold = 0.5
+			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+			m.metallic = 0.5; m.roughness = 0.5
 		"ac":
 			m.albedo_color = Color(0.85, 0.85, 0.83); m.roughness = 0.5
 		"door":
@@ -766,7 +779,8 @@ func _building(base: Vector3, w: float, d: float, floors: int, lx: int, lz: int)
 			_label(SHOPS[rng.randi() % SHOPS.size()], sp + f * 0.08, ry, 72, Color(1, 1, 1), 0.009)
 	if bal.size():
 		_multimesh(_box_mesh(Vector3(2.8, 0.15, 1.1)), mat("white"), bal)
-		_multimesh(_box_mesh(Vector3(2.8, 1.0, 0.06)), mat("metal"), rail)
+		var rq := QuadMesh.new(); rq.size = Vector2(2.8, 1.0)
+		_multimesh(rq, mat("railing"), rail)
 	if acs.size():
 		_multimesh(_box_mesh(Vector3(0.85, 0.55, 0.35)), mat("ac"), acs)
 	if sills.size():
