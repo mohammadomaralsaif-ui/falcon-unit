@@ -314,7 +314,10 @@ func _load_world() -> void:
 	_load_layer.queue_free()
 	_load_bar = null
 	world_ready.emit()
-	if Missions.autostart:
+	if Missions.roam:
+		Missions.roam = false
+		_start_roam.call_deferred()
+	elif Missions.autostart:
 		Missions.autostart = false
 		_start_mission.call_deferred()
 		if Missions.checkpoint:
@@ -325,6 +328,72 @@ func _load_world() -> void:
 		hud.show_briefing(_start_mission)
 
 signal world_ready
+
+# ---- free roam: the same city with no mission running. A glowing marker stands in the street in front of each
+# unlocked mission; park the truck (or stand) in one for a couple of seconds and that mission's briefing opens.
+var roaming := false
+var roam_marks: Array = []        # [{"i": mission index, "pos": Vector3, "t": seconds spent inside}]
+
+func _start_roam() -> void:
+	roaming = true
+	phase = "roam"
+	intro_i = 99
+	drive_started = true
+	hud.set_letterbox(false)
+	hud.set_prompt("")
+	hud.clear_radio()
+	_capture_mouse(true)
+	in_vehicle = true
+	vehicle.set_driving(true)
+	var unlocked := Missions.unlocked()
+	for i in Missions.LIST.size():
+		var md: Dictionary = Missions.LIST[i]
+		var b: Vector2i = md.block
+		var pos := Vector3(b.x * city.P + city.R + city.B * 0.5, 0.0, city.road_center(b.y + 1))
+		var open := i < unlocked
+		var col := Color(1.0, 0.8, 0.2) if open else Color(0.5, 0.5, 0.55)
+		var beam := MeshInstance3D.new()
+		var cm := CylinderMesh.new(); cm.top_radius = 3.2; cm.bottom_radius = 3.2; cm.height = 40.0; cm.radial_segments = 20; cm.rings = 1
+		beam.mesh = cm
+		var bm := StandardMaterial3D.new()
+		bm.albedo_color = Color(col.r, col.g, col.b, 0.22)
+		bm.emission_enabled = true; bm.emission = col; bm.emission_energy_multiplier = 1.6
+		bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		beam.material_override = bm
+		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(beam)
+		beam.global_position = pos + Vector3(0, 20.0, 0)
+		var lab := Label3D.new()
+		lab.text = ("%d · %s" % [i + 1, md.title]) if open else ("%d · مقفل" % (i + 1))
+		lab.font = load("res://assets/fonts/Tajawal-Bold.ttf")
+		lab.font_size = 56; lab.pixel_size = 0.012; lab.outline_size = 12
+		lab.modulate = col
+		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lab.no_depth_test = true
+		add_child(lab)
+		lab.global_position = pos + Vector3(0, 9.0, 0)
+		if open:
+			roam_marks.append({"i": i, "pos": pos, "t": 0.0})
+	hud.show_banner("تجوّل حر · عمّان", "اركن في دائرة ذهبية ليبدأ الإحاطة", 4.0)
+	hud.set_objectives(["◆ تجوّل بالمدينة بحرّية", "◇ العلامات الذهبية = مهمات متاحة", "◇ [F] نزول/ركوب · [H] صفارة"])
+
+func _update_roam(dt: float) -> void:
+	var ref: Vector3 = vehicle.global_position if in_vehicle else player.global_position
+	var speed: float = vehicle.speed_kmh if in_vehicle else 0.0
+	for m in roam_marks:
+		var inside: bool = Vector2(ref.x - m.pos.x, ref.z - m.pos.z).length() < 6.5 and speed < 12.0
+		m.t = m.t + dt if inside else 0.0
+		if inside:
+			hud.set_prompt("ابقَ هنا لبدء: %s" % Missions.LIST[m.i].title)
+		if m.t > 2.0:
+			Missions.current = m.i
+			Missions.team_size = team_size
+			Missions.difficulty = difficulty
+			roaming = false
+			get_tree().reload_current_scene()
+			return
 
 ## "كمّل من نقطة الاقتحام": skip the opening, the drive and the briefing — the truck is already
 ## parked at the cordon and the team is out, ready to stack on the door.
@@ -1693,6 +1762,8 @@ func _process(dt: float) -> void:
 		return
 	var real_dt := dt / maxf(Engine.time_scale, 0.05)
 	_auto_quality(real_dt)
+	if roaming:
+		_update_roam(real_dt)
 	_indoor_t -= real_dt
 	if _indoor_t <= 0.0 and player:
 		_indoor_t = 0.4

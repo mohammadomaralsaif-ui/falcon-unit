@@ -10,6 +10,7 @@ extends RefCounted
 
 static var current := 0   # index of the mission being played (survives scene reloads)
 static var autostart := false
+static var roam := false           # free roam through the city (no mission), with mission markers on the map
 static var checkpoint := false     # retry straight from the cordon (skip the opening and the drive)
 static var team_size := 3
 static var difficulty := 1

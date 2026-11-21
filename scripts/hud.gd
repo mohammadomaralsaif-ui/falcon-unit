@@ -864,6 +864,14 @@ func show_briefing(on_start: Callable) -> void:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
 	vb.add_child(grid)
+	var roam_b := _button("🏙  تجوّل حر بالمدينة (علامات المهمات على الخريطة)", func():
+		Missions.roam = true
+		Missions.team_size = main.team_size
+		Missions.difficulty = main.difficulty
+		get_tree().reload_current_scene(), 20)
+	roam_b.custom_minimum_size = Vector2(580, 54)
+	vb.add_child(roam_b)
+	vb.move_child(roam_b, 0)
 	var unlocked := Missions.unlocked()
 	for i in Missions.LIST.size():
 		var md: Dictionary = Missions.LIST[i]
