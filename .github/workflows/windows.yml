@@ -1,0 +1,49 @@
+name: Build Windows PC
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare export templates
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates
+          if [ -d /root/.local/share/godot/export_templates/4.3.stable ] && [ ! -d ~/.local/share/godot/export_templates/4.3.stable ]; then
+            cp -r /root/.local/share/godot/export_templates/4.3.stable ~/.local/share/godot/export_templates/
+          fi
+          ls ~/.local/share/godot/export_templates/4.3.stable | grep -i windows || true
+
+      - name: Import assets
+        run: godot --headless --path . --import || true
+
+      - name: Export Windows
+        run: |
+          mkdir -p build-win
+          set +e
+          godot --headless --verbose --path . --export-release "Windows" build-win/falcon-unit.exe > export.log 2>&1
+          ls -la build-win
+          if [ ! -s build-win/falcon-unit.exe ]; then
+            grep -n -i -E "error|fail|template" export.log | tail -40 | while IFS= read -r line; do echo "::error::$line"; done
+            tail -60 export.log
+            exit 1
+          fi
+          cd build-win && zip -9 falcon-unit-windows.zip falcon-unit.exe && ls -la
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pc-${{ github.run_number }}
+          name: Falcon Unit PC · build ${{ github.run_number }}
+          body: |
+            حمّل falcon-unit-windows.zip، فك الضغط، وشغّل falcon-unit.exe (ويندوز 64 بت).
+            Controls: WASD move, mouse look, Shift sprint, E interact, F vehicle, R reload, T orders, C crouch, G flash.
+          files: build-win/falcon-unit-windows.zip
