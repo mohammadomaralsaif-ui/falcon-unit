@@ -2,6 +2,8 @@ name: Build Windows PC
 
 on:
   workflow_dispatch:
+  push:
+    branches: [claude/windows-pc]
 
 permissions:
   contents: write
