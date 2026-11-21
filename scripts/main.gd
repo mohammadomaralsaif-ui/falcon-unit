@@ -379,8 +379,77 @@ func _start_roam() -> void:
 	hud.show_banner("تجوّل حر · عمّان", "اركن في دائرة ذهبية ليبدأ الإحاطة", 4.0)
 	hud.set_objectives(["◆ تجوّل بالمدينة بحرّية", "◇ العلامات الذهبية = مهمات متاحة", "◇ [F] نزول/ركوب · [H] صفارة"])
 
+# ---- street incident: a dispatch call sends you to a crossroads where armed men are shooting. Neutralise (or cuff)
+# all of them to secure the street; a new call comes in a while after.
+var roam_ev := {}                  # {"pos": Vector3, "men": Array, "far_t": float}
+var roam_ev_t := 25.0              # seconds until the next call
+var roam_secured := 0
+
+func _roam_event_start(ref: Vector3) -> void:
+	var cands: Array = []
+	for i in range(1, city.N):
+		for j in range(1, city.N):
+			var c := Vector3(city.road_center(i), 0.0, city.road_center(j))
+			var d := Vector2(c.x - ref.x, c.z - ref.z).length()
+			if d > 60.0 and d < 170.0:
+				cands.append(c)
+	if cands.is_empty():
+		roam_ev_t = 10.0
+		return
+	var pos: Vector3 = cands.pick_random()
+	var men: Array = []
+	var n := 2 + (1 if difficulty == 2 else 0)
+	for k in n:
+		var a := TAU * k / n + randf() * 0.6
+		var e := CharacterBody3D.new()
+		e.set_script(Actor)
+		e.setup(self, "enemy", pos + Vector3(cos(a) * 4.5, 0.2, sin(a) * 4.5), a + PI)
+		e.accuracy = [0.28, 0.4, 0.55][difficulty] * 0.8
+		e.damage = [6.0, 9.0, 13.0][difficulty]
+		e.hunter = true
+		add_child(e)
+		enemies.append(e)
+		men.append(e)
+	roam_ev = {"pos": pos, "men": men, "far_t": 0.0}
+	hud.radio("غرفة العمليات", "بلاغ عاجل: مسلّحون يطلقون النار عند التقاطع! توجّه للموقع يا الصقر ١.", 4.0, true)
+	hud.set_waypoint(pos + Vector3(0, 1, 0))
+	hud.set_objectives(["◆ بلاغ: مسلّحون بالشارع – أمّن الموقع", "◇ حيّد المسلّحين أو اعتقلهم"])
+
+func _roam_event_end(ok: bool) -> void:
+	for e in roam_ev.men:
+		if is_instance_valid(e):
+			enemies.erase(e)
+			if not ok:
+				e.queue_free()
+	roam_ev = {}
+	roam_ev_t = randf_range(70.0, 110.0)
+	hud.set_waypoint(null)
+	hud.set_objectives(["◆ تجوّل بالمدينة بحرّية", "◇ العلامات الذهبية = مهمات متاحة", "◇ بلاغات جديدة بتوصلك بالراديو"])
+	if ok:
+		roam_secured += 1
+		hud.show_banner("تم تأمين الشارع", "بلاغات منجزة: %d" % roam_secured, 3.0)
+		hud.radio("غرفة العمليات", "أحسنت يا الصقر ١. الموقع آمن، بنبلّغك إذا استجد شي.", 3.0, true)
+	else:
+		hud.radio("غرفة العمليات", "الوحدة المساندة وصلت للموقع. كمّل دوريتك.", 3.0, true)
+
 func _update_roam(dt: float) -> void:
 	var ref: Vector3 = vehicle.global_position if in_vehicle else player.global_position
+	if roam_ev.is_empty():
+		roam_ev_t -= dt
+		if roam_ev_t <= 0.0:
+			_roam_event_start(ref)
+	else:
+		var left := 0
+		for e in roam_ev.men:
+			if is_instance_valid(e) and not e.dead and not e.cuffed:
+				left += 1
+		if left == 0:
+			_roam_event_end(true)
+		else:
+			var far := Vector2(ref.x - roam_ev.pos.x, ref.z - roam_ev.pos.z).length() > 220.0
+			roam_ev.far_t = roam_ev.far_t + dt if far else 0.0
+			if roam_ev.far_t > 60.0:
+				_roam_event_end(false)
 	var speed: float = vehicle.speed_kmh if in_vehicle else 0.0
 	for m in roam_marks:
 		var inside: bool = Vector2(ref.x - m.pos.x, ref.z - m.pos.z).length() < 6.5 and speed < 12.0
@@ -1589,6 +1658,8 @@ func _beat(name: String) -> bool:
 	return true
 
 func _story_progress() -> void:
+	if roaming:
+		return
 	var left := 0
 	for e in enemies:
 		if not e.dead and not e.cuffed:
