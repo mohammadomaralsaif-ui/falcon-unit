@@ -751,14 +751,14 @@ var _aq_t := 0.0            # time in the current measuring window
 var _aq_frames := 0
 var _aq_warm := 6.0         # ignore the first seconds after a change (shader compile, loading)
 var _aq_good := 0.0         # seconds of smooth play at the current level
-var _aq_ceiling := 2        # highest level the auto mode may use; lowered when a level proved too heavy
+var _aq_ceiling := 3        # highest level the auto mode may use; lowered when a level proved too heavy
 
 func auto_reset() -> void:
 	_aq_t = 0.0
 	_aq_frames = 0
 	_aq_warm = 6.0
 	_aq_good = 0.0
-	_aq_ceiling = 2
+	_aq_ceiling = 3
 
 func _auto_quality(real_dt: float) -> void:
 	if not Settings.auto or get_tree().paused or real_dt > 0.5:
@@ -783,7 +783,7 @@ func _auto_quality(real_dt: float) -> void:
 		print("AUTOQ down -> ", Settings.quality, " fps=", fps)
 	elif fps >= 55.0:
 		_aq_good += 3.0
-		if _aq_good >= 30.0 and Settings.quality < _aq_ceiling:
+		if _aq_good >= 30.0 and Settings.quality < mini(_aq_ceiling, maxi(Settings.tier, 0)):
 			Settings.quality += 1
 			_aq_warm = 5.0
 			_aq_good = 0.0
@@ -1833,6 +1833,10 @@ func _process(dt: float) -> void:
 		return
 	var real_dt := dt / maxf(Engine.time_scale, 0.05)
 	_auto_quality(real_dt)
+	if Settings.just_detected and loaded and hud:
+		Settings.just_detected = false
+		Settings.save()
+		hud.show_banner("تم فحص جهازك", "%s · الإعداد المناسب: %s" % [Settings.gpu_name if Settings.gpu_name != "" else "?", ["خفيفة", "متوسطة", "عالية", "فائقة"][Settings.quality]], 4.0)
 	if roaming:
 		_update_roam(real_dt)
 	_indoor_t -= real_dt

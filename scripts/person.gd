@@ -118,7 +118,33 @@ var idle_clip := "Idle"   # what this person does when standing around
 var relaxed := false      # bystander / officer: stands upright with the feet together, not in a ready stance
 var _gest_to := 1.0
 
+# animation level of detail: people far from the camera update their skeleton every few frames instead of
+# every frame (nobody can tell at that distance, and skinning dozens of bodies is a big share of a phone's frame)
+var _anim_far := false
+var _anim_acc := 0.0
+var _anim_n := 0
+const ANIM_FAR := [14.0, 22.0, 34.0, 50.0]
+
+func _anim_lod(dt: float) -> void:
+	if anim == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var far := global_position.distance_squared_to(cam.global_position) > pow(ANIM_FAR[Settings.quality], 2.0)
+	if far != _anim_far:
+		_anim_far = far
+		anim.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL if far else AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE
+		_anim_acc = 0.0
+	if far:
+		_anim_acc += dt
+		_anim_n += 1
+		if _anim_n % (3 if Settings.quality <= 1 else 2) == 0:
+			anim.advance(_anim_acc)
+			_anim_acc = 0.0
+
 func _process(dt: float) -> void:
+	_anim_lod(dt)
 	if _lock > 0.0:
 		_lock -= dt
 	if not pose:
