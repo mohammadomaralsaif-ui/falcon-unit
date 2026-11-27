@@ -597,7 +597,7 @@ func _process(dt: float) -> void:
 		fps_label.visible = Settings.show_fps
 		var fps := Engine.get_frames_per_second()
 		var qn: String = ["خفيفة", "متوسطة", "عالية", "فائقة"][Settings.quality]
-		fps_label.text = "FPS %d · %s%s · %s" % [fps, qn, " (تلقائي)" if Settings.auto else "", "Vulkan" if RenderingServer.get_current_rendering_method() != "gl_compatibility" else "GL"]
+		fps_label.text = "FPS %d · %s%s · %s" % [fps, qn, " (تلقائي)" if Settings.auto else "", "Vulkan" if (RenderingServer.get_rendering_device() != null) else "GL"]
 		fps_label.add_theme_color_override("font_color", Color(0.4, 1, 0.5) if fps >= 50 else (Color(1, 0.85, 0.3) if fps >= 30 else Color(1, 0.35, 0.3)))
 	Sfx.duck(Voice.speaking(), udt)
 	# radio

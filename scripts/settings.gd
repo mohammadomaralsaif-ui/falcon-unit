@@ -144,7 +144,7 @@ static func crowd_count() -> int:
 ## Renderer side of the quality level (resolution scale, shadows, glow).
 static func apply(vp: Viewport, env: Environment, sun: DirectionalLight3D) -> void:
 	load_all()
-	var vulkan := RenderingServer.get_current_rendering_method() != "gl_compatibility"
+	var vulkan: bool = (RenderingServer.get_rendering_device() != null)
 	# Vulkan: AMD FSR 1 upscaling keeps a lowered resolution sharp; the old GL path only has bilinear
 	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR      # FSR upscaling is Forward+ only (not the Mobile renderer)
 	vp.scaling_3d_scale = [0.6, 0.8, 1.0, 1.0][quality]

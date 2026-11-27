@@ -16,25 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Godot 4.7.1 (engine + export templates)
-        run: |
-          apt-get update -qq >/dev/null 2>&1 || true
-          apt-get install -y -qq curl unzip ca-certificates >/dev/null
-          GV=4.7.1
-          curl -sSL -o /tmp/g.zip https://github.com/godotengine/godot/releases/download/${GV}-stable/Godot_v${GV}-stable_linux.x86_64.zip
-          unzip -oq /tmp/g.zip -d /tmp/g
-          install -m 755 /tmp/g/Godot_v${GV}-stable_linux.x86_64 /usr/local/bin/godot
-          curl -sSL -o /tmp/t.tpz https://github.com/godotengine/godot/releases/download/${GV}-stable/Godot_v${GV}-stable_export_templates.tpz
-          mkdir -p ~/.local/share/godot/export_templates/${GV}.stable
-          unzip -oq /tmp/t.tpz -d /tmp/t
-          cp -r /tmp/t/templates/* ~/.local/share/godot/export_templates/${GV}.stable/
-          rm -rf /tmp/t /tmp/t.tpz
-          which -a godot; godot --version
-          ls ~/.local/share/godot/export_templates/${GV}.stable | grep -i android
-
       - name: Prepare Godot templates, SDK path and signing key
         run: |
           mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
+          if [ -d /root/.local/share/godot/export_templates/4.3.stable ] && [ ! -d ~/.local/share/godot/export_templates/4.3.stable ]; then
+            cp -r /root/.local/share/godot/export_templates/4.3.stable ~/.local/share/godot/export_templates/
+          fi
+          ls ~/.local/share/godot/export_templates/4.3.stable | head
           SDK="${ANDROID_HOME:-/usr/lib/android-sdk}"
           [ -d "$SDK" ] || SDK=/usr/lib/android-sdk
           echo "Android SDK: $SDK"
@@ -46,7 +34,7 @@ jobs:
             keytool -genkeypair -v -keystore "$KS" -storepass android -keypass android \
               -alias androiddebugkey -dname "CN=Falcon Unit,O=Falcon,C=JO" -keyalg RSA -keysize 2048 -validity 10000
           fi
-          for f in editor_settings-4.tres editor_settings-4.7.tres; do
+          for f in editor_settings-4.tres editor_settings-4.3.tres; do
             printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$SDK" "$JDK" "$KS" > ~/.config/godot/$f
           done
           echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$KS" >> $GITHUB_ENV
