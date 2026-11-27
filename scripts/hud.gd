@@ -578,8 +578,27 @@ func show_countdown(t: String) -> void:
 	tw.tween_property(countdown_lbl, "scale", Vector2.ONE, 0.3)
 
 # ------------------------------------------------------------------ per-frame
+var fps_label: Label
+var _fps_t := 0.0
+
 func _process(dt: float) -> void:
 	var udt: float = dt / maxf(Engine.time_scale, 0.05)
+	_fps_t -= udt
+	if _fps_t <= 0.0 and root:
+		_fps_t = 0.5
+		if fps_label == null:
+			fps_label = Label.new()
+			fps_label.add_theme_font_size_override("font_size", 18)
+			fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
+			fps_label.add_theme_constant_override("outline_size", 5)
+			fps_label.position = Vector2(14, 6)
+			fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			root.add_child(fps_label)
+		fps_label.visible = Settings.show_fps
+		var fps := Engine.get_frames_per_second()
+		var qn: String = ["خفيفة", "متوسطة", "عالية", "فائقة"][Settings.quality]
+		fps_label.text = "FPS %d · %s%s · %s" % [fps, qn, " (تلقائي)" if Settings.auto else "", "Vulkan" if RenderingServer.get_current_rendering_method() != "gl_compatibility" else "GL"]
+		fps_label.add_theme_color_override("font_color", Color(0.4, 1, 0.5) if fps >= 50 else (Color(1, 0.85, 0.3) if fps >= 30 else Color(1, 0.35, 0.3)))
 	Sfx.duck(Voice.speaking(), udt)
 	# radio
 	if radio_t > 0.0:
@@ -915,6 +934,9 @@ func show_briefing(on_start: Callable) -> void:
 		_choice_row(vb, "العدّة", [["درع واقي + مسدس", "shield"], ["دخان ×3", "smoke"], ["قنابل صوتية ×3", "flash"]], Settings.gear, func(v):
 			Settings.gear = v
 			Settings.save(), 168, 19)
+	_choice_row(vb, "عدّاد الأداء (FPS) بالزاوية", [["إخفاء", 0], ["إظهار", 1]], 1 if Settings.show_fps else 0, func(v):
+		Settings.show_fps = v == 1
+		Settings.save())
 	_choice_row(vb, "جودة الرسم (تلقائي = اللعبة تقيس الأداء وتضبط الجودة لحالها)", [["تلقائي", 4], ["فائقة", 3], ["عالية", 2], ["متوسطة", 1], ["خفيفة", 0]], 4 if Settings.auto else Settings.quality, func(v):
 		Settings.auto = v == 4
 		if v < 4:
