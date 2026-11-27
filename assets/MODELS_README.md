@@ -35,3 +35,6 @@
   phone call, listening, civilian walk). Trimmed (tools/trim_anim.mjs) from the Mesh2Motion animation
   library (https://github.com/Mesh2Motion/mesh2motion-app), which is CC0 1.0 — see `assets/models/ANIM_LICENSE-CC0.md`.
   They are retargeted at load time onto every character by `scripts/retarget.gd`.
+- `assets/models/anim_ual1.glb`, `assets/models/anim_ual2.glb` — unarmed sprint and jog, an extra death fall, a knock-back
+  hit, interact, talking and head-shake idles, trimmed (tools/trim_anim.mjs) from Quaternius' Universal Animation
+  Library 1 & 2 (https://quaternius.com, CC0 1.0). Retargeted at load time like the files above.

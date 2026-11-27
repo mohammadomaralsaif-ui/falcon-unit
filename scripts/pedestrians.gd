@@ -136,7 +136,7 @@ func _physics_process(dt: float) -> void:
 				continue
 		if p.talk > 0.0:
 			p.talk -= dt
-			p.node.play("Talking")
+			p.node.play("Talking2" if (p.node.get_instance_id() % 2 == 0 and p.node.anim.has_animation("Talking2")) else "Talking")
 			if p.talk <= 0.0:
 				p.node.set_mode("none")
 				_apply(p, dt)
@@ -164,7 +164,7 @@ func _physics_process(dt: float) -> void:
 		p.u += spd * dt * p.dir
 		_apply(p, dt)
 		if spd > 3.0:
-			p.node.play("Run", spd / 5.5)
+			p.node.run_civ(spd)
 		else:
 			p.node.play("WalkCiv", spd / 1.35)
 

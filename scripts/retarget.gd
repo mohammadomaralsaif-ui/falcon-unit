@@ -56,6 +56,12 @@ const BASE_CLIPS := {"CrouchIdle": ["Crouch_Idle", true], "CrouchWalk": ["Crouch
 const ADDON_CLIPS := {"DeathB": ["Death_B", false], "StrafeL": ["Strafe_left", true], "StrafeR": ["Strafe_right", true], "WalkBack": ["Walk_Backwards", true],
 	"Listen": ["Idle Listening", true]}
 
+## Quaternius Universal Animation Library 1 & 2 (CC0, same UE-mannequin rig): unarmed sprint/jog for people
+## fleeing, an extra fall, a knock-back hit, a hands-out interact (cuffing) and a head-shake "no".
+const UAL1_CLIPS := {"Sprint": ["Sprint", true], "Jog": ["Jog_Fwd", true], "DeathA": ["Death01", false],
+	"Interact": ["Interact", false], "Talking2": ["Idle_Talking", true]}
+const UAL2_CLIPS := {"HitKnock": ["Hit_Knockback", false], "No": ["Idle_No", true]}
+
 ## path: target model (any Mixamo / Ready Player Me compatible rig facing +Z).
 ## Idle / Walk / Run come from the Mixamo soldier; crouch, strafes, backpedal, hit reactions, deaths,
 ## throw and sitting from the CC0 Mesh2Motion library (different rig, mapped bone by bone).
@@ -68,6 +74,10 @@ static func library(model := "res://assets/models/civilian.glb") -> AnimationLib
 		_retarget(lib, model, "res://assets/models/anim_base.glb", UE, BASE_CLIPS, true)
 	if ResourceLoader.exists("res://assets/models/anim_addon.glb"):
 		_retarget(lib, model, "res://assets/models/anim_addon.glb", UE, ADDON_CLIPS, true)
+	if ResourceLoader.exists("res://assets/models/anim_ual1.glb"):
+		_retarget(lib, model, "res://assets/models/anim_ual1.glb", UE, UAL1_CLIPS, true)
+	if ResourceLoader.exists("res://assets/models/anim_ual2.glb"):
+		_retarget(lib, model, "res://assets/models/anim_ual2.glb", UE, UAL2_CLIPS, true)
 	_libs[model] = lib
 	return lib
 

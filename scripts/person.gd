@@ -61,6 +61,12 @@ func _init(_role := "swat", seed_val := 0, _model := "") -> void:
 	model.rotation.y = PI
 	add_child(model)
 	skel = model.find_child("Skeleton3D", true, false)
+	# glTF scenes imported by Godot 4.4+ can leave a skinned mesh's skeleton path empty; bind it explicitly,
+	# otherwise the body renders in its bind (T) pose whatever the animation does
+	if skel:
+		for mi in model.find_children("*", "MeshInstance3D", true, false):
+			if mi.skin and (mi.skeleton.is_empty() or mi.get_node_or_null(mi.skeleton) != skel):
+				mi.skeleton = mi.get_path_to(skel)
 	if custom:
 		# normalise height: head bone at ~1.62 m whatever units the file used
 		var hb := -1
@@ -113,7 +119,7 @@ var _lock := 0.0          # a one-shot clip (hit, throw, death) is playing: loco
 var crouch_anim := false  # crouched = the real crouch clips (not just bent legs)
 
 const GESTURES := ["talk", "point", "salute", "radio", "mic", "camera"]
-const IDLES := ["Idle", "IdleCiv", "IdleArms", "Listen", "Talking", "Phone"]
+const IDLES := ["Idle", "IdleCiv", "IdleArms", "Listen", "Talking", "Talking2", "Phone", "No"]
 var idle_clip := "Idle"   # what this person does when standing around
 var relaxed := false      # bystander / officer: stands upright with the feet together, not in a ready stance
 var _gest_to := 1.0
@@ -185,7 +191,19 @@ func oneshot(n: String, hold := -1.0, blend := 0.08) -> void:
 	_lock = hold if hold > 0.0 else anim.get_animation(n).length
 
 func hit_react(head := false) -> void:
+	if not head and randf() < 0.3 and anim.has_animation("HitKnock"):
+		oneshot("HitKnock", 0.55)      # a heavy round knocks him back a step
+		return
 	oneshot("HitHead" if head else "HitChest", 0.38)
+
+## Unarmed run for civilians and hostages: a real sprint (or jog) instead of the soldier's rifle-at-the-ready run.
+func run_civ(spd: float) -> void:
+	if spd > 4.6 and anim.has_animation("Sprint"):
+		play("Sprint", clampf(spd / 6.2, 0.7, 1.4))
+	elif anim.has_animation("Jog"):
+		play("Jog", clampf(spd / 3.4, 0.7, 1.4))
+	else:
+		play("Run", spd / 5.5)
 
 ## Grenade throw: the weapon hangs on its sling for a moment while the arm goes over.
 func throw_anim() -> void:
@@ -294,7 +312,7 @@ func collapse(side := 0.0) -> void:
 	set_leg_yaw(0.0)
 	crouch = 0.0
 	pose.crouch = 0.0
-	var opts: Array = ["DeathB", "DeathD"].filter(func(n): return anim.has_animation(n))
+	var opts: Array = ["DeathA", "DeathB", "DeathD"].filter(func(n): return anim.has_animation(n))
 	if opts.size() > 0:
 		# motion-captured fall: buckle, drop, settle
 		var n: String = opts[randi() % opts.size()]

@@ -96,7 +96,10 @@ func _physics_process(dt: float) -> void:
 	var step := d.normalized() * minf(spd * dt, d.length())
 	global_position += step
 	rotation.y = lerp_angle(rotation.y, atan2(-d.x, -d.z), 1.0 - exp(-dt * 10.0))
-	model.play("Run" if spd > 3.5 else "WalkCiv", spd / (5.5 if spd > 3.5 else 1.35))
+	if spd > 3.0:
+		model.run_civ(spd)
+	else:
+		model.play("WalkCiv", spd / 1.35)
 
 func _vanish() -> void:
 	visible = false
