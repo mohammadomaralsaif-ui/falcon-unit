@@ -19,7 +19,7 @@ jobs:
       - name: Install Godot 4.7.1 (engine + export templates)
         run: |
           apt-get update -qq >/dev/null 2>&1 || true
-          command -v unzip >/dev/null || apt-get install -y -qq unzip >/dev/null
+          apt-get install -y -qq curl unzip ca-certificates >/dev/null
           GV=4.7.1
           curl -sSL -o /tmp/g.zip https://github.com/godotengine/godot/releases/download/${GV}-stable/Godot_v${GV}-stable_linux.x86_64.zip
           unzip -oq /tmp/g.zip -d /tmp/g
